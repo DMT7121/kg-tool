@@ -399,12 +399,23 @@ export async function exportToExcel(records: ProcessedRecord[]): Promise<Blob> {
         }
         currentEmp = r.employeeName;
 
+        const notes: string[] = [];
+        if (r.overtime) {
+            notes.push('Tăng ca');
+        }
+        if (r.checkIn && !r.checkOut) {
+            notes.push('Quên chấm công ra ca');
+        } else if (!r.checkIn && r.checkOut) {
+            notes.push('Quên chấm công vào ca');
+        }
+        const noteStr = notes.join(', ');
+
         const row = worksheet.addRow({
             name: r.employeeName,
             date: format(new Date(r.logicalDate), 'dd/MM/yyyy'),
             checkin: r.checkIn ? format(r.checkIn, 'HH:mm') : '',
             checkout: r.checkOut ? format(r.checkOut, 'HH:mm') : '',
-            note: r.overtime ? 'Tăng ca' : ''
+            note: noteStr
         });
 
         row.alignment = { vertical: 'middle', horizontal: 'center' };

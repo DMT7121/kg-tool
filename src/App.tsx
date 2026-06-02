@@ -85,7 +85,7 @@ function App() {
   return (
     <div className="app-container">
       <div className="header">
-        <h1 className="title">Hệ Thống Xử Lý Chấm Công</h1>
+        <h1 className="title">KG_TOOL - Hệ Thống Xử Lý Chấm Công</h1>
         <p className="subtitle">Tự động hoá chuẩn hoá dữ liệu, phân ca đêm và nội suy ngày giờ</p>
       </div>
 

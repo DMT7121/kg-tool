@@ -32,13 +32,24 @@ function doPost(e) {
     }
     
     // Append rows
-    const rows = records.map(r => [
-      r.employeeName,
-      r.logicalDate,
-      r.checkIn ? new Date(r.checkIn).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
-      r.checkOut ? new Date(r.checkOut).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
-      r.overtime ? 'Tăng ca' : ''
-    ]);
+    const rows = records.map(r => {
+      const notes = [];
+      if (r.overtime) {
+        notes.push('Tăng ca');
+      }
+      if (r.checkIn && !r.checkOut) {
+        notes.push('Quên chấm công ra ca');
+      } else if (!r.checkIn && r.checkOut) {
+        notes.push('Quên chấm công vào ca');
+      }
+      return [
+        r.employeeName,
+        r.logicalDate,
+        r.checkIn ? new Date(r.checkIn).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
+        r.checkOut ? new Date(r.checkOut).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
+        notes.join(', ')
+      ];
+    });
     
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
     
