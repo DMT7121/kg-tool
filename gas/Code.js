@@ -4,6 +4,7 @@
  * 1. Xử lý chấm công (Lưu Bang_Cham_Cong_Log)
  * 2. Lưu trữ thông tin tài khoản VietQR (Lưu DATA2)
  * 3. Quản lý Phiếu lương nhân viên (Lưu PayrollData & ActionLogs)
+ * 4. Tích hợp Quản lý và Lưu trữ mẫu câu / lịch sử Đọc TTS (Lưu TTS_Templates, TTS_History, TTS_Settings)
  */
 
 // Initialize or open spreadsheets
@@ -39,9 +40,35 @@ function getOrCreateSheets(ssId) {
   return { ss: ss, dataSheet: dataSheet, logSheet: logSheet };
 }
 
+// Auto-create TTS tables if missing
+function getOrCreateTtsSheets(ss) {
+  var templatesSheet = ss.getSheetByName("TTS_Templates");
+  if (!templatesSheet) {
+    templatesSheet = ss.insertSheet("TTS_Templates");
+    templatesSheet.appendRow(['id', 'title', 'category', 'text', 'variables', 'providerId', 'voiceId', 'gender', 'lang', 'rate', 'pitch', 'volume', 'isFavorite', 'createdAt', 'updatedAt', 'createdBy', 'note']);
+    templatesSheet.getRange("A1:Q1").setFontWeight("bold").setBackground("#eef4ff");
+  }
+
+  var historySheet = ss.getSheetByName("TTS_History");
+  if (!historySheet) {
+    historySheet = ss.insertSheet("TTS_History");
+    historySheet.appendRow(['id', 'templateId', 'text', 'providerId', 'voiceId', 'gender', 'rate', 'pitch', 'volume', 'playedAt', 'status', 'errorMessage', 'user']);
+    historySheet.getRange("A1:L1").setFontWeight("bold").setBackground("#feeef0");
+  }
+
+  var settingsSheet = ss.getSheetByName("TTS_Settings");
+  if (!settingsSheet) {
+    settingsSheet = ss.insertSheet("TTS_Settings");
+    settingsSheet.appendRow(['key', 'value', 'updatedAt']);
+    settingsSheet.getRange("A1:C1").setFontWeight("bold").setBackground("#eef4ff");
+  }
+
+  return { templatesSheet: templatesSheet, historySheet: historySheet, settingsSheet: settingsSheet };
+}
+
 /**
  * GET Handler
- * Dùng để đọc danh sách tháng lương, thông tin lương chi tiết và log chỉnh sửa.
+ * Dùng để đọc danh sách tháng lương, thông tin lương chi tiết và log chỉnh sửa, mẫu câu/lịch sử TTS.
  */
 function doGet(e) {
   var res = { success: false, data: null, error: "" };
@@ -50,6 +77,7 @@ function doGet(e) {
     var ssId = e.parameter.ssId;
     
     var sheets = getOrCreateSheets(ssId);
+    var ss = sheets.ss;
     
     if (action === "getMonths") {
       res.data = fetchMonthsList(sheets.dataSheet, ssId);
@@ -61,6 +89,15 @@ function doGet(e) {
       res.success = true;
     } else if (action === "getLogs") {
       res.data = fetchActionLogs(sheets.logSheet, ssId);
+      res.success = true;
+    } else if (action === "get_tts_templates") {
+      res.data = fetchTtsTemplates(ss, ssId);
+      res.success = true;
+    } else if (action === "get_tts_history") {
+      res.data = fetchTtsHistory(ss, ssId);
+      res.success = true;
+    } else if (action === "get_tts_settings") {
+      res.data = fetchTtsSettings(ss, ssId);
       res.success = true;
     } else {
       throw new Error("Hành động GET không hợp lệ: " + action);
@@ -76,7 +113,7 @@ function doGet(e) {
 
 /**
  * POST Handler
- * Hỗ trợ lưu chấm công, lưu VietQR, lưu/xóa phiếu lương
+ * Hỗ trợ lưu chấm công, lưu VietQR, lưu/xóa phiếu lương, lưu/đồng bộ TTS
  */
 function doPost(e) {
   try {
@@ -181,7 +218,7 @@ function doPost(e) {
     if (action === "savePayroll") {
       var sheets = getOrCreateSheets(ssId);
       var month = data.month;
-      var dataStr = data.data; // JSON string of payroll
+      var dataStr = data.data; 
       var operator = data.operator || "Hệ thống";
       
       if (!month || !dataStr) {
@@ -209,6 +246,44 @@ function doPost(e) {
       writeLog(sheets.logSheet, operator, "Xóa phiếu lương", month, "Đã xóa toàn bộ phiếu lương của tháng " + month, ssId);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true }))
                            .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5. LƯU / ĐỒNG BỘ MẪU CÂU TTS
+    if (action === "save_tts_template") {
+      var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
+      var template = data.template;
+      if (!template || !template.id) {
+        throw new Error("Thiếu dữ liệu template hoặc ID.");
+      }
+      saveTtsTemplateRow(templatesSheet, template, ssId);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 6. XÓA MẪU CÂU TTS
+    if (action === "delete_tts_template") {
+      var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
+      var id = data.id;
+      if (!id) throw new Error("Thiếu ID template cần xóa.");
+      deleteTtsTemplateRow(templatesSheet, id, ssId);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 7. LƯU LỊCH SỬ PHÁT TTS
+    if (action === "save_tts_history") {
+      var historySheet = getOrCreateTtsSheets(ss).historySheet;
+      var log = data.log;
+      if (!log) throw new Error("Thiếu thông tin lịch sử.");
+      saveTtsHistoryRow(historySheet, log, ssId);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 8. LƯU CẤU HÌNH TTS
+    if (action === "save_tts_settings") {
+      var settingsSheet = getOrCreateTtsSheets(ss).settingsSheet;
+      var settingsList = data.settings; 
+      if (!settingsList || !settingsList.length) throw new Error("Thiếu cấu hình lưu trữ.");
+      saveTtsSettingsRows(settingsSheet, settingsList, ssId);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
     }
 
     throw new Error("Hành động POST không hợp lệ: " + action);
@@ -389,6 +464,173 @@ function fetchActionLogs(logSheet, ssId) {
     }
   }
   return logs;
+}
+
+// ==========================================
+// BUSINESS LOGIC METHODS FOR TTS
+// ==========================================
+
+function fetchTtsTemplates(ss, ssId) {
+  var sheet = ss.getSheetByName("TTS_Templates");
+  if (!sheet) return [];
+  var rows = getSheetValues(sheet, ssId, "A2:Q");
+  var list = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0]) {
+      list.push({
+        id: rows[i][0],
+        title: rows[i][1],
+        category: rows[i][2],
+        text: rows[i][3],
+        variables: rows[i][4] ? JSON.parse(rows[i][4]) : [],
+        providerId: rows[i][5],
+        voiceId: rows[i][6],
+        gender: rows[i][7],
+        lang: rows[i][8],
+        rate: Number(rows[i][9]) || 1.0,
+        pitch: Number(rows[i][10]) || 1.0,
+        volume: Number(rows[i][11]) || 1.0,
+        isFavorite: rows[i][12] === "TRUE" || rows[i][12] === true,
+        createdAt: rows[i][13],
+        updatedAt: rows[i][14],
+        createdBy: rows[i][15],
+        note: rows[i][16]
+      });
+    }
+  }
+  return list;
+}
+
+function saveTtsTemplateRow(sheet, template, ssId) {
+  var rows = getSheetValues(sheet, ssId, "A2:A");
+  var targetRowIndex = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0] === template.id) {
+      targetRowIndex = i + 2;
+      break;
+    }
+  }
+
+  var rowData = [
+    template.id,
+    template.title || "",
+    template.category || "",
+    template.text || "",
+    template.variables ? JSON.stringify(template.variables) : "[]",
+    template.providerId || "",
+    template.voiceId || "",
+    template.gender || "",
+    template.lang || "vi-VN",
+    template.rate || 1.0,
+    template.pitch || 1.0,
+    template.volume || 1.0,
+    template.isFavorite ? "TRUE" : "FALSE",
+    template.createdAt || new Date().toISOString(),
+    new Date().toISOString(),
+    template.createdBy || "",
+    template.note || ""
+  ];
+
+  if (targetRowIndex !== -1) {
+    updateSheetValues(sheet, ssId, "A" + targetRowIndex + ":Q" + targetRowIndex, [rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+}
+
+function deleteTtsTemplateRow(sheet, id, ssId) {
+  var rows = getSheetValues(sheet, ssId, "A2:A");
+  var targetRowIndex = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0] === id) {
+      targetRowIndex = i + 2;
+      break;
+    }
+  }
+  if (targetRowIndex !== -1) {
+    sheet.deleteRow(targetRowIndex);
+  }
+}
+
+function fetchTtsHistory(ss, ssId) {
+  var sheet = ss.getSheetByName("TTS_History");
+  if (!sheet) return [];
+  var rows = getSheetValues(sheet, ssId, "A2:L");
+  var list = [];
+  var start = Math.max(0, rows.length - 100);
+  for (var i = rows.length - 1; i >= start; i--) {
+    if (rows[i][0]) {
+      list.push({
+        id: rows[i][0],
+        templateId: rows[i][1],
+        text: rows[i][2],
+        providerId: rows[i][3],
+        voiceId: rows[i][4],
+        gender: rows[i][5],
+        rate: Number(rows[i][6]) || 1.0,
+        pitch: Number(rows[i][7]) || 1.0,
+        volume: Number(rows[i][8]) || 1.0,
+        playedAt: rows[i][9],
+        status: rows[i][10],
+        errorMessage: rows[i][11]
+      });
+    }
+  }
+  return list;
+}
+
+function saveTtsHistoryRow(sheet, log, ssId) {
+  var rowData = [
+    log.id || "hist-" + Date.now(),
+    log.templateId || "",
+    log.text || "",
+    log.providerId || "",
+    log.voiceId || "",
+    log.gender || "",
+    log.rate || 1.0,
+    log.pitch || 1.0,
+    log.volume || 1.0,
+    log.playedAt || new Date().toISOString(),
+    log.status || "success",
+    log.errorMessage || "",
+    log.user || ""
+  ];
+  sheet.appendRow(rowData);
+}
+
+function fetchTtsSettings(ss, ssId) {
+  var sheet = ss.getSheetByName("TTS_Settings");
+  if (!sheet) return {};
+  var rows = getSheetValues(sheet, ssId, "A2:B");
+  var settings = {};
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0]) {
+      settings[rows[i][0]] = rows[i][1];
+    }
+  }
+  return settings;
+}
+
+function saveTtsSettingsRows(sheet, settingsList, ssId) {
+  var rows = getSheetValues(sheet, ssId, "A2:B");
+  var timestamp = new Date().toISOString();
+  
+  settingsList.forEach(function(item) {
+    var targetRowIndex = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i][0] === item.key) {
+        targetRowIndex = i + 2;
+        break;
+      }
+    }
+    
+    var rowData = [item.key, String(item.value), timestamp];
+    if (targetRowIndex !== -1) {
+      updateSheetValues(sheet, ssId, "A" + targetRowIndex + ":C" + targetRowIndex, [rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
+  });
 }
 
 function test() {

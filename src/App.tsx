@@ -12,12 +12,14 @@ import {
   Settings, 
   Save, 
   Send,
-  HelpCircle
+  HelpCircle,
+  Volume2
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, type ProcessedRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
 import TransferFileTool from './components/TransferFileTool';
+import TTSPage from './components/TTSPage';
 import { StatCard, EmptyState, GuidePanel } from './components/Shared';
 
 // Interface definitions
@@ -64,7 +66,7 @@ const FALLBACK_BANKS: Bank[] = [
 
 function App() {
   // Navigation & UI state
-  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer'>('attendance');
+  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts'>('attendance');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -698,6 +700,14 @@ function App() {
           >
             <span className="ico"><Send size={20} /></span>
             <span>Chuyển Tiền</span>
+          </button>
+          <button 
+            className={`nav-item ${currentView === 'tts' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('tts'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Đọc TTS" : undefined}
+          >
+            <span className="ico"><Volume2 size={20} /></span>
+            <span>Đọc TTS</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
@@ -1480,6 +1490,17 @@ function App() {
         {currentView === 'transfer' && (
           <div className="screen active">
             <TransferFileTool showToast={showToast} />
+          </div>
+        )}
+
+        {/* VIEW 6: TEXT-TO-SPEECH (TTS) TOOL */}
+        {currentView === 'tts' && (
+          <div className="screen active">
+            <TTSPage 
+              showToast={showToast} 
+              gasUrl={gasUrl} 
+              spreadsheetId={spreadsheetId} 
+            />
           </div>
         )}
 
