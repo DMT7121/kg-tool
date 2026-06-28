@@ -64,8 +64,40 @@ const FALLBACK_BANKS: Bank[] = [
 function App() {
   // Navigation & UI state
   const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings'>('attendance');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('kg_tool_sidebar_collapsed') === 'true';
+  });
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  // Resize listener for responsive App Shell
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      const mobile = width < 640;
+      const tablet = width >= 640 && width < 1024;
+      setIsMobile(mobile);
+      if (tablet) {
+        setSidebarCollapsed(true);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSidebar = () => {
+    if (isMobile) {
+      setIsMobileDrawerOpen(prev => !prev);
+    } else {
+      setSidebarCollapsed(prev => {
+        const next = !prev;
+        localStorage.setItem('kg_tool_sidebar_collapsed', String(next));
+        return next;
+      });
+    }
+  };
 
   // Config State
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem('kg_tool_gas_url') || '');
@@ -611,7 +643,7 @@ function App() {
   const totalAmountReceived = qrHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
 
   return (
-    <div className="dashboard-layout">
+    <div className={`dashboard-layout ${isMobile ? 'layout-mobile' : ''} ${!isMobile && sidebarCollapsed ? 'layout-collapsed' : ''}`}>
       {/* Toast Notification badges */}
       <div className="toast-container">
         {toasts.map(t => (
@@ -627,7 +659,7 @@ function App() {
       </div>
 
       {/* Navigation Sidebar */}
-      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <aside className={`sidebar ${isMobile ? 'mobile-drawer' : ''} ${isMobile && isMobileDrawerOpen ? 'drawer-open' : ''} ${!isMobile && sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="brand">
           <div className="logo"></div>
           <span className="logo-text">KG_TOOL</span>
@@ -636,28 +668,32 @@ function App() {
         <nav className="nav">
           <button 
             className={`nav-item ${currentView === 'attendance' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('attendance'); setIsSidebarOpen(false); }}
+            onClick={() => { setCurrentView('attendance'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Chấm Công" : undefined}
           >
             <span className="ico"><FileText size={20} /></span>
             <span>Chấm Công</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'vietqr' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('vietqr'); setIsSidebarOpen(false); }}
+            onClick={() => { setCurrentView('vietqr'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "VietQR & Tài khoản" : undefined}
           >
             <span className="ico"><QrCode size={20} /></span>
             <span>VietQR & Tài khoản</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'payroll' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('payroll'); setIsSidebarOpen(false); }}
+            onClick={() => { setCurrentView('payroll'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Phiếu Lương" : undefined}
           >
             <span className="ico"><CreditCard size={20} /></span>
             <span>Phiếu Lương</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('settings'); setIsSidebarOpen(false); }}
+            onClick={() => { setCurrentView('settings'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Cấu hình" : undefined}
           >
             <span className="ico"><Settings size={20} /></span>
             <span>Cấu hình</span>
@@ -681,19 +717,21 @@ function App() {
       </aside>
 
       {/* Background Dim Overlay on Mobile when Sidebar is Open */}
-      {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>}
+      {isMobile && isMobileDrawerOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsMobileDrawerOpen(false)}></div>
+      )}
 
       {/* Main Content Pane */}
       <main className="main-content">
         
         {/* Top Header Bar */}
         <div className="topbar">
-          <button className="hamb" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>☰</button>
+          <button className="hamb" onClick={toggleSidebar}>☰</button>
           <div className="user">
             <div className="mini-btn">🔔<i className="dot"></i></div>
             <div className="mini-btn">☾</div>
             <div className="avatar">Q</div>
-            <div>
+            <div className="user-text">
               <b>Quản trị viên</b>
               <small>Quản lý nhà hàng</small>
             </div>

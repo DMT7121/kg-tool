@@ -205,6 +205,18 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>('current');
   const [paperSize, setPaperSize] = useState<'a4' | 'k80'>('a4');
 
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'data' | 'settings' | 'preview' | 'export'>('preview');
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Load state from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('kg_tool_payroll_state');
@@ -1829,482 +1841,510 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         ]}
       />
 
-      <div className={`payroll-layout ${isLeftPanelCollapsed ? 'left-panel-collapsed' : ''}`}>
+      {isMobileScreen && (
+        <div className="payroll-tabs" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '10px', width: '100%', marginBottom: '1.25rem', border: '1px solid var(--glass-border)', position: 'sticky', top: '0', zIndex: '100' }}>
+          <button type="button" className={`tab-btn ${mobileActiveTab === 'data' ? 'active' : ''}`} onClick={() => setMobileActiveTab('data')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'data' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Dữ liệu</button>
+          <button type="button" className={`tab-btn ${mobileActiveTab === 'settings' ? 'active' : ''}`} onClick={() => setMobileActiveTab('settings')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'settings' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Tùy chỉnh</button>
+          <button type="button" className={`tab-btn ${mobileActiveTab === 'preview' ? 'active' : ''}`} onClick={() => setMobileActiveTab('preview')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'preview' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Xem trước</button>
+          <button type="button" className={`tab-btn ${mobileActiveTab === 'export' ? 'active' : ''}`} onClick={() => setMobileActiveTab('export')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'export' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>In / Xuất</button>
+        </div>
+      )}
+
+      <div className={`payroll-layout ${isLeftPanelCollapsed ? 'left-panel-collapsed' : ''} ${isMobileScreen ? 'layout-mobile' : ''}`}>
         
         {/* LEFT COLUMN: Input form configs */}
-        <div className="config-pane">
-          
-          {/* Section 1: General configurations */}
-          <div className="glass-card collapsible-section">
-            <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
-              <span className="card-heading-title">⚙️ Cấu hình phiếu lương chung</span>
-            </div>
-            <div className="section-content">
-              <div className="grid2">
-                <div className="form-group">
-                  <label className="form-label">Chế độ tính lương</label>
-                  <select 
-                    className="form-control" 
-                    value={salaryMode} 
-                    onChange={(e) => setSalaryMode(e.target.value as 'monthly' | 'hourly')}
-                  >
-                    <option value="monthly">Theo tháng (Lương tháng / ngày công)</option>
-                    <option value="hourly">Theo giờ (Lương giờ × số giờ)</option>
-                  </select>
+        {(!isMobileScreen || mobileActiveTab === 'data' || mobileActiveTab === 'settings' || mobileActiveTab === 'export') && (
+          <div className="config-pane">
+            
+            {/* Section 1: General configurations */}
+            {(!isMobileScreen || mobileActiveTab === 'data') && (
+              <div className="glass-card collapsible-section">
+                <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
+                  <span className="card-heading-title">⚙️ Cấu hình phiếu lương chung</span>
                 </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Tháng thanh toán</label>
-                  <input type="month" className="form-control" value={payMonth} onChange={(e) => setPayMonth(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="form-group">
-                  <label className="form-label">Ngày lập chứng từ</label>
-                  <input type="date" className="form-control" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
-                </div>
-
-                <div className="form-group" style={{ display: isHourly ? 'none' : 'block' }}>
-                  <label className="form-label">Số ngày công định mức</label>
-                  <input type="number" className="form-control" value={standardDays} onChange={(e) => setStandardDays(Number(e.target.value) || 26)} />
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="form-group">
-                  <label className="form-label">Chức vụ mặc định</label>
-                  <input type="text" className="form-control" value={defaultPosition} onChange={(e) => setDefaultPosition(e.target.value)} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Bộ phận mặc định</label>
-                  <input type="text" className="form-control" value={defaultDept} onChange={(e) => setDefaultDept(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="form-group">
-                  <label className="form-label">Làm tròn số tiền</label>
-                  <select className="form-control" value={roundMode} onChange={(e) => setRoundMode(e.target.value as any)}>
-                    <option value="none">Không làm tròn</option>
-                    <option value="hundred">Làm tròn hàng trăm (100đ)</option>
-                    <option value="thousand">Làm tròn hàng nghìn (1.000đ)</option>
-                  </select>
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">Khấu trừ tạm ứng chung (đ)</label>
-                  <input 
-                    type="text" 
-                    className="form-control" 
-                    value={formatMoney(advance)} 
-                    onFocus={(e) => {
-                      const val = onlyNumber(e.target.value);
-                      e.target.value = val === 0 ? '' : String(val);
-                    }}
-                    onBlur={(e) => {
-                      const val = onlyNumber(e.target.value);
-                      setAdvance(val);
-                      e.target.value = formatMoney(val);
-                    }}
-                    onChange={() => {}}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Bulk import / Sample Actions */}
-          <div className="glass-card">
-            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>☁ Nhập dữ liệu hàng loạt / Thao tác</span>
-            <div className="grid2">
-              <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
-              <button className="primary" onClick={triggerCsvSelect} style={{ height: '44px', fontSize: '14px' }}>
-                <UploadCloud size={16} />
-                Nhập danh sách CSV
-              </button>
-              <button className="primary" onClick={loadSampleData} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>Tải dữ liệu mẫu</button>
-            </div>
-            <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
-              <button className="btn-outline" onClick={clearAllForms} style={{ flexGrow: 1, padding: '0.5rem' }}>Xóa form dữ liệu</button>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Hỗ trợ định dạng: .csv, .xlsx, .xls</p>
-          </div>
-
-          {/* Section 3: Tùy chỉnh hiển thị */}
-          <div className="glass-card collapsible-section">
-            <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
-              <span className="card-heading-title">👁️ Tùy chỉnh hiển thị phiếu</span>
-            </div>
-            <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div className="form-group">
-                <label className="form-label">Chọn Preset nhanh</label>
-                <div className="preset-toggle-container">
-                  <button className="btn-outline small-btn" onClick={() => applyPreset('full')}>Đầy đủ</button>
-                  <button className="btn-outline small-btn" onClick={() => applyPreset('compact')}>Rút gọn</button>
-                  <button className="btn-outline small-btn" onClick={() => applyPreset('internal')}>Nội bộ</button>
-                  <button className="btn-outline small-btn" onClick={() => applyPreset('k80')}>In nhiệt</button>
-                </div>
-              </div>
-
-              <div className="checkbox-grid">
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility((prev: any) => ({ ...prev, showLogo: e.target.checked }))} />
-                  <span>Logo đơn vị</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showUnitInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showUnitInfo: e.target.checked }))} />
-                  <span>Tên & địa chỉ đơn vị</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility((prev: any) => ({ ...prev, showTitle: e.target.checked }))} />
-                  <span>Tiêu đề phiếu</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showMetaInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showMetaInfo: e.target.checked }))} />
-                  <span>Tháng & Ngày lập</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showEmpName} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpName: e.target.checked }))} />
-                  <span>Tên nhân viên</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showEmpRole} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpRole: e.target.checked }))} />
-                  <span>Chức vụ</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showEmpDept} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpDept: e.target.checked }))} />
-                  <span>Bộ phận</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility((prev: any) => ({ ...prev, showBaseSalary: e.target.checked }))} />
-                  <span>Mức lương cơ bản</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility((prev: any) => ({ ...prev, showTime: e.target.checked }))} />
-                  <span>Số giờ/Số công làm</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility((prev: any) => ({ ...prev, showSignatures: e.target.checked }))} />
-                  <span>Ký tên xác nhận</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility((prev: any) => ({ ...prev, showNotes: e.target.checked }))} />
-                  <span>Ghi chú bằng chữ</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Kiểu chữ & Typography */}
-          <div className="glass-card collapsible-section">
-            <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
-              <span className="card-heading-title">🔤 Kiểu chữ & Typography</span>
-            </div>
-            <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div className="form-group">
-                <label className="form-label">Chọn Preset phong cách nhanh</label>
-                <div className="preset-toggle-container">
-                  <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('modern')}>Hiện đại</button>
-                  <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('admin')}>Hành chính</button>
-                  <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('minimalist')}>Tối giản</button>
-                  <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('luxury')}>Sang trọng</button>
-                  <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('k80')}>In nhiệt K80</button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Font chữ tiếng Việt</label>
-                <select className="form-control" value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
-                  {AVAILABLE_FONTS.map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid3">
-                <div className="form-group">
-                  <label className="form-label">Cỡ tiêu đề</label>
-                  <input type="number" className="form-control" value={fontSizeTitle} onChange={e => setFontSizeTitle(Number(e.target.value) || 28)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Cỡ nội dung</label>
-                  <input type="number" className="form-control" value={fontSizeContent} onChange={e => setFontSizeContent(Number(e.target.value) || 14)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Cỡ bảng</label>
-                  <input type="number" className="form-control" value={fontSizeTable} onChange={e => setFontSizeTable(Number(e.target.value) || 13)} />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Độ đậm tiêu đề</label>
-                <select className="form-control" value={titleWeight} onChange={e => setTitleWeight(e.target.value)}>
-                  <option value="400">Regular (400)</option>
-                  <option value="500">Medium (500)</option>
-                  <option value="600">Semi Bold (600)</option>
-                  <option value="700">Bold (700)</option>
-                  <option value="800">Extra Bold (800)</option>
-                  <option value="900">Black (900)</option>
-                </select>
-              </div>
-
-              <button className="btn-outline" onClick={resetAllConfigurations} style={{ padding: '0.5rem', width: '100%', marginTop: '0.5rem' }}>
-                Khôi phục mặc định
-              </button>
-            </div>
-          </div>
-
-          {/* Section 5: Thiết lập in & Xuất bản */}
-          <div className="glass-card collapsible-section">
-            <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
-              <span className="card-heading-title">🖨️ Thiết lập in ấn & Khổ giấy</span>
-            </div>
-            <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div className="grid2">
-                <div className="form-group">
-                  <label className="form-label">Phạm vi in ấn</label>
-                  <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
-                    <option value="current">Chỉ in phiếu đang chọn</option>
-                    <option value="all">In tất cả nhân viên</option>
-                    <option value="selected">In các nhân viên được chọn</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Chọn khổ giấy</label>
-                  <select className="form-control" value={paperSize} onChange={e => setPaperSize(e.target.value as any)}>
-                    <option value="a4">Khổ giấy chuẩn A4 / A5</option>
-                    <option value="k80">Khổ giấy in nhiệt K80 (80mm)</option>
-                  </select>
-                </div>
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cài đặt này sẽ được áp dụng trực tiếp khi bạn bấm nút In Phiếu.</p>
-            </div>
-          </div>
-
-          {/* Section 6: Nhập dữ liệu nhân viên */}
-          <div className="glass-card">
-            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>👥 Nhập dữ liệu nhân viên ({employees.length})</span>
-            <div className="grid2" style={{ marginBottom: '1.25rem' }}>
-              <button className="primary" onClick={addEmployee} style={{ height: '44px', fontSize: '14px' }}>
-                <Plus size={14} />
-                Thêm nhân viên
-              </button>
-              <button className="primary" onClick={() => {
-                const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
-                if (text) {
-                  const lines = text.split('\n');
-                  const newEmps: Employee[] = [];
-                  const isHourly = salaryMode === 'hourly';
-                  lines.forEach((line, idx) => {
-                    if (!line.trim()) return;
-                    const cols = line.split('\t');
-                    if (cols.length < 2) return;
-                    const name = cols[0]?.trim();
-                    const days = Number(cols[1]) || 0;
-                    const range = cols[2]?.trim() || '';
-                    const salary = onlyNumber(cols[3] || (isHourly ? '35.000' : '10.000.000'));
-                    let amount = isHourly ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
-                    newEmps.push({ id: Date.now().toString() + idx, name, days, range, salary, amount });
-                  });
-                  if (newEmps.length > 0) {
-                    setEmployees(prev => [...prev, ...newEmps]);
-                    showToast(`Đã dán thành công ${newEmps.length} nhân viên!`, 'success');
-                  }
-                }
-              }} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>
-                Dán dữ liệu
-              </button>
-            </div>
-
-            <div className="employees-list-container">
-              {employees.map((emp, idx) => (
-                <div key={emp.id} className="employee-input-row">
-                  <div className="employee-row-title">
-                    <span>👤 Nhân viên #{idx + 1}</span>
-                    <button className="btn-danger small-btn" style={{ padding: '2px 6px' }} onClick={() => deleteEmployee(emp.id)}>Xóa</button>
+                <div className="section-content">
+                  <div className="grid2">
+                    <div className="form-group">
+                      <label className="form-label">Chế độ tính lương</label>
+                      <select 
+                        className="form-control" 
+                        value={salaryMode} 
+                        onChange={(e) => setSalaryMode(e.target.value as 'monthly' | 'hourly')}
+                      >
+                        <option value="monthly">Theo tháng (Lương tháng / ngày công)</option>
+                        <option value="hourly">Theo giờ (Lương giờ × số giờ)</option>
+                      </select>
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">Tháng thanh toán</label>
+                      <input type="month" className="form-control" value={payMonth} onChange={(e) => setPayMonth(e.target.value)} />
+                    </div>
                   </div>
-                  
+
+                  <div className="grid2">
+                    <div className="form-group">
+                      <label className="form-label">Ngày lập chứng từ</label>
+                      <input type="date" className="form-control" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
+                    </div>
+
+                    <div className="form-group" style={{ display: isHourly ? 'none' : 'block' }}>
+                      <label className="form-label">Số ngày công định mức</label>
+                      <input type="number" className="form-control" value={standardDays} onChange={(e) => setStandardDays(Number(e.target.value) || 26)} />
+                    </div>
+                  </div>
+
+                  <div className="grid2">
+                    <div className="form-group">
+                      <label className="form-label">Chức vụ mặc định</label>
+                      <input type="text" className="form-control" value={defaultPosition} onChange={(e) => setDefaultPosition(e.target.value)} />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Bộ phận mặc định</label>
+                      <input type="text" className="form-control" value={defaultDept} onChange={(e) => setDefaultDept(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="grid2">
+                    <div className="form-group">
+                      <label className="form-label">Làm tròn số tiền</label>
+                      <select className="form-control" value={roundMode} onChange={(e) => setRoundMode(e.target.value as any)}>
+                        <option value="none">Không làm tròn</option>
+                        <option value="hundred">Làm tròn hàng trăm (100đ)</option>
+                        <option value="thousand">Làm tròn hàng nghìn (1.000đ)</option>
+                      </select>
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">Khấu trừ tạm ứng chung (đ)</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formatMoney(advance)} 
+                        onFocus={(e) => {
+                          const val = onlyNumber(e.target.value);
+                          e.target.value = val === 0 ? '' : String(val);
+                        }}
+                        onBlur={(e) => {
+                          const val = onlyNumber(e.target.value);
+                          setAdvance(val);
+                          e.target.value = formatMoney(val);
+                        }}
+                        onChange={() => {}}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 2: Bulk import / Sample Actions */}
+            {(!isMobileScreen || mobileActiveTab === 'data') && (
+              <div className="glass-card">
+                <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>☁ Nhập dữ liệu hàng loạt / Thao tác</span>
+                <div className="grid2">
+                  <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
+                  <button className="primary" onClick={triggerCsvSelect} style={{ height: '44px', fontSize: '14px' }}>
+                    <UploadCloud size={16} />
+                    Nhập danh sách CSV
+                  </button>
+                  <button className="primary" onClick={loadSampleData} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>Tải dữ liệu mẫu</button>
+                </div>
+                <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
+                  <button className="btn-outline" onClick={clearAllForms} style={{ flexGrow: 1, padding: '0.5rem' }}>Xóa form dữ liệu</button>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Hỗ trợ định dạng: .csv, .xlsx, .xls</p>
+              </div>
+            )}
+
+            {/* Section 3: Tùy chỉnh hiển thị */}
+            {(!isMobileScreen || mobileActiveTab === 'settings') && (
+              <div className="glass-card collapsible-section">
+                <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
+                  <span className="card-heading-title">👁️ Tùy chỉnh hiển thị phiếu</span>
+                </div>
+                <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   <div className="form-group">
-                    <label className="form-label">Họ và tên</label>
-                    <input type="text" className="form-control" value={emp.name} onChange={(e) => updateEmployeeDetails(emp.id, 'name', e.target.value)} />
+                    <label className="form-label">Chọn Preset nhanh</label>
+                    <div className="preset-toggle-container">
+                      <button className="btn-outline small-btn" onClick={() => applyPreset('full')}>Đầy đủ</button>
+                      <button className="btn-outline small-btn" onClick={() => applyPreset('compact')}>Rút gọn</button>
+                      <button className="btn-outline small-btn" onClick={() => applyPreset('internal')}>Nội bộ</button>
+                      <button className="btn-outline small-btn" onClick={() => applyPreset('k80')}>In nhiệt</button>
+                    </div>
+                  </div>
+
+                  <div className="checkbox-grid">
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility((prev: any) => ({ ...prev, showLogo: e.target.checked }))} />
+                      <span>Logo đơn vị</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showUnitInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showUnitInfo: e.target.checked }))} />
+                      <span>Tên & địa chỉ đơn vị</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility((prev: any) => ({ ...prev, showTitle: e.target.checked }))} />
+                      <span>Tiêu đề phiếu</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showMetaInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showMetaInfo: e.target.checked }))} />
+                      <span>Tháng & Ngày lập</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showEmpName} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpName: e.target.checked }))} />
+                      <span>Tên nhân viên</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showEmpRole} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpRole: e.target.checked }))} />
+                      <span>Chức vụ</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showEmpDept} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpDept: e.target.checked }))} />
+                      <span>Bộ phận</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility((prev: any) => ({ ...prev, showBaseSalary: e.target.checked }))} />
+                      <span>Mức lương cơ bản</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility((prev: any) => ({ ...prev, showTime: e.target.checked }))} />
+                      <span>Số giờ/Số công làm</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility((prev: any) => ({ ...prev, showSignatures: e.target.checked }))} />
+                      <span>Ký tên xác nhận</span>
+                    </label>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility((prev: any) => ({ ...prev, showNotes: e.target.checked }))} />
+                      <span>Ghi chú bằng chữ</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 4: Kiểu chữ & Typography */}
+            {(!isMobileScreen || mobileActiveTab === 'settings') && (
+              <div className="glass-card collapsible-section">
+                <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
+                  <span className="card-heading-title">🔤 Kiểu chữ & Typography</span>
+                </div>
+                <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Chọn Preset phong cách nhanh</label>
+                    <div className="preset-toggle-container">
+                      <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('modern')}>Hiện đại</button>
+                      <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('admin')}>Hành chính</button>
+                      <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('minimalist')}>Tối giản</button>
+                      <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('luxury')}>Sang trọng</button>
+                      <button className="btn-outline small-btn" onClick={() => applyTypographyPreset('k80')}>In nhiệt K80</button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Font chữ tiếng Việt</label>
+                    <select className="form-control" value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
+                      {AVAILABLE_FONTS.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="grid3">
                     <div className="form-group">
-                      <label className="form-label">{isHourly ? 'Số giờ làm' : 'Số công'}</label>
-                      <input 
-                        type="number" 
-                        step="0.1" 
-                        min="0" 
-                        className="form-control" 
-                        value={emp.days} 
-                        onChange={(e) => updateEmployeeDays(emp.id, Number(e.target.value) || 0)} 
-                      />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label className="form-label">Thời gian làm việc</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        placeholder="01/06 - 30/06" 
-                        value={emp.range} 
-                        onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">{isHourly ? 'Lương giờ' : 'Lương cơ bản'}</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        value={formatMoney(emp.salary)} 
-                        onFocus={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          e.target.value = val === 0 ? '' : String(val);
-                        }}
-                        onBlur={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          updateEmployeeSalary(emp.id, String(val));
-                          e.target.value = formatMoney(val);
-                        }}
-                        onChange={() => {}}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {employees.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  Chưa có nhân viên nào. Vui lòng thêm thủ công hoặc tải file CSV mẫu.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Section 7: Deductions */}
-          <div className="glass-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <span className="card-heading-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <TrendingDown size={18} />
-                Khoản khấu trừ chung ({deductions.length})
-              </span>
-              <button className="btn-primary small-btn" onClick={addDeduction}>
-                <Plus size={14} />
-                Thêm khấu trừ
-              </button>
-            </div>
-
-            <div className="deductions-list-container">
-              {deductions.map(d => (
-                <div key={d.id} className="deduction-input-row">
-                  <div className="employee-row-title">
-                    <span>💸 Khấu trừ</span>
-                    <button className="btn-danger small-btn" style={{ padding: '2px 6px' }} onClick={() => deleteDeduction(d.id)}>Xóa</button>
-                  </div>
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Nội dung</label>
-                      <input type="text" className="form-control" placeholder="BHXH, Đồng phục..." value={d.label} onChange={(e) => updateDeduction(d.id, 'label', e.target.value)} />
+                      <label className="form-label">Cỡ tiêu đề</label>
+                      <input type="number" className="form-control" value={fontSizeTitle} onChange={e => setFontSizeTitle(Number(e.target.value) || 28)} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Số tiền (đ)</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        value={formatMoney(d.amount)} 
-                        onFocus={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          e.target.value = val === 0 ? '' : String(val);
-                        }}
-                        onBlur={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          updateDeduction(d.id, 'amount', val);
-                          e.target.value = formatMoney(val);
-                        }}
-                        onChange={() => {}}
-                      />
+                      <label className="form-label">Cỡ nội dung</label>
+                      <input type="number" className="form-control" value={fontSizeContent} onChange={e => setFontSizeContent(Number(e.target.value) || 14)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Cỡ bảng</label>
+                      <input type="number" className="form-control" value={fontSizeTable} onChange={e => setFontSizeTable(Number(e.target.value) || 13)} />
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Section 8: Google Sheets Sync Controls */}
-          <div className="glass-card sync-box">
-            <div className="sync-status">
-              <span className={`sync-dot ${syncStatus}`}></span>
-              <span>Google Sheets Sync: </span>
-              <strong>{syncStatus === 'online' ? 'Sẵn sàng' : syncStatus === 'loading' ? 'Đang đồng bộ...' : 'Chưa kết nối'}</strong>
-            </div>
-
-            <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
-              <button className="primary" style={{ flexGrow: 1 }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
-                <Save size={16} />
-                Lưu Cloud (Google Sheets)
-              </button>
-              <button className="btn-ghost" onClick={fetchHistoryMonths} disabled={syncStatus === 'loading'} title="Tải lại lịch sử">
-                <RefreshCw size={16} className={syncStatus === 'loading' ? 'spinner' : ''} />
-              </button>
-            </div>
-
-            <div className="history-list-header">Lịch sử tháng lương đã lưu:</div>
-            <div className="history-items-list">
-              {historyMonths.map(h => (
-                <div key={h.month} className="history-item-row" onClick={() => loadHistoryMonth(h.month)}>
-                  <div className="history-meta">
-                    <span className="h-month">Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
-                    <span className="h-info">Ghi bởi: {h.operator} - {h.updatedTime}</span>
+                  <div className="form-group">
+                    <label className="form-label">Độ đậm tiêu đề</label>
+                    <select className="form-control" value={titleWeight} onChange={e => setTitleWeight(e.target.value)}>
+                      <option value="400">Regular (400)</option>
+                      <option value="500">Medium (500)</option>
+                      <option value="600">Semi Bold (600)</option>
+                      <option value="700">Bold (700)</option>
+                      <option value="800">Extra Bold (800)</option>
+                      <option value="900">Black (900)</option>
+                    </select>
                   </div>
-                  <button 
-                    className="btn-danger small-btn" 
-                    style={{ padding: '3px 6px', fontSize: '10px' }} 
-                    onClick={(e) => { e.stopPropagation(); deleteHistoryMonth(h.month); }}
-                  >
-                    Xóa
+
+                  <button className="btn-outline" onClick={resetAllConfigurations} style={{ padding: '0.5rem', width: '100%', marginTop: '0.5rem' }}>
+                    Khôi phục mặc định
                   </button>
                 </div>
-              ))}
-              {historyMonths.length === 0 && (
-                <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Chưa có dữ liệu nào lưu trữ đám mây.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Section 9: Validation Messages */}
-          {warningsList.length > 0 && (
-            <div className="glass-card" style={{ border: '1px solid rgba(255, 92, 122, 0.4)', background: 'rgba(255, 92, 122, 0.05)' }}>
-              <span className="card-heading-title" style={{ color: '#ff5c7a' }}>
-                <AlertTriangle size={18} />
-                Cảnh báo dữ liệu ({warningsList.length})
-              </span>
-              <div className="warnings-container-scroll" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                {employees.map(emp => {
-                  const msgs = validationMap[emp.id] || [];
-                  if (msgs.length === 0) return null;
-                  return (
-                    <div key={emp.id} style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.15)', padding: '6px 10px', borderRadius: '6px' }}>
-                      <strong style={{ color: 'white', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
-                      {msgs.map((m, i) => (
-                        <div key={i} style={{ color: m.type === 'error' ? '#ff5c7a' : '#ffc107', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <span>•</span>
-                          <span>{m.message}</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
               </div>
-            </div>
-          )}
+            )}
 
-        </div>
+            {/* Section 5: Thiết lập in & Xuất bản */}
+            {(!isMobileScreen || mobileActiveTab === 'export') && (
+              <div className="glass-card collapsible-section">
+                <div className="section-header" onClick={(e) => e.currentTarget.classList.toggle('collapsed')}>
+                  <span className="card-heading-title">🖨️ Thiết lập in ấn & Khổ giấy</span>
+                </div>
+                <div className="section-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  <div className="grid2">
+                    <div className="form-group">
+                      <label className="form-label">Phạm vi in ấn</label>
+                      <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
+                        <option value="current">Chỉ in phiếu đang chọn</option>
+                        <option value="all">In tất cả nhân viên</option>
+                        <option value="selected">In các nhân viên được chọn</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Chọn khổ giấy</label>
+                      <select className="form-control" value={paperSize} onChange={e => setPaperSize(e.target.value as any)}>
+                        <option value="a4">Khổ giấy chuẩn A4 / A5</option>
+                        <option value="k80">Khổ giấy in nhiệt K80 (80mm)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cài đặt này sẽ được áp dụng trực tiếp khi bạn bấm nút In Phiếu.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Section 6: Nhập dữ liệu nhân viên */}
+            {(!isMobileScreen || mobileActiveTab === 'data') && (
+              <div className="glass-card">
+                <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>👥 Nhập dữ liệu nhân viên ({employees.length})</span>
+                <div className="grid2" style={{ marginBottom: '1.25rem' }}>
+                  <button className="primary" onClick={addEmployee} style={{ height: '44px', fontSize: '14px' }}>
+                    <Plus size={14} />
+                    Thêm nhân viên
+                  </button>
+                  <button className="primary" onClick={() => {
+                    const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
+                    if (text) {
+                      const lines = text.split('\n');
+                      const newEmps: Employee[] = [];
+                      const isHourly = salaryMode === 'hourly';
+                      lines.forEach((line, idx) => {
+                        if (!line.trim()) return;
+                        const cols = line.split('\t');
+                        if (cols.length < 2) return;
+                        const name = cols[0]?.trim();
+                        const days = Number(cols[1]) || 0;
+                        const range = cols[2]?.trim() || '';
+                        const salary = onlyNumber(cols[3] || (isHourly ? '35.000' : '10.000.000'));
+                        let amount = isHourly ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
+                        newEmps.push({ id: Date.now().toString() + idx, name, days, range, salary, amount });
+                      });
+                      if (newEmps.length > 0) {
+                        setEmployees(prev => [...prev, ...newEmps]);
+                        showToast(`Đã dán thành công ${newEmps.length} nhân viên!`, 'success');
+                      }
+                    }
+                  }} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>
+                    Dán dữ liệu
+                  </button>
+                </div>
+
+                <div className="employees-list-container">
+                  {employees.map((emp, idx) => (
+                    <div key={emp.id} className="employee-input-row">
+                      <div className="employee-row-title">
+                        <span>👤 Nhân viên #{idx + 1}</span>
+                        <button className="btn-danger small-btn" style={{ padding: '2px 6px' }} onClick={() => deleteEmployee(emp.id)}>Xóa</button>
+                      </div>
+                      
+                      <div className="form-group">
+                        <label className="form-label">Họ và tên</label>
+                        <input type="text" className="form-control" value={emp.name} onChange={(e) => updateEmployeeDetails(emp.id, 'name', e.target.value)} />
+                      </div>
+
+                      <div className="grid3">
+                        <div className="form-group">
+                          <label className="form-label">{isHourly ? 'Số giờ làm' : 'Số công'}</label>
+                          <input 
+                            type="number" 
+                            step="0.1" 
+                            min="0" 
+                            className="form-control" 
+                            value={emp.days} 
+                            onChange={(e) => updateEmployeeDays(emp.id, Number(e.target.value) || 0)} 
+                          />
+                        </div>
+                        
+                        <div className="form-group">
+                          <label className="form-label">Thời gian làm việc</label>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="01/06 - 30/06" 
+                            value={emp.range} 
+                            onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">{isHourly ? 'Lương giờ' : 'Lương cơ bản'}</label>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            value={formatMoney(emp.salary)} 
+                            onFocus={(e) => {
+                              const val = onlyNumber(e.target.value);
+                              e.target.value = val === 0 ? '' : String(val);
+                            }}
+                            onBlur={(e) => {
+                              const val = onlyNumber(e.target.value);
+                              updateEmployeeSalary(emp.id, String(val));
+                              e.target.value = formatMoney(val);
+                            }}
+                            onChange={() => {}}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {employees.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Chưa có nhân viên nào. Vui lòng thêm thủ công hoặc tải file CSV mẫu.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Section 7: Deductions */}
+            {(!isMobileScreen || mobileActiveTab === 'data') && (
+              <div className="glass-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <span className="card-heading-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <TrendingDown size={18} />
+                    Khoản khấu trừ chung ({deductions.length})
+                  </span>
+                  <button className="btn-primary small-btn" onClick={addDeduction}>
+                    <Plus size={14} />
+                    Thêm khấu trừ
+                  </button>
+                </div>
+
+                <div className="deductions-list-container">
+                  {deductions.map(d => (
+                    <div key={d.id} className="deduction-input-row">
+                      <div className="employee-row-title">
+                        <span>💸 Khấu trừ</span>
+                        <button className="btn-danger small-btn" style={{ padding: '2px 6px' }} onClick={() => deleteDeduction(d.id)}>Xóa</button>
+                      </div>
+                      <div className="grid2">
+                        <div className="form-group">
+                          <label className="form-label">Nội dung</label>
+                          <input type="text" className="form-control" placeholder="BHXH, Đồng phục..." value={d.label} onChange={(e) => updateDeduction(d.id, 'label', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Số tiền (đ)</label>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            value={formatMoney(d.amount)} 
+                            onFocus={(e) => {
+                              const val = onlyNumber(e.target.value);
+                              e.target.value = val === 0 ? '' : String(val);
+                            }}
+                            onBlur={(e) => {
+                              const val = onlyNumber(e.target.value);
+                              updateDeduction(d.id, 'amount', val);
+                              e.target.value = formatMoney(val);
+                            }}
+                            onChange={() => {}}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 8: Google Sheets Sync Controls */}
+            {(!isMobileScreen || mobileActiveTab === 'settings') && (
+              <div className="glass-card sync-box">
+                <div className="sync-status">
+                  <span className={`sync-dot ${syncStatus}`}></span>
+                  <span>Google Sheets Sync: </span>
+                  <strong>{syncStatus === 'online' ? 'Sẵn sàng' : syncStatus === 'loading' ? 'Đang đồng bộ...' : 'Chưa kết nối'}</strong>
+                </div>
+
+                <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
+                  <button className="primary" style={{ flexGrow: 1 }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
+                    <Save size={16} />
+                    Lưu Cloud (Google Sheets)
+                  </button>
+                  <button className="btn-ghost" onClick={fetchHistoryMonths} disabled={syncStatus === 'loading'} title="Tải lại lịch sử">
+                    <RefreshCw size={16} className={syncStatus === 'loading' ? 'spinner' : ''} />
+                  </button>
+                </div>
+
+                <div className="history-list-header">Lịch sử tháng lương đã lưu:</div>
+                <div className="history-items-list">
+                  {historyMonths.map(h => (
+                    <div key={h.month} className="history-item-row" onClick={() => loadHistoryMonth(h.month)}>
+                      <div className="history-meta">
+                        <span className="h-month">Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
+                        <span className="h-info">Ghi bởi: {h.operator} - {h.updatedTime}</span>
+                      </div>
+                      <button 
+                        className="btn-danger small-btn" 
+                        style={{ padding: '3px 6px', fontSize: '10px' }} 
+                        onClick={(e) => { e.stopPropagation(); deleteHistoryMonth(h.month); }}
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  ))}
+                  {historyMonths.length === 0 && (
+                    <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Chưa có dữ liệu nào lưu trữ đám mây.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Section 9: Validation Messages */}
+            {(!isMobileScreen || mobileActiveTab === 'settings') && warningsList.length > 0 && (
+              <div className="glass-card" style={{ border: '1px solid rgba(255, 92, 122, 0.4)', background: 'rgba(255, 92, 122, 0.05)' }}>
+                <span className="card-heading-title" style={{ color: '#ff5c7a' }}>
+                  <AlertTriangle size={18} />
+                  Cảnh báo dữ liệu ({warningsList.length})
+                </span>
+                <div className="warnings-container-scroll" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  {employees.map(emp => {
+                    const msgs = validationMap[emp.id] || [];
+                    if (msgs.length === 0) return null;
+                    return (
+                      <div key={emp.id} style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.15)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <strong style={{ color: 'white', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
+                        {msgs.map((m, i) => (
+                          <div key={i} style={{ color: m.type === 'error' ? '#ff5c7a' : '#ffc107', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <span>•</span>
+                            <span>{m.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
 
         {/* RIGHT COLUMN: Live dynamic preview rendering */}
-        <div className="preview-pane">
+        {(!isMobileScreen || mobileActiveTab === 'preview' || mobileActiveTab === 'export') && (
+          <div className="preview-pane">
           
           {/* Preview Tab Control Panel */}
           <div className="preview-header-panel">
@@ -2576,7 +2616,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             </div>
           )}
 
-        </div>
+          </div>
+        )}
 
       </div>
     </div>

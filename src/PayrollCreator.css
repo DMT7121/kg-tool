@@ -900,3 +900,93 @@
   }
 }
 
+/* Responsive adjustments for Payroll Creator tab layout */
+.payroll-layout.layout-mobile {
+  grid-template-columns: 1fr !important;
+}
+
+@media (max-width: 768px) {
+  .payroll-layout {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  
+  .payroll-tabs .tab-btn {
+    transition: all 0.2s ease;
+  }
+  
+  .payroll-tabs .tab-btn.active {
+    box-shadow: 0 0 12px rgba(22, 119, 255, 0.4);
+  }
+  
+  /* Make sheet preview fit the viewport on mobile */
+  .sheet-canvas-wrapper {
+    transform: none !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+    padding: 0 !important;
+  }
+  
+  .receipt-svg-holder svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  
+  .preview-receipt-card {
+    padding: 0.5rem !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  
+  .preview-toolbar-bar {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+    height: auto !important;
+    padding: 10px !important;
+  }
+  
+  .toolbar-left-group, .toolbar-right-group {
+    justify-content: space-between !important;
+    width: 100% !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  
+  .action-buttons-box {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  
+  .action-buttons-box button {
+    width: 100% !important;
+  }
+  
+  .employee-navigator-widget {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  
+  .preview-header-panel {
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+  }
+  
+  .preview-views-toggle, .preview-templates-toggle {
+    display: flex !important;
+    width: 100% !important;
+  }
+  
+  .view-toggle-btn, .template-toggle-btn {
+    flex-grow: 1 !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+  }
+}
+

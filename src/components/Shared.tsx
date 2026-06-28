@@ -96,7 +96,7 @@ export const GuidePanel: React.FC<GuidePanelProps> = ({ title, purpose, steps, n
             </ol>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
             <div style={{ background: 'rgba(48, 231, 151, 0.04)', border: '1px solid rgba(48, 231, 151, 0.15)', borderRadius: '8px', padding: '0.75rem' }}>
               <strong style={{ color: 'var(--green)', display: 'block', marginBottom: '4px' }}>💡 Lưu ý quan trọng:</strong>
               <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.85rem' }}>
