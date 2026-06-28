@@ -17,6 +17,7 @@ import {
 import './App.css';
 import { parseFile, processRecords, exportToExcel, type ProcessedRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
+import TransferFileTool from './components/TransferFileTool';
 import { StatCard, EmptyState, GuidePanel } from './components/Shared';
 
 // Interface definitions
@@ -63,7 +64,7 @@ const FALLBACK_BANKS: Bank[] = [
 
 function App() {
   // Navigation & UI state
-  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings'>('attendance');
+  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer'>('attendance');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -689,6 +690,14 @@ function App() {
           >
             <span className="ico"><CreditCard size={20} /></span>
             <span>Phiếu Lương</span>
+          </button>
+          <button 
+            className={`nav-item ${currentView === 'transfer' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('transfer'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Chuyển Tiền" : undefined}
+          >
+            <span className="ico"><Send size={20} /></span>
+            <span>Chuyển Tiền</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
@@ -1464,6 +1473,13 @@ function App() {
               operatorName="Kế toán trưởng" 
               showToast={showToast} 
             />
+          </div>
+        )}
+
+        {/* VIEW 5: MYVIB TRANSFER FILE CREATOR */}
+        {currentView === 'transfer' && (
+          <div className="screen active">
+            <TransferFileTool showToast={showToast} />
           </div>
         )}
 
