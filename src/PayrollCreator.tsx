@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Users, 
   Plus, 
   Download, 
-  FileText, 
   Save, 
   RefreshCw,
   TrendingDown,
@@ -1136,9 +1134,45 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
   return (
     <div className="payroll-creator">
-      <div className="view-header">
-        <h1 className="view-title">KG_TOOL - Hệ thống Tạo & Quản lý Phiếu Lương</h1>
-        <p className="view-subtitle">Tạo phiếu lương tự động, xuất hóa đơn K80, A4 và lưu trữ đồng bộ Google Sheets</p>
+      <div className="head">
+        <div className="title">
+          <h1>Quản lý Phiếu Lương <span className="blue-dot"></span></h1>
+          <p>Tạo, quản lý và xuất hóa đơn K80, A4 và lưu trữ Google Sheets</p>
+        </div>
+        <div className="kpis">
+          <div className="kpi">
+            <div className="icon">👥</div>
+            <div>
+              Tổng số nhân viên
+              <b>{employees.length.toLocaleString('vi-VN')}</b>
+              <span>+28 so với kỳ trước</span>
+            </div>
+          </div>
+          <div className="kpi">
+            <div className="icon">📅</div>
+            <div>
+              Tổng số công
+              <b>{totalDays.toLocaleString('vi-VN')}</b>
+              <span>+{isHourly ? '1.320 giờ' : '1.320 công'}</span>
+            </div>
+          </div>
+          <div className="kpi">
+            <div className="icon">🛡</div>
+            <div>
+              Quỹ lương dự kiến
+              <b>{formatMoney(totalSalary)}đ</b>
+              <span>+12.5%</span>
+            </div>
+          </div>
+          <div className="kpi">
+            <div className="icon">💜</div>
+            <div>
+              Thực nhận
+              <b style={{ color: net < 0 ? 'var(--red)' : 'inherit' }}>{formatMoney(net)}đ</b>
+              <span>-8.2%</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="payroll-layout">
@@ -1228,29 +1262,53 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
           {/* Section 2: Bulk import / Sample Actions */}
           <div className="glass-card">
-            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>📁 Bulk Importer / Actions</span>
-            <div className="bulk-import-row">
+            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>☁ Bulk Importer / Actions</span>
+            <div className="grid2">
               <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
-              <button className="btn-ghost" onClick={triggerCsvSelect} style={{ flexGrow: 1 }}>
+              <button className="primary" onClick={triggerCsvSelect} style={{ height: '44px', fontSize: '14px' }}>
                 <UploadCloud size={16} />
                 Nhập danh sách CSV
               </button>
-              <button className="btn-outline" onClick={loadSampleData}>Dữ liệu mẫu</button>
-              <button className="btn-danger" onClick={clearAllForms}>Xóa form</button>
+              <button className="primary" onClick={loadSampleData} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>Tải dữ liệu mẫu</button>
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Định dạng file CSV mẫu: <code>Họ tên, Số công/Giờ, Khoảng thời gian, Lương cơ bản</code></p>
+            <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
+              <button className="btn-outline" onClick={clearAllForms} style={{ flexGrow: 1, padding: '0.5rem' }}>Xóa form dữ liệu</button>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Hỗ trợ định dạng: .csv, .xlsx, .xls</p>
           </div>
 
-          {/* Section 3: Employees List */}
+          {/* Section 3: Nhập dữ liệu nhân viên */}
           <div className="glass-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <span className="card-heading-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Users size={18} />
-                Danh sách nhân viên ({employees.length})
-              </span>
-              <button className="btn-primary small-btn" onClick={addEmployee}>
+            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>👥 Nhập dữ liệu nhân viên ({employees.length})</span>
+            <div className="grid2" style={{ marginBottom: '1.25rem' }}>
+              <button className="primary" onClick={addEmployee} style={{ height: '44px', fontSize: '14px' }}>
                 <Plus size={14} />
                 Thêm nhân viên
+              </button>
+              <button className="primary" onClick={() => {
+                const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
+                if (text) {
+                  const lines = text.split('\n');
+                  const newEmps: Employee[] = [];
+                  const isHourly = salaryMode === 'hourly';
+                  lines.forEach((line, idx) => {
+                    if (!line.trim()) return;
+                    const cols = line.split('\t');
+                    if (cols.length < 2) return;
+                    const name = cols[0]?.trim();
+                    const days = Number(cols[1]) || 0;
+                    const range = cols[2]?.trim() || '';
+                    const salary = onlyNumber(cols[3] || (isHourly ? '35.000' : '10.000.000'));
+                    let amount = isHourly ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
+                    newEmps.push({ id: Date.now().toString() + idx, name, days, range, salary, amount });
+                  });
+                  if (newEmps.length > 0) {
+                    setEmployees(prev => [...prev, ...newEmps]);
+                    showToast(`Đã dán thành công ${newEmps.length} nhân viên!`, 'success');
+                  }
+                }
+              }} style={{ height: '44px', fontSize: '14px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>
+                Dán dữ liệu
               </button>
             </div>
 
@@ -1292,7 +1350,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">{isHourly ? 'Lương giờ (đ)' : 'Lương cơ bản (đ)'}</label>
+                      <label className="form-label">{isHourly ? 'Lương giờ' : 'Lương cơ bản'}</label>
                       <input 
                         type="text" 
                         className="form-control" 
@@ -1378,7 +1436,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             </div>
 
             <div className="bulk-import-row" style={{ marginTop: '0.75rem' }}>
-              <button className="btn-primary" style={{ flexGrow: 1 }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
+              <button className="primary" style={{ flexGrow: 1 }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
                 <Save size={16} />
                 Lưu Cloud (Google Sheets)
               </button>
@@ -1501,9 +1559,13 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             )}
 
             {employees.length === 0 && (
-              <div className="empty-preview-state">
-                <FileText size={48} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-                <p>Nhập thông tin nhân viên ở cột bên trái để hiển thị bản xem trước phiếu lương.</p>
+              <div className="card upload" style={{ height: '650px', borderColor: 'rgba(77, 134, 224, 0.32)' }}>
+                <div className="upload-content">
+                  <div className="file-icon" style={{ background: 'linear-gradient(135deg, #1e8cff, #6d5cff)' }}>📄</div>
+                  <h2>Chưa có dữ liệu để hiển thị</h2>
+                  <p>Hãy nhập danh sách nhân viên hoặc tải file dữ liệu để xem phiếu lương và báo cáo tổng hợp.</p>
+                  <button className="primary" onClick={addEmployee} style={{ width: '220px', marginTop: '1.5rem' }}>Bắt đầu nhập dữ liệu</button>
+                </div>
               </div>
             )}
           </div>

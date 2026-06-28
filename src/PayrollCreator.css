@@ -1,10 +1,10 @@
 /* Scoped stylesheet for the Employee Payroll Tool component in kg-tool */
 
 .payroll-creator {
-  --blue: #1e3a8a;
-  --light-blue: #eff6ff;
-  --red: #dc2626;
-  --slate: #475569;
+  --blue: #1677ff;
+  --light-blue: rgba(22, 119, 255, 0.1);
+  --red: #ff5c7a;
+  --slate: #9eb3d7;
   
   display: flex;
   flex-direction: column;
@@ -37,27 +37,27 @@
   background: transparent;
 }
 .config-pane::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
+  background: rgba(99, 132, 206, 0.22);
   border-radius: 3px;
 }
 
 .glass-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(20px);
+  border: 1px solid rgba(77, 134, 224, 0.32);
   border-radius: 16px;
+  background: linear-gradient(145deg, rgba(12, 29, 65, 0.72), rgba(8, 19, 44, 0.68));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
   padding: 1.25rem;
-  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
 .card-heading-title {
-  font-family: 'Outfit', sans-serif;
+  font-family: inherit;
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: white;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -72,14 +72,14 @@
 .form-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: #b6c7e8;
 }
 
 .form-control {
   width: 100%;
-  border: 1px solid var(--glass-border);
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+  border: 1px solid rgba(91, 134, 211, 0.3);
+  background: rgba(5, 17, 42, 0.75);
+  color: white;
   border-radius: 10px;
   padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
@@ -87,13 +87,9 @@
   transition: all 0.2s;
 }
 
-body:not(.dark-theme) .form-control {
-  background-color: #ffffff;
-}
-
 .form-control:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
 }
 
 .grid2 {
@@ -118,7 +114,7 @@ body:not(.dark-theme) .form-control {
 /* Dynamic Rows */
 .employee-input-row, .deduction-input-row {
   background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(99, 132, 206, 0.22);
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 0.75rem;
@@ -127,18 +123,13 @@ body:not(.dark-theme) .form-control {
   gap: 0.75rem;
 }
 
-body:not(.dark-theme) .employee-input-row,
-body:not(.dark-theme) .deduction-input-row {
-  background-color: #fafbfc;
-}
-
 .employee-row-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 700;
   font-size: 0.8rem;
-  color: var(--primary-color);
+  color: var(--cyan);
 }
 
 .employees-list-container, .deductions-list-container {
@@ -153,7 +144,7 @@ body:not(.dark-theme) .deduction-input-row {
 }
 .employees-list-container::-webkit-scrollbar-thumb,
 .deductions-list-container::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
+  background: rgba(99, 132, 206, 0.22);
   border-radius: 2px;
 }
 
@@ -168,7 +159,7 @@ body:not(.dark-theme) .deduction-input-row {
 .collapsible-section .section-header::after {
   content: '▼';
   font-size: 0.7rem;
-  color: var(--text-muted);
+  color: var(--muted);
   transition: transform 0.2s;
 }
 
@@ -182,13 +173,13 @@ body:not(.dark-theme) .deduction-input-row {
 
 /* Sync History Box */
 .sync-box {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.03), rgba(99, 102, 241, 0.08));
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.03), rgba(22, 119, 255, 0.08));
 }
 
 .history-list-header {
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: white;
   margin-top: 0.75rem;
 }
 
@@ -206,19 +197,17 @@ body:not(.dark-theme) .deduction-input-row {
   align-items: center;
   padding: 0.5rem 0.75rem;
   background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(99, 132, 206, 0.22);
   border-radius: 8px;
   font-size: 0.75rem;
   cursor: pointer;
-}
-
-body:not(.dark-theme) .history-item-row {
-  background-color: #ffffff;
+  transition: all 0.2s;
+  color: white;
 }
 
 .history-item-row:hover {
-  background-color: rgba(99, 102, 241, 0.08);
-  border-color: var(--primary-color);
+  background-color: rgba(22, 119, 255, 0.12);
+  border-color: var(--blue);
 }
 
 .history-meta {
@@ -228,12 +217,12 @@ body:not(.dark-theme) .history-item-row {
 
 .history-meta .h-month {
   font-weight: 700;
-  color: var(--primary-color);
+  color: var(--cyan);
 }
 
 .history-meta .h-info {
   font-size: 0.65rem;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-top: 0.15rem;
 }
 
@@ -242,12 +231,12 @@ body:not(.dark-theme) .history-item-row {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(20px);
+  border: 1px solid rgba(77, 134, 224, 0.32);
   border-radius: 16px;
+  background: linear-gradient(145deg, rgba(12, 29, 65, 0.72), rgba(8, 19, 44, 0.68));
   padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
   min-height: calc(100vh - 180px);
 }
 
@@ -257,28 +246,23 @@ body:not(.dark-theme) .history-item-row {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--glass-border);
+  border-bottom: 1px solid rgba(99, 132, 206, 0.22);
   padding-bottom: 1rem;
 }
 
 .preview-views-toggle, .preview-templates-toggle {
   display: flex;
   background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(99, 132, 206, 0.22);
   border-radius: 10px;
   padding: 0.25rem;
   gap: 0.25rem;
 }
 
-body:not(.dark-theme) .preview-views-toggle,
-body:not(.dark-theme) .preview-templates-toggle {
-  background-color: rgba(0, 0, 0, 0.02);
-}
-
 .view-toggle-btn, .template-toggle-btn {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 0.8rem;
   font-weight: 600;
   padding: 0.5rem 0.8rem;
@@ -288,9 +272,9 @@ body:not(.dark-theme) .preview-templates-toggle {
 }
 
 .view-toggle-btn.active, .template-toggle-btn.active {
-  background-color: var(--primary-color);
+  background-color: var(--blue);
   color: #ffffff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 0 10px rgba(22, 119, 255, 0.3);
 }
 
 /* Quick Metrics Bar */
@@ -302,29 +286,24 @@ body:not(.dark-theme) .preview-templates-toggle {
 
 .metric-box {
   background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(99, 132, 206, 0.22);
   border-radius: 12px;
   padding: 0.75rem 1rem;
-}
-
-body:not(.dark-theme) .metric-box {
-  background-color: #fafbfc;
 }
 
 .metric-box span {
   display: block;
   font-size: 0.65rem;
-  color: var(--text-muted);
+  color: var(--muted);
   text-transform: uppercase;
   font-weight: 700;
   margin-bottom: 0.25rem;
 }
 
 .metric-box strong {
-  font-family: 'Outfit', sans-serif;
   font-size: 1.15rem;
   font-weight: 800;
-  color: var(--text-primary);
+  color: white;
 }
 
 .metric-box strong.red {
@@ -346,13 +325,13 @@ body:not(.dark-theme) .metric-box {
   width: 6px;
 }
 .preview-scroll-container::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
+  background: rgba(99, 132, 206, 0.22);
   border-radius: 3px;
 }
 
 .preview-receipt-card {
   background-color: rgba(255, 255, 255, 0.01);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(99, 132, 206, 0.22);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -363,17 +342,13 @@ body:not(.dark-theme) .metric-box {
   align-items: center;
   padding: 0.75rem 1rem;
   background-color: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid var(--glass-border);
-}
-
-body:not(.dark-theme) .receipt-card-header {
-  background-color: #fafbfc;
+  border-bottom: 1px solid rgba(99, 132, 206, 0.22);
 }
 
 .receipt-card-header span {
   font-weight: 700;
   font-size: 0.85rem;
-  color: var(--text-primary);
+  color: white;
 }
 
 .receipt-card-actions {
@@ -402,13 +377,14 @@ body:not(.dark-theme) .receipt-card-header {
   align-items: center;
   justify-content: center;
   padding: 5rem 2rem;
-  color: var(--text-muted);
+  color: var(--muted);
   text-align: center;
   font-size: 0.9rem;
 }
 
 .spinner {
   animation: spin 1s linear infinite;
+  color: var(--blue);
 }
 
 @keyframes spin {
@@ -446,7 +422,6 @@ body:not(.dark-theme) .receipt-card-header {
    PRINT STYLES FOR PAYROLL SYSTEM
    ======================================================== */
 @media print {
-  /* Hide standard Web UI wrappers of kg-tool */
   .sidebar,
   .sidebar-overlay,
   .sidebar-toggle,

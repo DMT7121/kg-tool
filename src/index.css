@@ -1,15 +1,31 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg-gradient-start: #0f172a;
-  --bg-gradient-end: #1e1b4b;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --primary-color: #6366f1;
-  --primary-hover: #4f46e5;
-  --success-color: #10b981;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --bg: #050b1e;
+  --panel: rgba(11, 22, 51, 0.8);
+  --panel-2: rgba(15, 30, 66, 0.8);
+  --line: #24406f;
+  --text: #f7fbff;
+  --muted: #9eb3d7;
+  --blue: #1677ff;
+  --cyan: #22d3ee;
+  --violet: #7c3cff;
+  --green: #30e797;
+  --orange: #f7a032;
+  --red: #ff5c7a;
+  --shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+  --radius: 24px;
+  
+  /* Fallbacks for existing code compatibility */
+  --bg-gradient-start: #061125;
+  --bg-gradient-end: #030817;
+  --glass-bg: rgba(11, 22, 51, 0.8);
+  --glass-border: rgba(99, 132, 206, 0.22);
+  --primary-color: #1677ff;
+  --primary-hover: #0060df;
+  --success-color: #30e797;
+  --text-main: #f7fbff;
+  --text-muted: #9eb3d7;
 }
 
 * {
@@ -19,13 +35,13 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
-  color: var(--text-main);
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, Segoe UI, sans-serif;
+  background:
+    radial-gradient(circle at 70% 20%, rgba(25,103,255,.22), transparent 32%),
+    radial-gradient(circle at 25% 80%, rgba(124,60,255,.18), transparent 36%),
+    linear-gradient(135deg, #061125 0%, #071633 42%, #030817 100%);
+  color: var(--text);
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow-x: hidden;
 }
 
