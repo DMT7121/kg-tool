@@ -1013,3 +1013,270 @@ input[type="file"]::file-selector-button:hover {
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* Custom Bank Selector & Compact Cards */
+.selected-bank-compact-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(13, 34, 78, 0.4);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 12px;
+  min-height: 64px;
+  margin-top: 4px;
+}
+
+.bank-card-details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.logo-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.logo-box img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.logo-text-fallback {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: #eef2ff;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.bank-info-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.bank-info-text strong {
+  font-size: 14px;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bank-info-text small {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.bin-tag {
+  font-size: 10px;
+  color: var(--cyan);
+  font-weight: 600;
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+.change-bank-btn {
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--cyan);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.change-bank-btn:hover {
+  background: rgba(34, 211, 238, 0.18);
+  border-color: var(--cyan);
+}
+
+/* Custom Dropdown Popover container */
+.bank-selector-input-container {
+  position: relative;
+  width: 100%;
+}
+
+.bank-dropdown-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: linear-gradient(145deg, rgba(8, 20, 48, 0.98), rgba(5, 12, 28, 0.99));
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  max-height: 380px;
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+}
+
+.bank-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.bank-dropdown-header span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.close-dropdown-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+}
+.close-dropdown-btn:hover {
+  color: #ffffff;
+}
+
+.bank-options-list {
+  overflow-y: auto;
+  flex-grow: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bank-options-list::-webkit-scrollbar {
+  width: 5px;
+}
+.bank-options-list::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.25);
+  border-radius: 3px;
+}
+
+.bank-option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+}
+
+.bank-option-card:hover {
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.option-logo-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 1px;
+}
+
+.option-logo-box img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.option-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.option-shortname {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.option-bin {
+  font-size: 10px;
+  color: var(--cyan);
+  font-family: monospace;
+}
+
+.option-fullname {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.loading-dropdown-state, .error-dropdown-state, .empty-dropdown-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  gap: 8px;
+}
+
+.retry-btn {
+  border: 1px solid rgba(255, 92, 122, 0.4);
+  background: rgba(255, 92, 122, 0.1);
+  color: #ff5c7a;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* Overlay for clicking outside to close popover */
+.dropdown-click-outside-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 999;
+}
+

@@ -86,7 +86,13 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 2. VietQR & Personal Bank state
-  const [banks, setBanks] = useState<Bank[]>(FALLBACK_BANKS);
+  const [banks, setBanks] = useState<Bank[]>(() => {
+    const cached = localStorage.getItem('kg_tool_cached_banks');
+    return cached ? JSON.parse(cached) : FALLBACK_BANKS;
+  });
+  const [isBanksLoading, setIsBanksLoading] = useState(false);
+  const [banksError, setBanksError] = useState(false);
+
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => {
     const saved = localStorage.getItem('kg_tool_saved_accounts');
     return saved ? JSON.parse(saved) : [];
@@ -121,18 +127,40 @@ function App() {
   const [newDefaultMemo, setNewDefaultMemo] = useState('');
   const [newDefaultAmount, setNewDefaultAmount] = useState('');
 
+  const fetchBanksList = async (showToastNotice = false) => {
+    setIsBanksLoading(true);
+    setBanksError(false);
+    try {
+      const res = await fetch('https://api.vietqr.io/v2/banks');
+      const resData = await res.json();
+      if (resData.code === '00' && Array.isArray(resData.data)) {
+        setBanks(resData.data);
+        localStorage.setItem('kg_tool_cached_banks', JSON.stringify(resData.data));
+        setBanksError(false);
+        if (showToastNotice) {
+          showToast('Đã tải lại danh sách ngân hàng thành công!', 'success');
+        }
+      } else {
+        throw new Error('API returned invalid code');
+      }
+    } catch (err) {
+      console.error('Không thể lấy danh sách ngân hàng từ VietQR API:', err);
+      const cached = localStorage.getItem('kg_tool_cached_banks');
+      if (cached) {
+        if (showToastNotice) {
+          showToast('Không kết nối được API. Đang dùng danh sách đã lưu gần nhất.', 'info');
+        }
+      } else {
+        setBanksError(true);
+      }
+    } finally {
+      setIsBanksLoading(false);
+    }
+  };
+
   // Fetch VietQR Bank list on mount
   useEffect(() => {
-    fetch('https://api.vietqr.io/v2/banks')
-      .then(res => res.json())
-      .then(resData => {
-        if (resData.code === '00' && Array.isArray(resData.data)) {
-          setBanks(resData.data);
-        }
-      })
-      .catch(err => {
-        console.error('Không thể lấy danh sách ngân hàng từ VietQR API, dùng danh sách dự phòng:', err);
-      });
+    fetchBanksList(true);
   }, []);
 
   // Update QR Code Image Link dynamically based on inputs
@@ -534,22 +562,39 @@ function App() {
     return new Intl.NumberFormat('vi-VN').format(parseInt(num, 10));
   };
 
-  // Filter banks for custom searchable selection
-  const filteredBanks = searchBankQuery
-    ? banks.filter(b => 
-        b.name.toLowerCase().includes(searchBankQuery.toLowerCase()) ||
-        b.code.toLowerCase().includes(searchBankQuery.toLowerCase()) ||
-        b.shortName.toLowerCase().includes(searchBankQuery.toLowerCase())
-      )
-    : banks;
+  // Strip accents helper for search
+  const stripAccents = (str: string): string => {
+    if (!str) return '';
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase();
+  };
 
-  const filteredNewBanks = newSearchBankQuery
-    ? banks.filter(b => 
-        b.name.toLowerCase().includes(newSearchBankQuery.toLowerCase()) ||
-        b.code.toLowerCase().includes(newSearchBankQuery.toLowerCase()) ||
-        b.shortName.toLowerCase().includes(newSearchBankQuery.toLowerCase())
-      )
-    : banks;
+  // Filter banks for custom searchable selection
+  const filteredBanks = (() => {
+    const query = stripAccents(searchBankQuery).trim();
+    if (!query) return banks;
+    return banks.filter(b => 
+      stripAccents(b.name || '').includes(query) ||
+      stripAccents(b.code || '').includes(query) ||
+      stripAccents(b.shortName || '').includes(query) ||
+      (b.bin && b.bin.includes(query))
+    );
+  })();
+
+  const filteredNewBanks = (() => {
+    const query = stripAccents(newSearchBankQuery).trim();
+    if (!query) return banks;
+    return banks.filter(b => 
+      stripAccents(b.name || '').includes(query) ||
+      stripAccents(b.code || '').includes(query) ||
+      stripAccents(b.shortName || '').includes(query) ||
+      (b.bin && b.bin.includes(query))
+    );
+  })();
 
   // Dynamic KPIs calculations for Attendance
   const hasAttendanceData = processedRecords.length > 0;
@@ -941,48 +986,120 @@ function App() {
                       <label>Ngân hàng <span style={{ color: 'var(--red)' }}>*</span></label>
                       <div className="bank-select-wrapper">
                         {newBank ? (
-                          <div className="selected-bank-indicator">
-                            <div className="selected-bank-info">
-                              <img src={newBank.logo} alt={newBank.code} className="bank-logo-img" />
-                              <span style={{ fontWeight: 600, color: 'white' }}>{newBank.shortName}</span>
+                          <div className="selected-bank-compact-card">
+                            <div className="bank-card-details">
+                              <div className="logo-box">
+                                <img 
+                                  src={newBank.logo} 
+                                  alt={newBank.code} 
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const textFallback = e.currentTarget.nextSibling as HTMLSpanElement;
+                                    if (textFallback) textFallback.style.display = 'flex';
+                                  }}
+                                />
+                                <span className="logo-text-fallback" style={{ display: 'none' }}>
+                                  {newBank.shortName.slice(0, 2).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="bank-info-text">
+                                <strong>{newBank.shortName}</strong>
+                                <small>{newBank.name}</small>
+                                <span className="bin-tag">BIN: {newBank.bin || newBank.code}</span>
+                              </div>
                             </div>
-                            <button type="button" className="change-bank-btn" onClick={() => setNewBank(null)}>Thay đổi</button>
+                            <button 
+                              type="button" 
+                              className="change-bank-btn" 
+                              onClick={() => { setNewBank(null); setNewSearchBankQuery(''); }}
+                            >
+                              Thay đổi
+                            </button>
                           </div>
                         ) : (
-                          <>
+                          <div className="bank-selector-input-container">
                             <input 
                               type="text" 
                               className="form-control bank-search-input" 
-                              placeholder="Tìm tên hoặc mã ngân hàng..."
+                              placeholder="🔍 Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
                               value={newSearchBankQuery}
                               onChange={(e) => { setNewSearchBankQuery(e.target.value); setShowNewBankDropdown(true); }}
                               onFocus={() => setShowNewBankDropdown(true)}
+                              disabled={isBanksLoading}
                               style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid rgba(91,134,211,.3)', background: 'rgba(5,17,42,.75)', color: 'white', padding: '0 14px' }}
                             />
+                            
                             {showNewBankDropdown && (
-                              <div className="bank-dropdown">
-                                {filteredNewBanks.slice(0, 10).map(b => (
-                                  <div 
-                                    key={b.id} 
-                                    className="bank-option"
-                                    onClick={() => {
-                                      setNewBank(b);
-                                      setShowNewBankDropdown(false);
-                                    }}
-                                  >
-                                    <img src={b.logo} alt={b.code} className="bank-logo-img" />
-                                    <div className="bank-option-text">
-                                      <span className="bank-option-code">{b.code} ({b.shortName})</span>
-                                      <span className="bank-option-name">{b.name}</span>
-                                    </div>
+                              <>
+                                <div className="dropdown-click-outside-backdrop" onClick={() => setShowNewBankDropdown(false)} />
+                                <div className="bank-dropdown-popover">
+                                  <div className="bank-dropdown-header">
+                                    <span>Kết quả tìm kiếm ({filteredNewBanks.length})</span>
+                                    <button type="button" className="close-dropdown-btn" onClick={() => setShowNewBankDropdown(false)}>✕</button>
                                   </div>
-                                ))}
-                                {filteredNewBanks.length === 0 && (
-                                  <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>Không tìm thấy ngân hàng nào</div>
-                                )}
-                              </div>
+                                  
+                                  <div className="bank-options-list">
+                                    {isBanksLoading && (
+                                      <div className="loading-dropdown-state">
+                                        <span>Đang tải danh sách...</span>
+                                      </div>
+                                    )}
+                                    
+                                    {banksError && (
+                                      <div className="error-dropdown-state">
+                                        <span>Không thể tải danh sách.</span>
+                                        <button type="button" className="retry-btn" onClick={() => fetchBanksList(true)}>Thử lại</button>
+                                      </div>
+                                    )}
+                                    
+                                    {banksError && (
+                                      <div className="error-dropdown-state">
+                                        <span>Không thể tải danh sách.</span>
+                                        <button type="button" className="retry-btn" onClick={() => fetchBanksList(true)}>Thử lại</button>
+                                      </div>
+                                    )}
+                                    
+                                    {filteredNewBanks.slice(0, 50).map(b => (
+                                      <div 
+                                        key={b.id} 
+                                        className="bank-option-card"
+                                        onClick={() => {
+                                          setNewBank(b);
+                                          setNewSearchBankQuery('');
+                                          setShowNewBankDropdown(false);
+                                        }}
+                                      >
+                                        <div className="option-logo-box">
+                                          <img 
+                                            src={b.logo} 
+                                            alt={b.code} 
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                              const textFallback = e.currentTarget.nextSibling as HTMLSpanElement;
+                                              if (textFallback) textFallback.style.display = 'flex';
+                                            }}
+                                          />
+                                          <span className="logo-text-fallback" style={{ display: 'none' }}>
+                                            {b.shortName.slice(0, 2).toUpperCase()}
+                                          </span>
+                                        </div>
+                                        <div className="option-info">
+                                          <div className="option-shortname">{b.shortName} <span className="option-bin">({b.bin || b.code})</span></div>
+                                          <div className="option-fullname">{b.name}</div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    
+                                    {!isBanksLoading && filteredNewBanks.length === 0 && (
+                                      <div className="empty-dropdown-state">
+                                        Không tìm thấy ngân hàng phù hợp
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
                             )}
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1081,50 +1198,113 @@ function App() {
                     <label>Chọn ngân hàng thụ hưởng</label>
                     <div className="bank-select-wrapper">
                       {selectedBank ? (
-                        <div className="selected-bank-indicator" style={{ marginTop: 0 }}>
-                          <div className="selected-bank-info">
-                            <img src={selectedBank.logo} alt={selectedBank.code} className="bank-logo-img" />
-                            <span style={{ fontWeight: 600, color: 'white' }}>{selectedBank.shortName}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}> - {selectedBank.name}</span>
+                        <div className="selected-bank-compact-card">
+                          <div className="bank-card-details">
+                            <div className="logo-box">
+                              <img 
+                                src={selectedBank.logo} 
+                                alt={selectedBank.code} 
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  const textFallback = e.currentTarget.nextSibling as HTMLSpanElement;
+                                  if (textFallback) textFallback.style.display = 'flex';
+                                }}
+                              />
+                              <span className="logo-text-fallback" style={{ display: 'none' }}>
+                                {selectedBank.shortName.slice(0, 2).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="bank-info-text">
+                              <strong>{selectedBank.shortName}</strong>
+                              <small>{selectedBank.name}</small>
+                              <span className="bin-tag">BIN: {selectedBank.bin || selectedBank.code}</span>
+                            </div>
                           </div>
-                          <button type="button" className="change-bank-btn" onClick={() => { setSelectedBank(null); setSearchBankQuery(''); }}>Thay đổi</button>
+                          <button 
+                            type="button" 
+                            className="change-bank-btn" 
+                            onClick={() => { setSelectedBank(null); setSearchBankQuery(''); }}
+                          >
+                            Thay đổi
+                          </button>
                         </div>
                       ) : (
-                        <>
+                        <div className="bank-selector-input-container">
                           <input 
                             type="text" 
                             className="form-control bank-search-input" 
-                            placeholder="Tìm tên hoặc mã ngân hàng thụ hưởng..."
+                            placeholder="🔍 Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
                             value={searchBankQuery}
                             onChange={(e) => { setSearchBankQuery(e.target.value); setShowBankDropdown(true); }}
                             onFocus={() => setShowBankDropdown(true)}
+                            disabled={isBanksLoading}
                             style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid rgba(91,134,211,.3)', background: 'rgba(5,17,42,.75)', color: 'white', padding: '0 14px' }}
                           />
+                          
                           {showBankDropdown && (
-                            <div className="bank-dropdown">
-                              {filteredBanks.slice(0, 10).map(b => (
-                                <div 
-                                  key={b.id} 
-                                  className="bank-option"
-                                  onClick={() => {
-                                    setSelectedBank(b);
-                                    setSearchBankQuery(b.shortName);
-                                    setShowBankDropdown(false);
-                                  }}
-                                >
-                                  <img src={b.logo} alt={b.code} className="bank-logo-img" />
-                                  <div className="bank-option-text">
-                                    <span className="bank-option-code">{b.code} ({b.shortName})</span>
-                                    <span className="bank-option-name">{b.name}</span>
-                                  </div>
+                            <>
+                              <div className="dropdown-click-outside-backdrop" onClick={() => setShowBankDropdown(false)} />
+                              <div className="bank-dropdown-popover">
+                                <div className="bank-dropdown-header">
+                                  <span>Kết quả tìm kiếm ({filteredBanks.length})</span>
+                                  <button type="button" className="close-dropdown-btn" onClick={() => setShowBankDropdown(false)}>✕</button>
                                 </div>
-                              ))}
-                              {filteredBanks.length === 0 && (
-                                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>Không tìm thấy ngân hàng thụ hưởng</div>
-                              )}
-                            </div>
+                                
+                                <div className="bank-options-list">
+                                  {isBanksLoading && (
+                                    <div className="loading-dropdown-state">
+                                      <span>Đang tải danh sách...</span>
+                                    </div>
+                                  )}
+                                  
+                                  {banksError && (
+                                    <div className="error-dropdown-state">
+                                      <span>Không thể tải danh sách.</span>
+                                      <button type="button" className="retry-btn" onClick={() => fetchBanksList(true)}>Thử lại</button>
+                                    </div>
+                                  )}
+                                  
+                                  {filteredBanks.slice(0, 50).map(b => (
+                                    <div 
+                                      key={b.id} 
+                                      className="bank-option-card"
+                                      onClick={() => {
+                                        setSelectedBank(b);
+                                        setSearchBankQuery('');
+                                        setShowBankDropdown(false);
+                                      }}
+                                    >
+                                      <div className="option-logo-box">
+                                        <img 
+                                          src={b.logo} 
+                                          alt={b.code} 
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                            const textFallback = e.currentTarget.nextSibling as HTMLSpanElement;
+                                            if (textFallback) textFallback.style.display = 'flex';
+                                          }}
+                                        />
+                                        <span className="logo-text-fallback" style={{ display: 'none' }}>
+                                          {b.shortName.slice(0, 2).toUpperCase()}
+                                        </span>
+                                      </div>
+                                      <div className="option-info">
+                                        <div className="option-shortname">{b.shortName} <span className="option-bin">({b.bin || b.code})</span></div>
+                                        <div className="option-fullname">{b.name}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  
+                                  {!isBanksLoading && filteredBanks.length === 0 && (
+                                    <div className="empty-dropdown-state">
+                                      Không tìm thấy ngân hàng phù hợp
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
