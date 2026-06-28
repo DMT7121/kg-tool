@@ -6,13 +6,16 @@ import {
   Trash2, 
   RefreshCw, 
   Play, 
-  Sliders, 
   Sparkles, 
   BookOpen, 
   History, 
   Search, 
   Star, 
-  Database
+  Database,
+  ShieldAlert,
+  SlidersHorizontal,
+  Key,
+  Info
 } from 'lucide-react';
 import { StatCard, EmptyState } from './Shared';
 
@@ -40,6 +43,7 @@ export interface TTSHistoryItem {
   id: string;
   templateId?: string;
   text: string;
+  normalizedText: string;
   providerId: string;
   voiceId: string;
   gender: string;
@@ -54,7 +58,7 @@ export interface TTSHistoryItem {
 export interface TTSProvider {
   id: string;
   name: string;
-  type: 'browser' | 'local' | 'cloud' | 'custom';
+  type: 'browser' | 'cloud' | 'local' | 'custom';
   isFree: boolean;
   requiresApiKey: boolean;
   supportsVoiceList: boolean;
@@ -287,6 +291,26 @@ const DEFAULT_SUGGESTIONS: Omit<TTSTemplate, 'id' | 'createdAt' | 'updatedAt'>[]
   }
 ];
 
+// FPT.AI Voices Configuration
+const FPT_VOICES = [
+  { id: 'banmai', name: 'Ban Mai (Nữ miền Bắc)' },
+  { id: 'lannhi', name: 'Lan Nhi (Nữ miền Nam)' },
+  { id: 'leminh', name: 'Lê Minh (Nam miền Bắc)' },
+  { id: 'myan', name: 'Mỹ An (Nữ miền Trung)' },
+  { id: 'thuminh', name: 'Thu Minh (Nữ miền Bắc)' },
+  { id: 'giahuy', name: 'Gia Huy (Nam miền Trung)' },
+  { id: 'linhsan', name: 'Linh San (Nữ miền Bắc)' }
+];
+
+// Viettel AI Voices Configuration
+const VIETTEL_VOICES = [
+  { id: 'huyenchi', name: 'Huyền Chi (Nữ miền Bắc)' },
+  { id: 'diemmy', name: 'Diễm My (Nữ miền Nam)' },
+  { id: 'maihoa', name: 'Mai Hoa (Nữ miền Trung)' },
+  { id: 'duongphuong', name: 'Phương Phương (Nam miền Bắc)' },
+  { id: 'quangtuyen', name: 'Quang Tuyên (Nam miền Nam)' }
+];
+
 // Helper to normalize numbers to words for natural Vietnamese speech
 export function normalizeTextForVietnameseTTS(text: string): string {
   if (!text) return '';
@@ -427,10 +451,64 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       pitch: 1.0,
       volume: 1.0,
       customEndpoint: 'http://localhost:5000/tts',
-      cloudApiKey: '',
-      cloudVoiceId: ''
+      fptApiKey: '',
+      fptVoiceId: 'banmai',
+      fptSpeed: 0,
+      fptFormat: 'mp3',
+      fptEndpoint: 'https://api.fpt.ai/hmi/tts/v5',
+      viettelToken: '',
+      viettelEndpoint: 'https://viettelai.vn/tts/v1/synthesis',
+      viettelVoiceId: 'huyenchi',
+      viettelSpeed: 1.0,
+      viettelFormat: 'mp3',
+      viettelReturnOption: 2,
+      autoFallback: true,
+      fptDailyLimit: 5000,
+      viettelDailyLimit: 5000,
+      autoOptimize: true
     };
   });
+
+  // Quota usage states
+  const [fptUsedToday, setFptUsedToday] = useState<number>(() => {
+    const today = new Date().toDateString();
+    const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
+    if (savedDate !== today) {
+      localStorage.setItem('kg_tool_tts_quota_date', today);
+      localStorage.setItem('kg_tool_tts_quota_fpt_today', '0');
+      return 0;
+    }
+    const val = localStorage.getItem('kg_tool_tts_quota_fpt_today');
+    return val ? parseInt(val, 10) : 0;
+  });
+
+  const [viettelUsedToday, setViettelUsedToday] = useState<number>(() => {
+    const today = new Date().toDateString();
+    const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
+    if (savedDate !== today) {
+      localStorage.setItem('kg_tool_tts_quota_date', today);
+      localStorage.setItem('kg_tool_tts_quota_viettel_today', '0');
+      return 0;
+    }
+    const val = localStorage.getItem('kg_tool_tts_quota_viettel_today');
+    return val ? parseInt(val, 10) : 0;
+  });
+
+  const addQuotaUsage = (provider: 'fpt' | 'viettel', charCount: number) => {
+    if (provider === 'fpt') {
+      setFptUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_fpt_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'viettel') {
+      setViettelUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_viettel_today', next.toString());
+        return next;
+      });
+    }
+  };
 
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
@@ -529,8 +607,10 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
   // Clean Normalized text to speak
   const normalizedTextToSpeak = useMemo(() => {
-    return normalizeTextForVietnameseTTS(interpolatedText);
-  }, [interpolatedText]);
+    return providerSettings.autoOptimize 
+      ? normalizeTextForVietnameseTTS(interpolatedText)
+      : interpolatedText;
+  }, [interpolatedText, providerSettings.autoOptimize]);
 
   // Available Categories in library
   const categories = useMemo(() => {
@@ -598,13 +678,216 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     window.speechSynthesis.speak(utterance);
   };
 
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Play using FPT.AI
+  const speakFpt = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (fptUsedToday + charCount > providerSettings.fptDailyLimit) {
+      if (providerSettings.autoFallback) {
+        showToast('FPT.AI đã vượt quá hạn mức Quota trong ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của FPT.AI.', 'error');
+        return;
+      }
+    }
+
+    if (!providerSettings.fptApiKey) {
+      if (providerSettings.autoFallback) {
+        showToast('Chưa cấu hình API Key cho FPT.AI. Tự động dùng Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vui lòng nhập API Key cho FPT.AI trong Cấu hình.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    showToast('Đang gửi văn bản tới FPT.AI...', 'info');
+
+    try {
+      const response = await fetch(providerSettings.fptEndpoint, {
+        method: 'POST',
+        headers: {
+          'api_key': providerSettings.fptApiKey,
+          'speed': String(providerSettings.fptSpeed),
+          'voice': providerSettings.fptVoiceId,
+          'format': providerSettings.fptFormat
+        },
+        body: textToSpeak
+      });
+
+      if (!response.ok) {
+        throw new Error(`FPT.AI trả về lỗi: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.error !== 0) {
+        throw new Error(result.message || 'Lỗi xử lý FPT.AI');
+      }
+
+      const asyncUrl = result.async;
+      if (!asyncUrl) {
+        throw new Error('Không nhận được audio URL từ FPT.AI');
+      }
+
+      // Poll URL check availability
+      showToast('Đang tạo giọng nói FPT.AI...', 'info');
+      let ready = false;
+      let retries = 6;
+      
+      while (retries > 0 && !ready) {
+        await new Promise(r => setTimeout(r, 1500));
+        try {
+          const check = await fetch(asyncUrl, { method: 'HEAD' });
+          if (check.ok) {
+            ready = true;
+          }
+        } catch (e) {
+          // Retry
+        }
+        retries--;
+      }
+
+      if (!ready) {
+        throw new Error('Thời gian tạo file audio của FPT.AI quá lâu, vui lòng phát lại.');
+      }
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(asyncUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+
+      audio.onplay = () => {
+        setPlaybackState('playing');
+      };
+      audio.onended = () => {
+        setPlaybackState('idle');
+        addQuotaUsage('fpt', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ FPT.AI');
+        showToast('Lỗi phát âm thanh từ FPT.AI.', 'error');
+      };
+
+      audio.play();
+
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      showToast(`FPT.AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      speakBrowser(textToSpeak);
+    }
+  };
+
+  // Play using Viettel AI
+  const speakViettel = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (viettelUsedToday + charCount > providerSettings.viettelDailyLimit) {
+      if (providerSettings.autoFallback) {
+        showToast('Viettel AI đã vượt quá hạn mức Quota trong ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của Viettel AI.', 'error');
+        return;
+      }
+    }
+
+    if (!providerSettings.viettelToken) {
+      if (providerSettings.autoFallback) {
+        showToast('Chưa cấu hình Token cho Viettel AI. Tự động dùng Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vui lòng nhập Token cho Viettel AI trong Cấu hình.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    showToast('Đang gửi văn bản tới Viettel AI...', 'info');
+
+    try {
+      const response = await fetch(providerSettings.viettelEndpoint, {
+        method: 'POST',
+        headers: {
+          'token': providerSettings.viettelToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: textToSpeak,
+          voice: providerSettings.viettelVoiceId,
+          speed: providerSettings.viettelSpeed,
+          tts_return_option: providerSettings.viettelReturnOption,
+          format: providerSettings.viettelFormat
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Viettel AI trả về lỗi: ${response.status}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      let audioUrl = '';
+
+      if (contentType.includes('json')) {
+        const result = await response.json();
+        audioUrl = result.url || result.audio_url || result.data;
+        if (!audioUrl) {
+          throw new Error('Không có URL âm thanh trong phản hồi JSON của Viettel AI');
+        }
+      } else {
+        const blob = await response.blob();
+        audioUrl = URL.createObjectURL(blob);
+      }
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+
+      audio.onplay = () => {
+        setPlaybackState('playing');
+      };
+      audio.onended = () => {
+        setPlaybackState('idle');
+        addQuotaUsage('viettel', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Viettel AI');
+        showToast('Lỗi phát âm thanh từ Viettel AI.', 'error');
+      };
+
+      audio.play();
+
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      showToast(`Viettel AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      speakBrowser(textToSpeak);
+    }
+  };
+
   // Play using custom API endpoint (Piper / Kokoro / Cloud Proxy)
   const speakCustom = async (textToSpeak: string) => {
     setPlaybackState('playing');
     showToast('Đang tải dữ liệu từ TTS server...', 'info');
 
     try {
-      // Build query string or body depending on settings
       const url = `${providerSettings.customEndpoint}?text=${encodeURIComponent(textToSpeak)}&rate=${providerSettings.rate}&pitch=${providerSettings.pitch}`;
       const response = await fetch(url);
       
@@ -638,27 +921,37 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       setPlaybackState('idle');
       addHistoryLog(interpolatedText, 'failed', err.message);
       showToast(`Không kết nối được Custom TTS Server: ${err.message}. Tự động chuyển đổi sang giọng đọc mặc định...`, 'error');
-      // Fallback
       speakBrowser(textToSpeak);
     }
   };
 
-  const handleSpeak = () => {
+  const handleSpeak = async () => {
     if (!interpolatedText.trim()) {
       showToast('Vui lòng soạn câu nói trước khi nghe thử.', 'error');
       return;
     }
 
-    if (providerSettings.activeProvider === 'browser') {
-      speakBrowser(normalizedTextToSpeak);
-    } else {
-      speakCustom(normalizedTextToSpeak);
+    const provider = providerSettings.activeProvider;
+    const textToSpeak = normalizedTextToSpeak;
+
+    if (provider === 'browser') {
+      speakBrowser(textToSpeak);
+    } else if (provider === 'fpt') {
+      await speakFpt(textToSpeak);
+    } else if (provider === 'viettel') {
+      await speakViettel(textToSpeak);
+    } else if (provider === 'custom') {
+      await speakCustom(textToSpeak);
     }
   };
 
   const handleStop = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.src = '';
     }
     setPlaybackState('idle');
   };
@@ -669,11 +962,16 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       id: 'hist-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       templateId: selectedTemplateId || undefined,
       text: text,
+      normalizedText: normalizedTextToSpeak,
       providerId: providerSettings.activeProvider,
-      voiceId: providerSettings.browserVoiceURI || 'Default vi-VN',
-      gender: providerSettings.browserGender,
-      rate: providerSettings.rate,
-      pitch: providerSettings.pitch,
+      voiceId: providerSettings.activeProvider === 'browser' 
+        ? (providerSettings.browserVoiceURI || 'Default vi-VN')
+        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptVoiceId : providerSettings.viettelVoiceId),
+      gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
+      rate: providerSettings.activeProvider === 'browser' 
+        ? providerSettings.rate 
+        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptSpeed : providerSettings.viettelSpeed),
+      pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
       volume: providerSettings.volume,
       playedAt: new Date().toISOString(),
       status: status,
@@ -704,11 +1002,15 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       text: composeText,
       variables: parsedVariables,
       providerId: providerSettings.activeProvider,
-      voiceId: providerSettings.browserVoiceURI,
-      gender: providerSettings.browserGender,
+      voiceId: providerSettings.activeProvider === 'browser' 
+        ? providerSettings.browserVoiceURI 
+        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptVoiceId : providerSettings.viettelVoiceId),
+      gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
       lang: 'vi-VN',
-      rate: providerSettings.rate,
-      pitch: providerSettings.pitch,
+      rate: providerSettings.activeProvider === 'browser' 
+        ? providerSettings.rate 
+        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptSpeed : providerSettings.viettelSpeed),
+      pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
       volume: providerSettings.volume,
       isFavorite: templates.find(t => t.id === id)?.isFavorite || false,
       createdAt: templates.find(t => t.id === id)?.createdAt || new Date().toISOString(),
@@ -758,14 +1060,21 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     setComposeCategory(tpl.category);
     
     // Apply preset synthesis settings if present
-    setProviderSettings((prev: any) => ({
-      ...prev,
-      rate: tpl.rate,
-      pitch: tpl.pitch,
-      volume: tpl.volume,
-      browserVoiceURI: tpl.voiceId || prev.browserVoiceURI,
-      browserGender: tpl.gender || prev.browserGender
-    }));
+    setProviderSettings((prev: any) => {
+      const isCloudFpt = tpl.providerId === 'fpt';
+      const isCloudViettel = tpl.providerId === 'viettel';
+      return {
+        ...prev,
+        activeProvider: tpl.providerId || prev.activeProvider,
+        volume: tpl.volume,
+        rate: !isCloudFpt && !isCloudViettel ? tpl.rate : prev.rate,
+        browserVoiceURI: tpl.providerId === 'browser' ? tpl.voiceId : prev.browserVoiceURI,
+        fptVoiceId: isCloudFpt ? tpl.voiceId : prev.fptVoiceId,
+        fptSpeed: isCloudFpt ? tpl.rate : prev.fptSpeed,
+        viettelVoiceId: isCloudViettel ? tpl.voiceId : prev.viettelVoiceId,
+        viettelSpeed: isCloudViettel ? tpl.rate : prev.viettelSpeed
+      };
+    });
 
     setMobileActiveTab('compose');
   };
@@ -822,16 +1131,14 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       const remoteTemplates: TTSTemplate[] = result.data || [];
       
       // 2. Merge logic: Merge remote and local
-      // Local templates not in remote will be pushed to sheet
       const mergedList = [...templates];
       
-      // Remote templates missing or newer replace local
+      // Remote templates replace local if remote is newer
       remoteTemplates.forEach(rt => {
         const localIdx = mergedList.findIndex(t => t.id === rt.id);
         if (localIdx === -1) {
           mergedList.push(rt);
         } else {
-          // If remote is newer
           const localTime = new Date(mergedList[localIdx].updatedAt).getTime();
           const remoteTime = new Date(rt.updatedAt).getTime();
           if (remoteTime > localTime) {
@@ -840,7 +1147,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         }
       });
 
-      // 3. Upload missing/local changes to sheet
+      // 3. Upload local changes to sheet
       for (const t of templates) {
         const remoteMatch = remoteTemplates.find(rt => rt.id === t.id);
         if (!remoteMatch || new Date(t.updatedAt).getTime() > new Date(remoteMatch.updatedAt).getTime()) {
@@ -909,6 +1216,29 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
   };
 
+  // Description map for Fpt speed sliders (-3 to +3)
+  const getFptSpeedDesc = (speed: number) => {
+    switch (speed) {
+      case -3: return 'Rất chậm';
+      case -2: return 'Chậm';
+      case -1: return 'Hơi chậm';
+      case 0: return 'Bình thường';
+      case 1: return 'Hơi nhanh';
+      case 2: return 'Nhanh';
+      case 3: return 'Rất nhanh';
+      default: return 'Bình thường';
+    }
+  };
+
+  // Description map for Viettel speed sliders (0.8 to 1.2)
+  const getViettelSpeedDesc = (speed: number) => {
+    if (speed <= 0.8) return 'Chậm rõ';
+    if (speed <= 0.9) return 'Hơi chậm';
+    if (speed <= 1.0) return 'Bình thường';
+    if (speed <= 1.1) return 'Hơi nhanh';
+    return 'Nhanh';
+  };
+
   return (
     <div className="tts-page">
       
@@ -933,11 +1263,33 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       {/* OVERVIEW KPIS */}
       <div className="kpis" style={{ marginBottom: '1.5rem' }}>
         <StatCard 
-          icon="🔊" 
-          label="Provider đang dùng" 
-          value={providerSettings.activeProvider === 'browser' ? 'Browser Native' : 'Custom Server'} 
-          subtext={providerSettings.activeProvider === 'browser' ? 'Giọng đọc trình duyệt' : providerSettings.customEndpoint}
+          icon="🔌" 
+          label="Provider chủ đạo" 
+          value={
+            providerSettings.activeProvider === 'browser' ? 'Browser Native' :
+            providerSettings.activeProvider === 'fpt' ? 'FPT.AI Cloud' :
+            providerSettings.activeProvider === 'viettel' ? 'Viettel AI Cloud' : 'Custom Server'
+          } 
+          subtext={
+            providerSettings.activeProvider === 'browser' ? 'Giọng đọc trình duyệt miễn phí' :
+            providerSettings.activeProvider === 'fpt' ? 'Đã kích hoạt FPT' :
+            providerSettings.activeProvider === 'viettel' ? 'Đã kích hoạt Viettel' : providerSettings.customEndpoint
+          }
           hasData={true} 
+        />
+        <StatCard 
+          icon="📊" 
+          label="FPT.AI Quota ngày" 
+          value={`${fptUsedToday} / ${providerSettings.fptDailyLimit} kí tự`}
+          subtext="Số kí tự đã gửi hôm nay"
+          hasData={fptUsedToday > 0} 
+        />
+        <StatCard 
+          icon="📈" 
+          label="Viettel Quota ngày" 
+          value={`${viettelUsedToday} / ${providerSettings.viettelDailyLimit} kí tự`} 
+          subtext="Số kí tự đã gửi hôm nay"
+          hasData={viettelUsedToday > 0} 
         />
         <StatCard 
           icon="📚" 
@@ -945,13 +1297,6 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           value={`${templates.length} mẫu`} 
           subtext="Lưu trong cơ sở dữ liệu"
           hasData={templates.length > 0} 
-        />
-        <StatCard 
-          icon="⏱️" 
-          label="Lịch sử phát" 
-          value={`${history.length} lượt`} 
-          subtext="Tổng số lượt phát gần đây"
-          hasData={history.length > 0} 
         />
       </div>
 
@@ -968,7 +1313,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 border: 'none', color: 'white', fontWeight: 600
               }}
             >
-              ✍️ Soạn câu
+              ✍️ Soạn
             </button>
             <button 
               type="button" 
@@ -979,7 +1324,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 border: 'none', color: 'white', fontWeight: 600
               }}
             >
-              📂 Mẫu câu
+              📂 Thư viện
             </button>
             <button 
               type="button" 
@@ -990,7 +1335,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 border: 'none', color: 'white', fontWeight: 600
               }}
             >
-              ⚙️ Giọng đọc
+              ⚙️ Cấu hình
             </button>
             <button 
               type="button" 
@@ -1011,7 +1356,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       <div 
         style={{ 
           display: 'grid', 
-          gridTemplateColumns: isMobileScreen ? '1fr' : '300px 1fr 340px', 
+          gridTemplateColumns: isMobileScreen ? '1fr' : '300px 1fr 350px', 
           gap: '1.25rem',
           alignItems: 'start'
         }}
@@ -1242,18 +1587,31 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
                 {/* TRANSLATED & NORMALIZED PREVIEW CARD */}
                 <div className="card" style={{ background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '8px' }}>
-                  <h3 style={{ fontSize: '0.9rem', margin: '0 0 0.5rem 0', color: 'var(--green)' }}>🔊 Xem trước câu nói thật</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <h3 style={{ fontSize: '0.9rem', margin: 0, color: 'var(--green)' }}>🔊 Xem trước câu nói thật</h3>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--cyan)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={providerSettings.autoOptimize}
+                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoOptimize: e.target.checked }))}
+                        style={{ accentColor: 'var(--cyan)' }}
+                      />
+                      <span>Tự động tối ưu câu đọc</span>
+                    </label>
+                  </div>
                   <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'white', lineHeight: 1.4 }}>
                     {interpolatedText}
                   </p>
                   
                   {/* Speech normalization display */}
-                  <div style={{ borderTop: '1px dashed rgba(255,255,255,0.06)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '2px' }}>Dòng đọc chuẩn hóa phát ra loa:</span>
-                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--cyan)', fontStyle: 'italic' }}>
-                      "{normalizedTextToSpeak}"
-                    </span>
-                  </div>
+                  {providerSettings.autoOptimize && (
+                    <div style={{ borderTop: '1px dashed rgba(255,255,255,0.06)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                      <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '2px' }}>Dòng đọc chuẩn hóa phát ra loa:</span>
+                      <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--cyan)', fontStyle: 'italic' }}>
+                        "{normalizedTextToSpeak}"
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* PLAYBACK CONTROLS PANEL */}
@@ -1313,6 +1671,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Đặt bàn");
                     setSelectedTemplateId(null);
                     if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
                     else speakCustom(normalizeTextForVietnameseTTS(text));
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
@@ -1330,6 +1690,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Thu ngân");
                     setSelectedTemplateId(null);
                     if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
                     else speakCustom(normalizeTextForVietnameseTTS(text));
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
@@ -1347,6 +1709,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Chấm công");
                     setSelectedTemplateId(null);
                     if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
                     else speakCustom(normalizeTextForVietnameseTTS(text));
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
@@ -1364,6 +1728,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Lương/Nhân sự");
                     setSelectedTemplateId(null);
                     if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
                     else speakCustom(normalizeTextForVietnameseTTS(text));
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
@@ -1384,7 +1750,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             {(!isMobileScreen || mobileActiveTab === 'settings') && (
               <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
                 <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sliders size={18} style={{ color: 'var(--cyan)' }} />
+                  <SlidersHorizontal size={18} style={{ color: 'var(--cyan)' }} />
                   <span>Cấu hình giọng đọc</span>
                 </h2>
 
@@ -1400,8 +1766,23 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       style={{ background: '#0a101e', color: 'white' }}
                     >
                       <option value="browser">🌐 Browser Speech API (Miễn phí)</option>
+                      <option value="fpt">⚡ FPT.AI Text to Speech (Cloud)</option>
+                      <option value="viettel">🎖️ Viettel AI Text to Speech (Cloud)</option>
                       <option value="custom">🛠️ Custom Endpoint Server (Tự host)</option>
                     </select>
+                  </div>
+
+                  {/* Fallback & limits configuration */}
+                  <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={providerSettings.autoFallback}
+                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoFallback: e.target.checked }))}
+                        style={{ accentColor: 'var(--cyan)' }}
+                      />
+                      <span>Tự động Fallback sang Browser khi cloud lỗi</span>
+                    </label>
                   </div>
 
                   {/* Browser settings */}
@@ -1428,6 +1809,238 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           </span>
                         )}
                       </div>
+
+                      {/* Browser Rate speed slider */}
+                      <div className="form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className="form-label" style={{ margin: 0 }}>Tốc độ đọc: {providerSettings.rate}x</label>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.5" 
+                          max="2.0" 
+                          step="0.1"
+                          value={providerSettings.rate} 
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, rate: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                        />
+                      </div>
+
+                      {/* Pitch slider */}
+                      <div className="form-group">
+                        <label className="form-label">Cao độ giọng (Pitch): {providerSettings.pitch}</label>
+                        <input 
+                          type="range" 
+                          min="0.5" 
+                          max="1.5" 
+                          step="0.05"
+                          value={providerSettings.pitch} 
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, pitch: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* FPT.AI configurations */}
+                  {providerSettings.activeProvider === 'fpt' && (
+                    <>
+                      {/* Safety API Key warning banner */}
+                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
+                        <ShieldAlert size={16} style={{ flexShrink: 0 }} />
+                        <span>⚠️ API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Key size={12} />
+                          <span>FPT.AI API Key</span>
+                        </label>
+                        <input 
+                          type="password" 
+                          className="form-control" 
+                          placeholder="Nhập API Key FPT.AI"
+                          value={providerSettings.fptApiKey || ''}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptApiKey: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Chọn giọng (FPT.AI Voices)</label>
+                        <select 
+                          className="form-control"
+                          value={providerSettings.fptVoiceId}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptVoiceId: e.target.value }))}
+                          style={{ background: '#0a101e', color: 'white' }}
+                        >
+                          {FPT_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Speed FPT.AI Slider (-3 to +3) */}
+                      <div className="form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className="form-label" style={{ margin: 0 }}>Tốc độ đọc: {getFptSpeedDesc(providerSettings.fptSpeed)}</label>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="-3" 
+                          max="3" 
+                          step="1"
+                          value={providerSettings.fptSpeed} 
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptSpeed: parseInt(e.target.value, 10) }))}
+                          style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Định dạng file</label>
+                          <select 
+                            className="form-control"
+                            value={providerSettings.fptFormat}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptFormat: e.target.value }))}
+                            style={{ background: '#0a101e', color: 'white' }}
+                          >
+                            <option value="mp3">MP3</option>
+                            <option value="wav">WAV</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Hạn mức (Kí tự)</label>
+                          <input 
+                            type="number" 
+                            className="form-control"
+                            value={providerSettings.fptDailyLimit}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">FPT API Endpoint</label>
+                        <input 
+                          type="text" 
+                          className="form-control"
+                          value={providerSettings.fptEndpoint}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptEndpoint: e.target.value }))}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => {
+                          setProviderSettings((prev: any) => ({ ...prev, fptApiKey: '' }));
+                          showToast('Đã xóa FPT API Key thành công!', 'info');
+                        }}
+                        style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
+                      >
+                        Xóa FPT API Key
+                      </button>
+                    </>
+                  )}
+
+                  {/* Viettel AI configurations */}
+                  {providerSettings.activeProvider === 'viettel' && (
+                    <>
+                      {/* Safety API Key warning banner */}
+                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
+                        <ShieldAlert size={16} style={{ flexShrink: 0 }} />
+                        <span>⚠️ API token đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Key size={12} />
+                          <span>Viettel Token</span>
+                        </label>
+                        <input 
+                          type="password" 
+                          className="form-control" 
+                          placeholder="Nhập Token Viettel AI"
+                          value={providerSettings.viettelToken || ''}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelToken: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Chọn giọng (Viettel Voices)</label>
+                        <select 
+                          className="form-control"
+                          value={providerSettings.viettelVoiceId}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelVoiceId: e.target.value }))}
+                          style={{ background: '#0a101e', color: 'white' }}
+                        >
+                          {VIETTEL_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Speed Viettel AI Slider (0.8 to 1.2) */}
+                      <div className="form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className="form-label" style={{ margin: 0 }}>Tốc độ đọc: {getViettelSpeedDesc(providerSettings.viettelSpeed)}</label>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.8" 
+                          max="1.2" 
+                          step="0.1"
+                          value={providerSettings.viettelSpeed} 
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelSpeed: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Định dạng file</label>
+                          <select 
+                            className="form-control"
+                            value={providerSettings.viettelFormat}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelFormat: e.target.value }))}
+                            style={{ background: '#0a101e', color: 'white' }}
+                          >
+                            <option value="mp3">MP3</option>
+                            <option value="wav">WAV</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Hạn mức (Kí tự)</label>
+                          <input 
+                            type="number" 
+                            className="form-control"
+                            value={providerSettings.viettelDailyLimit}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Viettel API Endpoint</label>
+                        <input 
+                          type="text" 
+                          className="form-control"
+                          value={providerSettings.viettelEndpoint}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelEndpoint: e.target.value }))}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => {
+                          setProviderSettings((prev: any) => ({ ...prev, viettelToken: '' }));
+                          showToast('Đã xóa Viettel Token thành công!', 'info');
+                        }}
+                        style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
+                      >
+                        Xóa Viettel Token
+                      </button>
                     </>
                   )}
 
@@ -1448,53 +2061,6 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     </div>
                   )}
 
-                  {/* Rate speed slider */}
-                  <div className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Tốc độ đọc: {providerSettings.rate}x</label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button 
-                          className="btn-outline" 
-                          style={{ padding: '1px 4px', fontSize: '10px' }}
-                          onClick={() => setProviderSettings((prev: any) => ({ ...prev, rate: 0.75 }))}
-                        >Chậm</button>
-                        <button 
-                          className="btn-outline" 
-                          style={{ padding: '1px 4px', fontSize: '10px' }}
-                          onClick={() => setProviderSettings((prev: any) => ({ ...prev, rate: 1.0 }))}
-                        >Chuẩn</button>
-                        <button 
-                          className="btn-outline" 
-                          style={{ padding: '1px 4px', fontSize: '10px' }}
-                          onClick={() => setProviderSettings((prev: any) => ({ ...prev, rate: 1.25 }))}
-                        >Nhanh</button>
-                      </div>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0.5" 
-                      max="2.0" 
-                      step="0.05"
-                      value={providerSettings.rate} 
-                      onChange={e => setProviderSettings((prev: any) => ({ ...prev, rate: parseFloat(e.target.value) }))}
-                      style={{ width: '100%', accentColor: 'var(--cyan)' }}
-                    />
-                  </div>
-
-                  {/* Pitch slider */}
-                  <div className="form-group">
-                    <label className="form-label">Cao độ giọng (Pitch): {providerSettings.pitch}</label>
-                    <input 
-                      type="range" 
-                      min="0.5" 
-                      max="1.5" 
-                      step="0.05"
-                      value={providerSettings.pitch} 
-                      onChange={e => setProviderSettings((prev: any) => ({ ...prev, pitch: parseFloat(e.target.value) }))}
-                      style={{ width: '100%', accentColor: 'var(--cyan)' }}
-                    />
-                  </div>
-
                   {/* Volume slider */}
                   <div className="form-group">
                     <label className="form-label">Âm lượng (Volume): {Math.round(providerSettings.volume * 100)}%</label>
@@ -1508,6 +2074,24 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       style={{ width: '100%', accentColor: 'var(--cyan)' }}
                     />
                   </div>
+
+                  {/* Clear all credentials */}
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => {
+                      setProviderSettings((prev: any) => ({
+                        ...prev,
+                        fptApiKey: '',
+                        viettelToken: ''
+                      }));
+                      showToast('Đã xóa toàn bộ API Key khỏi bộ nhớ trình duyệt!', 'info');
+                    }}
+                    style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: 'var(--red)', fontSize: '0.8rem', width: '100%', marginTop: '0.5rem' }}
+                  >
+                    <Trash2 size={14} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
+                    <span style={{ verticalAlign: 'middle' }}>Xóa toàn bộ API Key</span>
+                  </button>
 
                 </div>
               </div>
@@ -1540,7 +2124,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           {item.text}
                         </span>
                         <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--muted)' }}>
-                          {new Date(item.playedAt).toLocaleTimeString('vi-VN')} - {item.providerId}
+                          {new Date(item.playedAt).toLocaleTimeString('vi-VN')} - {item.providerId.toUpperCase()}
                         </span>
                       </div>
                       <button 
@@ -1548,8 +2132,10 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         onClick={() => {
                           setComposeText(item.text);
                           setSelectedTemplateId(item.templateId || null);
-                          if (item.providerId === 'browser') speakBrowser(normalizeTextForVietnameseTTS(item.text));
-                          else speakCustom(normalizeTextForVietnameseTTS(item.text));
+                          if (item.providerId === 'browser') speakBrowser(item.normalizedText);
+                          else if (item.providerId === 'fpt') speakFpt(item.normalizedText);
+                          else if (item.providerId === 'viettel') speakViettel(item.normalizedText);
+                          else speakCustom(item.normalizedText);
                         }}
                         style={{ 
                           background: 'transparent', border: 'none', color: 'var(--cyan)', 
@@ -1571,6 +2157,22 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           </div>
         )}
 
+      </div>
+
+      {/* Guide Panel Instruction */}
+      <div className="card panel" style={{ marginTop: '1.5rem', background: 'var(--panel-bg)' }}>
+        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Info size={18} style={{ color: 'var(--cyan)' }} />
+          <span>Hướng dẫn sử dụng Đọc TTS</span>
+        </h2>
+        <ol style={{ fontSize: '0.85rem', color: 'var(--muted)', paddingLeft: '1.25rem', lineHeight: 1.6, margin: 0 }}>
+          <li>Nhập nội dung mẫu câu cần nói ở khung soạn thảo hoặc chọn nhanh từ thư viện bên trái.</li>
+          <li>Bạn có thể chèn biến động dạng <code style={{ color: 'var(--cyan)' }}>&#123;ten_khach&#125;</code> để điền nhanh nội dung động cho khách hàng.</li>
+          <li>Chọn provider phát âm mong muốn: <strong>Web Speech API</strong> (Miễn phí, chạy nội bộ), <strong>FPT.AI Cloud</strong>, hoặc <strong>Viettel AI Cloud</strong>.</li>
+          <li>Điều chỉnh tốc độ và cao độ giọng đọc phù hợp với không gian nhà hàng của bạn.</li>
+          <li>Bấm <strong>"Nghe thử giọng"</strong> để bắt đầu phát âm thanh. Trình duyệt sẽ tự động fallback sang nguồn miễn phí nếu FPT/Viettel bị lỗi hoặc hết Quota.</li>
+          <li>Bấm <strong>"Lưu lại"</strong> để lưu mẫu câu vào cơ sở dữ liệu local và đồng bộ lên Spreadsheet.</li>
+        </ol>
       </div>
 
     </div>

@@ -52,8 +52,8 @@ function getOrCreateTtsSheets(ss) {
   var historySheet = ss.getSheetByName("TTS_History");
   if (!historySheet) {
     historySheet = ss.insertSheet("TTS_History");
-    historySheet.appendRow(['id', 'templateId', 'text', 'providerId', 'voiceId', 'gender', 'rate', 'pitch', 'volume', 'playedAt', 'status', 'errorMessage', 'user']);
-    historySheet.getRange("A1:L1").setFontWeight("bold").setBackground("#feeef0");
+    historySheet.appendRow(['id', 'templateId', 'text', 'normalizedText', 'providerId', 'voiceId', 'gender', 'rate', 'pitch', 'volume', 'playedAt', 'status', 'errorMessage', 'user']);
+    historySheet.getRange("A1:N1").setFontWeight("bold").setBackground("#feeef0");
   }
 
   var settingsSheet = ss.getSheetByName("TTS_Settings");
@@ -584,6 +584,7 @@ function saveTtsHistoryRow(sheet, log, ssId) {
     log.id || "hist-" + Date.now(),
     log.templateId || "",
     log.text || "",
+    log.normalizedText || "",
     log.providerId || "",
     log.voiceId || "",
     log.gender || "",
