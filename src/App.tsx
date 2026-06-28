@@ -17,6 +17,7 @@ import {
 import './App.css';
 import { parseFile, processRecords, exportToExcel, type ProcessedRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
+import { StatCard, EmptyState, GuidePanel } from './components/Shared';
 
 // Interface definitions
 interface Bank {
@@ -68,7 +69,10 @@ function App() {
 
   // Config State
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem('kg_tool_gas_url') || '');
-  const [spreadsheetId, setSpreadsheetId] = useState(() => localStorage.getItem('kg_tool_spreadsheet_id') || '1jL7m6dZuuxOdpMPSOO1KfMviUmbI1VJXAq3Hmwz9DGk');
+  const [spreadsheetId, setSpreadsheetId] = useState(() => localStorage.getItem('kg_tool_spreadsheet_id') || '');
+  const [connectionStatus, setConnectionStatus] = useState<'not_configured' | 'testing' | 'connected' | 'failed'>(() => {
+    return gasUrl ? 'connected' : 'not_configured';
+  });
 
   // 1. Attendance processing state
   const [file, setFile] = useState<File | null>(null);
@@ -96,6 +100,12 @@ function App() {
   const [memo, setMemo] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<'qr_only' | 'compact' | 'compact2' | 'print'>('compact');
   
+  // VietQR Transaction History state
+  const [qrHistory, setQrHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('kg_tool_qr_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // VietQR Actions & State
   const [qrUrl, setQrUrl] = useState('');
   const [isQrLoading, setIsQrLoading] = useState(false);
@@ -153,6 +163,37 @@ function App() {
     localStorage.setItem('kg_tool_gas_url', gasUrl);
     localStorage.setItem('kg_tool_spreadsheet_id', spreadsheetId);
     showToast('Đã lưu cấu hình hệ thống thành công!', 'success');
+    if (gasUrl) {
+      testConnection();
+    } else {
+      setConnectionStatus('not_configured');
+    }
+  };
+
+  // Test Connection to Apps Script backend
+  const testConnection = async () => {
+    if (!gasUrl) {
+      showToast('Vui lòng cấu hình URL Google Apps Script Web App trước!', 'error');
+      setConnectionStatus('not_configured');
+      return;
+    }
+    setConnectionStatus('testing');
+    try {
+      const url = `${gasUrl}?action=getMonths&ssId=${encodeURIComponent(spreadsheetId)}`;
+      const res = await fetch(url);
+      const result = await res.json();
+      if (result.success || Array.isArray(result) || result.status === 'success') {
+        setConnectionStatus('connected');
+        showToast('Kết nối Google Sheets API thành công!', 'success');
+      } else {
+        setConnectionStatus('failed');
+        showToast('Kết nối thất bại: API phản hồi sai cấu trúc.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setConnectionStatus('failed');
+      showToast(`Không thể kết nối: ${err.message || 'Lỗi mạng hoặc URL không tồn tại'}`, 'error');
+    }
   };
 
   // Drag and Drop File Handlers
@@ -407,6 +448,19 @@ function App() {
 
       if (resJson.status === 'success') {
         showToast('Lưu tài khoản và mã QR thành công lên sheet DATA2!', 'success');
+        
+        // Log to history
+        const newTx = {
+          id: Date.now().toString(),
+          bankCode: selectedBank.code,
+          accountNo: accountNo.trim(),
+          amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
+          memo: memo.trim(),
+          timestamp: new Date().toISOString()
+        };
+        const updatedHistory = [...qrHistory, newTx];
+        setQrHistory(updatedHistory);
+        localStorage.setItem('kg_tool_qr_history', JSON.stringify(updatedHistory));
       } else {
         throw new Error(resJson.message || 'Lỗi không rõ từ script.');
       }
@@ -432,8 +486,20 @@ function App() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       showToast('Đã tải hình ảnh QR Code về máy!', 'success');
+
+      // Log to history
+      const newTx = {
+        id: Date.now().toString(),
+        bankCode: selectedBank?.code || '',
+        accountNo: accountNo.trim(),
+        amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
+        memo: memo.trim(),
+        timestamp: new Date().toISOString()
+      };
+      const updatedHistory = [...qrHistory, newTx];
+      setQrHistory(updatedHistory);
+      localStorage.setItem('kg_tool_qr_history', JSON.stringify(updatedHistory));
     } catch (e) {
-      // Fallback: Open in new tab if fetch is blocked by CORS (standard behaviour for img.vietqr.io)
       window.open(qrUrl, '_blank');
       showToast('Mở mã QR trong tab mới để tải về!', 'info');
     }
@@ -442,7 +508,22 @@ function App() {
   const handleCopyQRLink = () => {
     if (!qrUrl) return;
     navigator.clipboard.writeText(qrUrl)
-      .then(() => showToast('Đã sao chép link ảnh VietQR!', 'success'))
+      .then(() => {
+        showToast('Đã sao chép link ảnh VietQR!', 'success');
+        
+        // Log to history
+        const newTx = {
+          id: Date.now().toString(),
+          bankCode: selectedBank?.code || '',
+          accountNo: accountNo.trim(),
+          amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
+          memo: memo.trim(),
+          timestamp: new Date().toISOString()
+        };
+        const updatedHistory = [...qrHistory, newTx];
+        setQrHistory(updatedHistory);
+        localStorage.setItem('kg_tool_qr_history', JSON.stringify(updatedHistory));
+      })
       .catch(() => showToast('Không thể sao chép link!', 'error'));
   };
 
@@ -471,11 +552,18 @@ function App() {
     : banks;
 
   // Dynamic KPIs calculations for Attendance
-  const empCount = processedRecords.length > 0 ? new Set(processedRecords.map(r => r.employeeName)).size : 1248;
-  const daysCount = processedRecords.length > 0 ? processedRecords.length : 25840;
-  const processedCount = processedRecords.length > 0 ? processedRecords.filter(r => r.checkIn && r.checkOut).length : 25328;
-  const nightCount = processedRecords.length > 0 ? processedRecords.filter(r => r.overtime).length : 1152;
-  const completionRate = processedRecords.length > 0 ? ((processedCount / daysCount) * 100).toFixed(2) : '97.98';
+  const hasAttendanceData = processedRecords.length > 0;
+  const empCount = hasAttendanceData ? new Set(processedRecords.map(r => r.employeeName)).size : 0;
+  const daysCount = hasAttendanceData ? processedRecords.length : 0;
+  const processedCount = hasAttendanceData ? processedRecords.filter(r => r.checkIn && r.checkOut).length : 0;
+  const nightCount = hasAttendanceData ? processedRecords.filter(r => r.overtime).length : 0;
+  const completionRate = hasAttendanceData ? ((processedCount / daysCount) * 100).toFixed(2) : '0';
+
+  // VietQR calculation metrics
+  const todayStr = new Date().toISOString().split('T')[0];
+  const qrCreatedToday = qrHistory.filter(h => h.timestamp && h.timestamp.startsWith(todayStr)).length;
+  const totalTransactions = qrHistory.length;
+  const totalAmountReceived = qrHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
 
   return (
     <div className="dashboard-layout">
@@ -506,7 +594,7 @@ function App() {
             onClick={() => { setCurrentView('attendance'); setIsSidebarOpen(false); }}
           >
             <span className="ico"><FileText size={20} /></span>
-            <span>Xử lý Chấm Công</span>
+            <span>Chấm Công</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'vietqr' ? 'active' : ''}`}
@@ -520,14 +608,14 @@ function App() {
             onClick={() => { setCurrentView('payroll'); setIsSidebarOpen(false); }}
           >
             <span className="ico"><CreditCard size={20} /></span>
-            <span>Quản lý Phiếu Lương</span>
+            <span>Phiếu Lương</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => { setCurrentView('settings'); setIsSidebarOpen(false); }}
           >
             <span className="ico"><Settings size={20} /></span>
-            <span>Cấu hình Hệ thống</span>
+            <span>Cấu hình</span>
           </button>
         </nav>
 
@@ -559,12 +647,12 @@ function App() {
           <div className="user">
             <div className="mini-btn">🔔<i className="dot"></i></div>
             <div className="mini-btn">☾</div>
-            <div className="avatar">A</div>
+            <div className="avatar">Q</div>
             <div>
-              <b>Admin</b>
-              <small>Quản trị viên</small>
+              <b>Quản trị viên</b>
+              <small>Quản lý nhà hàng</small>
             </div>
-            <span style={{ cursor: 'pointer' }}>⌄</span>
+            <span style={{ cursor: 'pointer' }}>▼</span>
           </div>
         </div>
 
@@ -574,43 +662,59 @@ function App() {
             <div className="head">
               <div className="title">
                 <h1>Xử lý Chấm Công <span className="blue-dot"></span></h1>
-                <p>Tự động hoá chuẩn hoá dữ liệu, phân ca đêm và nội suy ngày giờ</p>
+                <p>Tự động hóa chuẩn hóa dữ liệu chấm công nhà hàng, phân ca đêm và nội suy ngày giờ</p>
               </div>
               <div className="kpis">
-                <div className="kpi">
-                  <div className="icon">👥</div>
-                  <div>
-                    Nhân viên
-                    <b>{empCount.toLocaleString('vi-VN')}</b>
-                    <span>Tổng số nhân viên</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">📅</div>
-                  <div>
-                    Ngày công
-                    <b>{daysCount.toLocaleString('vi-VN')}</b>
-                    <span>Tháng này</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">✅</div>
-                  <div>
-                    Đã xử lý
-                    <b>{processedCount.toLocaleString('vi-VN')}</b>
-                    <span>{completionRate}% hoàn thành</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">🌙</div>
-                  <div>
-                    Ca đêm
-                    <b>{nightCount.toLocaleString('vi-VN')}</b>
-                    <span>Đêm qua</span>
-                  </div>
-                </div>
+                <StatCard 
+                  icon="👥" 
+                  label="Nhân viên" 
+                  value={empCount.toLocaleString('vi-VN')} 
+                  subtext="Tổng số nhân viên thực tế"
+                  hasData={hasAttendanceData} 
+                />
+                <StatCard 
+                  icon="📅" 
+                  label="Ngày công" 
+                  value={daysCount.toLocaleString('vi-VN')} 
+                  subtext="Tổng số dòng công ghi nhận"
+                  hasData={hasAttendanceData} 
+                />
+                <StatCard 
+                  icon="✅" 
+                  label="Đã xử lý" 
+                  value={processedCount.toLocaleString('vi-VN')} 
+                  subtext={`${completionRate}% ca hoàn thành`}
+                  hasData={hasAttendanceData} 
+                />
+                <StatCard 
+                  icon="🌙" 
+                  label="Ca đêm" 
+                  value={nightCount.toLocaleString('vi-VN')} 
+                  subtext="Số ca đêm phát hiện"
+                  hasData={hasAttendanceData} 
+                />
               </div>
             </div>
+
+            {/* Instruction module */}
+            <GuidePanel 
+              title="Xử lý Chấm Công"
+              purpose="Tải tệp chấm công thô từ máy chấm công nhà hàng, tự động làm sạch, xử lý ca làm việc kéo dài qua đêm (ca đêm), nội suy lịch làm việc và xuất báo cáo chuẩn để tính lương."
+              steps={[
+                "Tải file chấm công thô định dạng Excel (.xlsx, .xls) hoặc tệp phẳng (.csv) lên hệ thống.",
+                "Hệ thống sẽ tự động quét, phân tích và chuẩn hóa tên nhân viên, các mốc thời gian vào/ra.",
+                "Hệ thống tự động phát hiện và xử lý ca đêm (mốc giờ sau 0h và trước 6h sáng được quy về ca tối của ngày hôm trước).",
+                "Tải file kết quả chuẩn hóa về máy hoặc chọn nút đồng bộ lên Google Sheet."
+              ]}
+              notes={[
+                "Dữ liệu thô phải có các cột cơ bản chứa tên nhân viên và thời gian Check-In/Check-Out rõ ràng.",
+                "Các mốc giờ đi làm muộn hoặc về sớm sẽ được giữ nguyên trạng để phục vụ tính lương phạt."
+              ]}
+              errors={[
+                "Lỗi 'Không đọc được file' -> Đảm bảo tệp của bạn không bị khóa password và có phần mở rộng đúng chuẩn.",
+                "Lỗi 'Thiếu cột dữ liệu bắt buộc' -> Hãy kiểm tra lại tiêu đề cột trong file Excel xem có trùng khớp không."
+              ]}
+            />
 
             {!file ? (
               <div 
@@ -618,21 +722,23 @@ function App() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
               >
                 <div className="upload-content">
                   <div className="file-icon">☁</div>
                   <h2>Kéo thả file Excel hoặc CSV vào đây</h2>
-                  <a href="#" onClick={(e) => e.preventDefault()}>hoặc click để chọn file</a>
-                  <p>Hỗ trợ định dạng: .xlsx, .xls, .csv ⓘ</p>
+                  <p style={{ margin: '0.5rem 0 1rem' }}>hoặc</p>
+                  <label className="primary" style={{ padding: '8px 24px', cursor: 'pointer', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
+                    <span>Chọn tệp từ máy tính</span>
+                    <input 
+                      type="file" 
+                      style={{ display: 'none' }}
+                      ref={fileInputRef}
+                      accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                      onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
+                    />
+                  </label>
+                  <p style={{ marginTop: '1.25rem' }}>Hỗ trợ định dạng: .xlsx, .xls, .csv ⓘ</p>
                   <p style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '8px' }}>🛡 Dữ liệu của bạn được bảo mật tuyệt đối và chỉ sử dụng để xử lý chấm công.</p>
-                  <input 
-                    type="file" 
-                    className="file-input" 
-                    ref={fileInputRef}
-                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                    onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
-                  />
                 </div>
                 {errorMsg && <p style={{ color: '#ff5c7a', marginTop: '1rem', fontWeight: 500, zIndex: 5 }}>{errorMsg}</p>}
               </div>
@@ -726,7 +832,7 @@ function App() {
                 <div className="ficon">🌙</div>
                 <div>
                   <h3>Xử Lý Ca Đêm</h3>
-                  <p>Tự động gán giờ trước 6h sáng về ngày hôm trước</p>
+                  <p>Tự động gán giờ trước 6h sáng về ca ngày hôm trước</p>
                 </div>
                 <div className="arrow">→</div>
               </div>
@@ -734,7 +840,7 @@ function App() {
                 <div className="ficon">📆</div>
                 <div>
                   <h3>Nội Suy Lịch</h3>
-                  <p>Khớp dữ liệu với dải ngày chuẩn trong tháng</p>
+                  <p>Khớp dữ liệu chấm công với dải ngày hành chính và phân ca</p>
                 </div>
                 <div className="arrow">→</div>
               </div>
@@ -742,7 +848,7 @@ function App() {
                 <div className="ficon">🪄</div>
                 <div>
                   <h3>Định Dạng Tự Động</h3>
-                  <p>Xuất ra format chuẩn báo cáo dễ nhìn</p>
+                  <p>Chuẩn hóa dữ liệu thô xuất ra bảng báo cáo dễ theo dõi</p>
                 </div>
                 <div className="arrow">→</div>
               </div>
@@ -759,46 +865,62 @@ function App() {
                 <p>Nhập thông tin tài khoản và tạo mã QR chuẩn Napas 247 để nhận thanh toán nhanh chóng.</p>
               </div>
               <div className="kpis">
-                <div className="kpi">
-                  <div className="icon">👤</div>
-                  <div>
-                    Tài khoản đã lưu
-                    <b>{String(savedAccounts.length).padStart(2, '0')}</b>
-                    <span>Tổng số tài khoản</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">▦</div>
-                  <div>
-                    QR đã tạo hôm nay
-                    <b>28</b>
-                    <span>Mã QR</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">📈</div>
-                  <div>
-                    Tổng giao dịch
-                    <b>128</b>
-                    <span>30 ngày qua</span>
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="icon">💼</div>
-                  <div>
-                    Tổng tiền nhận
-                    <b>27.450.000đ</b>
-                    <span>30 ngày qua</span>
-                  </div>
-                </div>
+                <StatCard 
+                  icon="👤" 
+                  label="Tài khoản đã lưu" 
+                  value={savedAccounts.length} 
+                  subtext="Tài khoản đã được cấu hình"
+                  hasData={savedAccounts.length > 0} 
+                />
+                <StatCard 
+                  icon="▦" 
+                  label="QR đã tạo hôm nay" 
+                  value={qrCreatedToday} 
+                  subtext="Mã QR tạo trong ngày"
+                  hasData={totalTransactions > 0} 
+                />
+                <StatCard 
+                  icon="📈" 
+                  label="Tổng giao dịch" 
+                  value={totalTransactions} 
+                  subtext="Số lần xuất/tạo mã QR"
+                  hasData={totalTransactions > 0} 
+                />
+                <StatCard 
+                  icon="💼" 
+                  label="Tổng tiền nhận" 
+                  value={`${totalAmountReceived.toLocaleString('vi-VN')}đ`} 
+                  subtext="Tổng giá trị các mã QR"
+                  hasData={totalTransactions > 0} 
+                />
               </div>
             </div>
+
+            {/* Instruction module */}
+            <GuidePanel 
+              title="VietQR & Tài khoản"
+              purpose="Tạo nhanh mã QR thanh toán động theo chuẩn Napas 247 của ngân hàng Việt Nam, cho phép khách hàng quét chuyển khoản điền sẵn số tài khoản, chủ tài khoản, số tiền và nội dung chuyển khoản tự động."
+              steps={[
+                "Lưu thông tin các số tài khoản ngân hàng thụ hưởng hay dùng tại mục 'Tài khoản của bạn' để không phải gõ lại.",
+                "Nhấp chọn tài khoản ngân hàng thụ hưởng mong muốn trong danh sách thẻ.",
+                "Nhập số tiền cần thanh toán và ghi chú nội dung chuyển khoản ở phần form bên dưới.",
+                "Ảnh QR tương ứng sẽ được tự động vẽ trực tiếp bên khung preview phải.",
+                "Chọn 'Tải ảnh QR', sao chép link hoặc bấm 'Lưu Cloud' để lưu lịch sử giao dịch lên bảng tính Google Sheet."
+              ]}
+              notes={[
+                "Họ tên chủ tài khoản viết hoa không dấu (ví dụ: NGUYEN VAN A).",
+                "VietQR được tạo động qua API mở VietQR và hoàn toàn miễn phí."
+              ]}
+              errors={[
+                "Lỗi ảnh QR không hiển thị -> Vui lòng kiểm tra lại kết nối mạng Internet hoặc kiểm tra tính hợp lệ của Số tài khoản."
+              ]}
+            />
 
             <div className="two-col">
               {/* LEFT COLUMN: Input Forms and Saved Accounts */}
               <div className="card panel">
                 <h2>👥 Tài khoản của bạn</h2>
-                <p className="sub">Quản lý và sử dụng tài khoản để tạo mã QR thanh toán.</p>
+                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quản lý và sử dụng tài khoản để tạo mã QR thanh toán nhanh.</p>
                 <button 
                   className="primary" 
                   style={{ width: '180px', height: '44px', float: 'right', marginTop: '-60px' }}
@@ -809,10 +931,10 @@ function App() {
                 </button>
 
                 {showAddAccountForm && (
-                  <form onSubmit={handleAddAccount} className="card panel" style={{ border: '1px dashed rgba(34,211,238,0.5)', padding: '1.25rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <form onSubmit={handleAddAccount} className="card panel" style={{ border: '1px dashed rgba(34,211,238,0.5)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white' }}>Thêm tài khoản lưu trữ</span>
-                      <button type="button" className="btn-outline" style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }} onClick={() => setShowAddAccountForm(false)}>Hủy</button>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white' }}>Thêm tài khoản mới</span>
+                      <button type="button" className="btn-outline" style={{ padding: '4px 12px', borderRadius: '6px', fontSize: '0.75rem' }} onClick={() => setShowAddAccountForm(false)}>Hủy</button>
                     </div>
 
                     <div className="field full">
@@ -895,7 +1017,7 @@ function App() {
                         <label>Số tiền mặc định</label>
                         <input 
                           type="text" 
-                          placeholder="Ví dụ: 500,000"
+                          placeholder="Ví dụ: 500.000"
                           value={newDefaultAmount ? formatVND(newDefaultAmount) : ''}
                           onChange={(e) => setNewDefaultAmount(e.target.value.replace(/\D/g, ''))}
                         />
@@ -904,7 +1026,7 @@ function App() {
                         <label>Nội dung mặc định</label>
                         <input 
                           type="text" 
-                          placeholder="Ví dụ: CK TIEN AN"
+                          placeholder="Ví dụ: CK TIEN COM"
                           value={newDefaultMemo}
                           onChange={(e) => setNewDefaultMemo(e.target.value)}
                         />
@@ -944,13 +1066,16 @@ function App() {
                     );
                   })}
                   {savedAccounts.length === 0 && !showAddAccountForm && (
-                    <div className="full" style={{ padding: '2rem', textAlign: 'center', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--glass-border)', borderRadius: '12px', color: 'var(--muted)' }}>
-                      Chưa lưu tài khoản cá nhân nào. Hãy click "Thêm tài khoản" để tạo nhanh!
-                    </div>
+                    <EmptyState 
+                      icon="👤"
+                      title="Chưa lưu tài khoản cá nhân"
+                      description="Hãy bấm nút 'Thêm tài khoản' phía trên để lưu thông tin thụ hưởng hay dùng của bạn."
+                      style={{ gridColumn: 'span 2', padding: '2rem 1rem' }}
+                    />
                   )}
                 </div>
 
-                <h2>▣ Thông tin tạo mã QR</h2>
+                <h2 style={{ marginTop: '2rem' }}>▣ Thông tin tạo mã QR</h2>
                 <div className="form-grid">
                   <div className="field full">
                     <label>Chọn ngân hàng thụ hưởng</label>
@@ -960,7 +1085,7 @@ function App() {
                           <div className="selected-bank-info">
                             <img src={selectedBank.logo} alt={selectedBank.code} className="bank-logo-img" />
                             <span style={{ fontWeight: 600, color: 'white' }}>{selectedBank.shortName}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '150px' }}> - {selectedBank.name}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}> - {selectedBank.name}</span>
                           </div>
                           <button type="button" className="change-bank-btn" onClick={() => { setSelectedBank(null); setSearchBankQuery(''); }}>Thay đổi</button>
                         </div>
@@ -969,7 +1094,7 @@ function App() {
                           <input 
                             type="text" 
                             className="form-control bank-search-input" 
-                            placeholder="Tìm tên hoặc mã ngân hàng..."
+                            placeholder="Tìm tên hoặc mã ngân hàng thụ hưởng..."
                             value={searchBankQuery}
                             onChange={(e) => { setSearchBankQuery(e.target.value); setShowBankDropdown(true); }}
                             onFocus={() => setShowBankDropdown(true)}
@@ -995,7 +1120,7 @@ function App() {
                                 </div>
                               ))}
                               {filteredBanks.length === 0 && (
-                                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>Không tìm thấy ngân hàng nào</div>
+                                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>Không tìm thấy ngân hàng thụ hưởng</div>
                               )}
                             </div>
                           )}
@@ -1005,7 +1130,7 @@ function App() {
                   </div>
 
                   <div className="field">
-                    <label>Số tài khoản</label>
+                    <label>Số tài khoản thụ hưởng</label>
                     <input 
                       type="text" 
                       placeholder="Ví dụ: 1903678..."
@@ -1015,7 +1140,7 @@ function App() {
                   </div>
 
                   <div className="field">
-                    <label>Tên chủ tài khoản (Không dấu)</label>
+                    <label>Tên chủ tài khoản (Viết hoa không dấu)</label>
                     <input 
                       type="text" 
                       placeholder="Ví dụ: NGUYEN VAN A"
@@ -1026,10 +1151,10 @@ function App() {
                   </div>
 
                   <div className="field">
-                    <label>Số tiền (VND)</label>
+                    <label>Số tiền chuyển khoản (VND)</label>
                     <input 
                       type="text" 
-                      placeholder="Ví dụ: 100,000"
+                      placeholder="Ví dụ: 100.000"
                       value={amount ? formatVND(amount) : ''}
                       onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
                     />
@@ -1039,7 +1164,7 @@ function App() {
                     <label>Nội dung chuyển khoản</label>
                     <input 
                       type="text" 
-                      placeholder="Ví dụ: THANH TOAN TIEN COM"
+                      placeholder="Ví dụ: THANH TOAN HOA DON COM CHIEU"
                       value={memo}
                       onChange={(e) => setMemo(e.target.value)}
                     />
@@ -1064,14 +1189,14 @@ function App() {
               {/* RIGHT COLUMN: Live QR Code Preview and actions */}
               <div className="card panel qrbox">
                 <h2>▦ Mã QR thanh toán</h2>
-                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quét mã để chuyển khoản nhanh chóng và chính xác.</p>
+                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quét mã QR bằng App Ngân hàng hoặc Ví điện tử để chuyển khoản.</p>
 
                 {qrUrl ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
                     <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--glass-border)' }}>
-                      <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ mã QR</button>
-                      <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Gọn 1</button>
-                      <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Gọn 2</button>
+                      <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
+                      <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
+                      <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
                       <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
                     </div>
 
@@ -1096,14 +1221,16 @@ function App() {
 
                     <div className="form-grid">
                       <button className="primary" style={{ height: '48px' }} onClick={handleDownloadQR}>Tải ảnh QR</button>
-                      <button className="primary" style={{ height: '48px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={handleCopyQRLink}>Link QR</button>
+                      <button className="primary" style={{ height: '48px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={handleCopyQRLink}>Sao chép link</button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', color: 'var(--muted)', textAlign: 'center' }}>
-                    <QrCode size={48} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-                    <p>Vui lòng điền thông tin tài khoản thụ hưởng để bắt đầu tạo mã QR</p>
-                  </div>
+                  <EmptyState 
+                    icon="▦"
+                    title="Chưa có mã QR"
+                    description="Nhập đầy đủ thông tin ngân hàng, số tài khoản và họ tên chủ tài khoản ở bảng bên để hệ thống tạo mã QR thanh toán động."
+                    style={{ minHeight: '320px', border: 'none', background: 'transparent' }}
+                  />
                 )}
               </div>
             </div>
@@ -1132,17 +1259,39 @@ function App() {
               </div>
               <button 
                 className="primary" 
-                style={{ width: '160px', height: '44px' }}
+                style={{ width: '180px', height: '44px' }}
+                disabled={!spreadsheetId || spreadsheetId.trim() === ''}
                 onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, '_blank')}
               >
                 ⓘ Xem Google Sheet
               </button>
             </div>
 
+            {/* Instruction module */}
+            <GuidePanel 
+              title="Cấu hình Hệ thống"
+              purpose="Cấu hình tài khoản và định danh bảng tính Google Sheets để lưu trữ lịch sử chấm công, danh sách tài khoản VietQR và lịch sử xuất bảng tổng hợp lương nhà hàng an toàn qua API."
+              steps={[
+                "Mở tệp Google Spreadsheet của bạn và copy chuỗi ID trên thanh URL (Spreadsheet ID).",
+                "Mở Script Editor (Trình soạn thảo mã) Google Apps Script bound với bảng tính.",
+                "Dán mã backend API tương ứng vào file Code.gs của Apps Script.",
+                "Thực hiện Deploy dưới dạng Web App với quyền truy cập 'Anyone' (Bất kỳ ai).",
+                "Copy URL Web App của Google và dán vào form cấu hình bên dưới cùng với Spreadsheet ID.",
+                "Bấm '🔒 Lưu cấu hình' rồi bấm 'Kiểm tra kết nối' để test kết nối thực tế."
+              ]}
+              notes={[
+                "Nút 'Xem Google Sheet' ở đầu trang sẽ tự động bị khóa (Disabled) cho đến khi bạn điền một ID Spreadsheet hợp lệ.",
+                "URL Apps Script Web App của Google luôn kết thúc bằng từ khóa '/exec'."
+              ]}
+              errors={[
+                "Trạng thái báo 'Lỗi kết nối' -> Đảm bảo bạn đã cấp quyền chạy Script cho tài khoản Google của bạn (Authorize Script) trong Google Editor."
+              ]}
+            />
+
             <div className="settings-layout">
               <div className="card panel">
                 <h2>Thông tin kết nối Google</h2>
-                <p className="sub" style={{ marginBottom: '1rem' }}>Cung cấp thông tin kết nối với Google Apps Script Web App để hệ thống có thể ghi và đọc dữ liệu.</p>
+                <p className="sub" style={{ marginBottom: '1.5rem' }}>Cung cấp thông tin kết nối với Google Apps Script Web App để hệ thống có thể ghi và đọc dữ liệu.</p>
                 <form onSubmit={handleSaveSettings} className="form-grid">
                   <div className="field full">
                     <label>Google Apps Script Web App URL</label>
@@ -1163,13 +1312,25 @@ function App() {
                       placeholder="1jL7m6dZuuxOdpMPSOO1KfMviUmbI1VJXAq3Hmwz9DGk"
                       value={spreadsheetId}
                       onChange={(e) => setSpreadsheetId(e.target.value.trim())}
+                      required
                     />
                     <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '4px' }}>Mã ID của bảng tính Google Sheet chứa sheet DATA2 và Bang_Cham_Cong_Log.</p>
                   </div>
 
-                  <button type="submit" className="primary full" style={{ height: '48px' }}>
-                    🔒 Lưu cấu hình
-                  </button>
+                  <div className="bulk-import-row full" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button type="submit" className="primary" style={{ flexGrow: 1, height: '48px' }}>
+                      🔒 Lưu cấu hình
+                    </button>
+                    <button 
+                      type="button" 
+                      className="primary" 
+                      style={{ width: '180px', height: '48px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }}
+                      onClick={testConnection}
+                      disabled={connectionStatus === 'testing'}
+                    >
+                      {connectionStatus === 'testing' ? 'Đang test...' : 'Kiểm tra kết nối'}
+                    </button>
+                  </div>
                 </form>
                 <p className="sub" style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '1rem' }}>🛡 Thông tin của bạn được mã hóa và lưu trữ an toàn. Chỉ quản trị viên mới có quyền thay đổi cấu hình.</p>
               </div>
@@ -1177,19 +1338,22 @@ function App() {
               <div className="status-col">
                 <div className="card status">
                   <h3>Trạng thái kết nối</h3>
-                  <b style={{ color: gasUrl ? 'var(--green)' : 'var(--red)' }}>{gasUrl ? 'Đã cấu hình' : 'Chưa cấu hình'}</b>
-                  <p className="sub">Đường dẫn Google Apps Script Web App.</p>
+                  {connectionStatus === 'connected' && <b style={{ color: 'var(--green)' }}>Đã kết nối</b>}
+                  {connectionStatus === 'testing' && <b style={{ color: 'var(--cyan)' }}>Đang kết kiểm tra...</b>}
+                  {connectionStatus === 'failed' && <b style={{ color: 'var(--red)' }}>Lỗi kết nối</b>}
+                  {connectionStatus === 'not_configured' && <b style={{ color: 'var(--muted)' }}>Chưa cấu hình</b>}
+                  <p className="sub">Trạng thái xác thực Google Apps Script.</p>
                 </div>
                 <div className="card status">
                   <h3>Sức khỏe đồng bộ</h3>
-                  <b>{gasUrl ? '100%' : '0%'}</b>
-                  <p className="sub">{gasUrl ? 'Hệ thống hoạt động ổn định' : 'Vui lòng cấu hình URL'}</p>
+                  <b>{connectionStatus === 'connected' ? '100%' : '0%'}</b>
+                  <p className="sub">{connectionStatus === 'connected' ? 'Hệ thống hoạt động ổn định' : 'Kiểm tra lại cấu hình kết nối'}</p>
                 </div>
               </div>
             </div>
 
             <div className="card guide">
-              <h2>Hướng dẫn cấu hình & Triển khai</h2>
+              <h2>Hướng dẫn cấu hình & Triển khai nhanh</h2>
               <div className="steps">
                 <div className="step">
                   <div className="num">1</div>

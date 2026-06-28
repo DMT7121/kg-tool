@@ -8,6 +8,7 @@ import {
   UploadCloud
 } from 'lucide-react';
 import './PayrollCreator.css';
+import { StatCard, EmptyState, GuidePanel } from './components/Shared';
 
 // Styling Themes (Colors match standard layouts)
 const THEMES = {
@@ -121,7 +122,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [defaultPosition, setDefaultPosition] = useState('Nhân viên');
   const [defaultDept, setDefaultDept] = useState('Nhân sự');
   const [roundMode, setRoundMode] = useState<'dong' | 'thousand'>('dong');
-  const [advance, setAdvance] = useState(10000000);
+  const [advance, setAdvance] = useState(0);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [deductions, setDeductions] = useState<Deduction[]>([]);
@@ -156,10 +157,13 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         setActiveTemplate(data.activeTemplate || 'standard');
       } catch (e) {
         console.error(e);
-        loadSampleData();
+        setEmployees([]);
+        setDeductions([]);
       }
     } else {
-      loadSampleData();
+      setEmployees([]);
+      setDeductions([]);
+      setAdvance(0);
     }
   }, []);
 
@@ -1101,7 +1105,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         URL.revokeObjectURL(url);
         reject(new Error('Failed to load SVG into Image object'));
       };
-      
       img.src = url;
     });
   };
@@ -1140,40 +1143,55 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           <p>Tạo, quản lý và xuất hóa đơn K80, A4 và lưu trữ Google Sheets</p>
         </div>
         <div className="kpis">
-          <div className="kpi">
-            <div className="icon">👥</div>
-            <div>
-              Tổng số nhân viên
-              <b>{employees.length.toLocaleString('vi-VN')}</b>
-              <span>+28 so với kỳ trước</span>
-            </div>
-          </div>
-          <div className="kpi">
-            <div className="icon">📅</div>
-            <div>
-              Tổng số công
-              <b>{totalDays.toLocaleString('vi-VN')}</b>
-              <span>+{isHourly ? '1.320 giờ' : '1.320 công'}</span>
-            </div>
-          </div>
-          <div className="kpi">
-            <div className="icon">🛡</div>
-            <div>
-              Quỹ lương dự kiến
-              <b>{formatMoney(totalSalary)}đ</b>
-              <span>+12.5%</span>
-            </div>
-          </div>
-          <div className="kpi">
-            <div className="icon">💜</div>
-            <div>
-              Thực nhận
-              <b style={{ color: net < 0 ? 'var(--red)' : 'inherit' }}>{formatMoney(net)}đ</b>
-              <span>-8.2%</span>
-            </div>
-          </div>
+          <StatCard 
+            icon="👥" 
+            label="Tổng số nhân viên" 
+            value={employees.length.toLocaleString('vi-VN')} 
+            subtext="Nhân viên tính lương thực tế"
+            hasData={employees.length > 0} 
+          />
+          <StatCard 
+            icon="📅" 
+            label="Tổng số công" 
+            value={totalDays.toLocaleString('vi-VN')} 
+            subtext={isHourly ? 'Tổng số giờ làm việc' : 'Tổng số công làm việc'}
+            hasData={employees.length > 0} 
+          />
+          <StatCard 
+            icon="🛡" 
+            label="Quỹ lương dự kiến" 
+            value={`${formatMoney(totalSalary)}đ`} 
+            subtext="Trước khi khấu trừ"
+            hasData={employees.length > 0} 
+          />
+          <StatCard 
+            icon="💜" 
+            label="Thực nhận" 
+            value={`${formatMoney(net)}đ`} 
+            subtext="Sau khi trừ tạm ứng & khấu trừ"
+            hasData={employees.length > 0} 
+          />
         </div>
       </div>
+
+      <GuidePanel 
+        title="Quản lý Phiếu Lương"
+        purpose="Tạo phiếu lương chi tiết cho từng nhân viên nhà hàng (hỗ trợ chế độ lương tháng hoặc lương giờ), tính toán thực nhận sau khi cấn trừ tạm ứng & các khoản khấu trừ khác, xuất file ảnh PNG hóa đơn nhiệt K80 hoặc in phiếu A4/A5."
+        steps={[
+          "Thiết lập tháng thanh toán, ngày lập chứng từ và chế độ tính lương (Lương tháng / Lương giờ).",
+          "Nhập dữ liệu nhân viên bằng cách gõ tay, dán dữ liệu thô từ Excel (nút 'Dán dữ liệu') hoặc import tệp CSV.",
+          "Cấu hình các khoản khấu trừ chung (như BHXH, đồng phục, tiền phạt) hoặc tiền tạm ứng lương.",
+          "Chuyển đổi qua lại giữa 'Phiếu Lương Nhân Viên' và 'Bảng Tổng Hợp Lương' để kiểm tra số liệu.",
+          "Chọn các mẫu in 'Standard', 'K80 Thermal' hoặc 'Modern' rồi bấm 'Tải ảnh PNG' hoặc 'In Phiếu' để in hóa đơn vật lý."
+        ]}
+        notes={[
+          "Mức lương và số ngày công phải là số thực tế để tính toán chính xác.",
+          "Cấu hình K80 Thermal được tối ưu để in qua máy in hóa đơn nhiệt khổ giấy 80mm."
+        ]}
+        errors={[
+          "Lỗi 'Thực nhận âm' -> Kiểm tra xem số tiền tạm ứng hoặc khấu trừ của nhân viên đó có lớn hơn tổng thu nhập cơ bản không."
+        ]}
+      />
 
       <div className="payroll-layout">
         
@@ -1262,7 +1280,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
           {/* Section 2: Bulk import / Sample Actions */}
           <div className="glass-card">
-            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>☁ Bulk Importer / Actions</span>
+            <span className="card-heading-title" style={{ display: 'block', marginBottom: '1rem' }}>☁ Nhập dữ liệu hàng loạt / Thao tác</span>
             <div className="grid2">
               <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
               <button className="primary" onClick={triggerCsvSelect} style={{ height: '44px', fontSize: '14px' }}>
@@ -1486,13 +1504,13 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
             <div className="preview-templates-toggle">
               <button className={`template-toggle-btn ${activeTemplate === 'standard' ? 'active' : ''}`} onClick={() => setActiveTemplate('standard')}>
-                Standard
+                Mẫu chuẩn
               </button>
               <button className={`template-toggle-btn ${activeTemplate === 'k80' ? 'active' : ''}`} onClick={() => setActiveTemplate('k80')}>
-                K80 Thermal
+                Hóa đơn nhiệt K80
               </button>
               <button className={`template-toggle-btn ${activeTemplate === 'modern' ? 'active' : ''}`} onClick={() => setActiveTemplate('modern')}>
-                Modern
+                Mẫu hiện đại
               </button>
             </div>
           </div>
@@ -1527,11 +1545,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     <div className="receipt-card-header">
                       <span>Phiếu #{index + 1} - {emp.name}</span>
                       <div className="receipt-card-actions">
-                        <button className="btn-ghost small-btn" onClick={() => handleDownloadPng(emp)}>
+                        <button className="primary" style={{ padding: '4px 12px', fontSize: '12px', height: '32px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={() => handleDownloadPng(emp)}>
                           <Download size={12} />
                           Ảnh PNG
                         </button>
-                        <button className="btn-primary small-btn" onClick={handlePrint}>
+                        <button className="primary" style={{ padding: '4px 12px', fontSize: '12px', height: '32px' }} onClick={handlePrint}>
                           In Phiếu
                         </button>
                       </div>
@@ -1545,11 +1563,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 <div className="receipt-card-header">
                   <span>Bảng Tổng Hợp Lương ({payMonth})</span>
                   <div className="receipt-card-actions">
-                    <button className="btn-ghost small-btn" onClick={() => handleDownloadPng()}>
+                    <button className="primary" style={{ padding: '4px 12px', fontSize: '12px', height: '32px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={() => handleDownloadPng()}>
                       <Download size={12} />
                       Ảnh PNG
                     </button>
-                    <button className="btn-primary small-btn" onClick={handlePrint}>
+                    <button className="primary" style={{ padding: '4px 12px', fontSize: '12px', height: '32px' }} onClick={handlePrint}>
                       In Bảng Tổng Hợp
                     </button>
                   </div>
@@ -1559,14 +1577,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             )}
 
             {employees.length === 0 && (
-              <div className="card upload" style={{ height: '650px', borderColor: 'rgba(77, 134, 224, 0.32)' }}>
-                <div className="upload-content">
-                  <div className="file-icon" style={{ background: 'linear-gradient(135deg, #1e8cff, #6d5cff)' }}>📄</div>
-                  <h2>Chưa có dữ liệu để hiển thị</h2>
-                  <p>Hãy nhập danh sách nhân viên hoặc tải file dữ liệu để xem phiếu lương và báo cáo tổng hợp.</p>
-                  <button className="primary" onClick={addEmployee} style={{ width: '220px', marginTop: '1.5rem' }}>Bắt đầu nhập dữ liệu</button>
-                </div>
-              </div>
+              <EmptyState 
+                icon="📄"
+                title="Chưa có phiếu lương để hiển thị"
+                description="Vui lòng nhập thông tin nhân viên hoặc tải file CSV dữ liệu chấm công ở cột bên trái để bắt đầu tạo phiếu lương và bảng tổng hợp."
+                actionLabel="Thêm nhân viên đầu tiên"
+                onAction={addEmployee}
+                style={{ height: '550px' }}
+              />
             )}
           </div>
 
