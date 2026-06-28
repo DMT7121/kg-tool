@@ -13,11 +13,13 @@ import {
   ChevronDown,
   Sparkles,
   ClipboardCheck,
-  Edit2
+  Edit2,
+  Info
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
 import { VIB_BANKS } from '../constants/vibBanks';
+import { VCB_BANKS } from '../constants/vcbBanks';
 import { StatCard, GuidePanel, EmptyState } from './Shared';
 
 export interface TransferEmployee {
@@ -28,12 +30,18 @@ export interface TransferEmployee {
   bankCodeName: string; 
   amount: number; 
   memo: string; 
-  empCode?: string; 
-  dept?: string; 
-  role?: string; 
-  phone?: string; 
-  payMonth?: string; 
-  notes?: string; 
+  // VCB specific
+  idNo?: string;
+  issuedDate?: string;
+  issuedPlace?: string;
+  refNo?: string;
+  address?: string;
+  // Extra payroll fields
+  payMonth?: string;
+  dept?: string;
+  role?: string;
+  phone?: string;
+  notes?: string;
   source: 'manual' | 'import' | 'payroll';
   isValid: boolean;
   errors: string[];
@@ -43,7 +51,31 @@ interface TransferFileToolProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
+// Accent removal utility
+export function removeVietnameseAccents(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+// Strict name normalization for Vietcombank
+export function normalizeVietnameseName(name: string): string {
+  if (!name) return '';
+  const noAccents = removeVietnameseAccents(name);
+  return noAccents
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^A-Z0-9\s]/g, ''); // strip any strange non-alpha characters for bank safety
+}
+
 export default function TransferFileTool({ showToast }: TransferFileToolProps) {
+  const [bankTemplate, setBankTemplate] = useState<'vib' | 'vcb'>(() => {
+    return (localStorage.getItem('kg_tool_transfer_active_bank') as 'vib' | 'vcb') || 'vib';
+  });
+
   const [employees, setEmployees] = useState<TransferEmployee[]>(() => {
     const saved = localStorage.getItem('kg_tool_transfer_entries');
     return saved ? JSON.parse(saved) : [];
@@ -53,14 +85,26 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     return localStorage.getItem('kg_tool_transfer_memo_template') || "KINGS GRILL thanh toan luong {ten_nhan_vien} {thang_luong}";
   });
 
+  const [vcbMemoTemplate, setVcbMemoTemplate] = useState(() => {
+    return localStorage.getItem('kg_tool_transfer_vcb_memo_template') || "KG LUONG NV T{thang_luong}";
+  });
+
   // Save changes to localStorage
   useEffect(() => {
     localStorage.setItem('kg_tool_transfer_entries', JSON.stringify(employees));
   }, [employees]);
 
   useEffect(() => {
+    localStorage.setItem('kg_tool_transfer_active_bank', bankTemplate);
+  }, [bankTemplate]);
+
+  useEffect(() => {
     localStorage.setItem('kg_tool_transfer_memo_template', defaultMemoTemplate);
   }, [defaultMemoTemplate]);
+
+  useEffect(() => {
+    localStorage.setItem('kg_tool_transfer_vcb_memo_template', vcbMemoTemplate);
+  }, [vcbMemoTemplate]);
 
   // Form edit states
   const [activeEmployeeEdit, setActiveEmployeeEdit] = useState<TransferEmployee | null>(null);
@@ -100,23 +144,118 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Strip Vietnamese tones for search filter queries
+  const stripTones = (str: string): string => {
+    return removeVietnameseAccents(str).toLowerCase();
+  };
+
+  // Filter banks for selection
+  const filteredBanks = useMemo(() => {
+    const q = stripTones(bankSearchQuery.trim());
+    const currentBankList = bankTemplate === 'vib' ? VIB_BANKS : VCB_BANKS;
+    if (!q) return currentBankList;
+    return currentBankList.filter(b => 
+      stripTones(b.codeName).includes(q) || 
+      stripTones(b.fullName).includes(q)
+    );
+  }, [bankSearchQuery, bankTemplate]);
+
+  // Map arbitrary bank name to VIB codeName
+  const resolveVibBankName = (rawBank: string): string => {
+    if (!rawBank) return '';
+    const cleanRaw = rawBank.trim();
+    const direct = VIB_BANKS.find(b => b.codeName.toLowerCase() === cleanRaw.toLowerCase() || b.fullName.toLowerCase() === cleanRaw.toLowerCase());
+    if (direct) return direct.codeName;
+
+    const queryClean = stripTones(cleanRaw);
+    const numberCode = cleanRaw.match(/^\d+/);
+    if (numberCode) {
+      const codeMatch = VIB_BANKS.find(b => b.codeName.startsWith(numberCode[0]));
+      if (codeMatch) return codeMatch.codeName;
+    }
+
+    const matches = VIB_BANKS.filter(b => {
+      const targetClean = stripTones(b.codeName);
+      const fullClean = stripTones(b.fullName);
+      return targetClean.includes(queryClean) || queryClean.includes(targetClean) || fullClean.includes(queryClean);
+    });
+
+    if (matches.length > 0) return matches[0].codeName;
+
+    // Common abbreviations
+    if (queryClean.includes('vcb') || queryClean.includes('vietcombank')) return '203 - Vietcombank';
+    if (queryClean.includes('agri') || queryClean.includes('agribank') || queryClean.includes('vba')) return '204 - Agribank';
+    if (queryClean.includes('tcb') || queryClean.includes('techcombank')) return '310 - Techcombank';
+    if (queryClean.includes('bidv')) return '202 - BIDV';
+    if (queryClean.includes('vietin')) return '201 - Vietinbank';
+    if (queryClean.includes('mb') || queryClean.includes('mbb') || queryClean.includes('quan doi')) return '311 - Quân đội';
+    if (queryClean.includes('acb') || queryClean.includes('a chau')) return '307 - Á Châu';
+    if (queryClean.includes('vib')) return '314 - NH Quốc tế VIB';
+    if (queryClean.includes('tp') || queryClean.includes('tien phong')) return '358 - TPBank';
+    if (queryClean.includes('vp') || queryClean.includes('vpb')) return '309 - VPBank';
+    
+    return cleanRaw;
+  };
+
+  // Map arbitrary bank name to Vietcombank format (e.g. "(ACB) Á Châu")
+  const resolveVcbBankName = (rawBank: string): string => {
+    if (!rawBank) return '';
+    const cleanRaw = rawBank.trim();
+    const direct = VCB_BANKS.find(b => b.codeName.toLowerCase() === cleanRaw.toLowerCase() || b.fullName.toLowerCase() === cleanRaw.toLowerCase());
+    if (direct) return direct.codeName;
+
+    const queryClean = stripTones(cleanRaw);
+    
+    const matches = VCB_BANKS.filter(b => {
+      const targetClean = stripTones(b.codeName);
+      const fullClean = stripTones(b.fullName);
+      return targetClean.includes(queryClean) || queryClean.includes(targetClean) || fullClean.includes(queryClean);
+    });
+
+    if (matches.length > 0) return matches[0].codeName;
+
+    if (queryClean.includes('vcb') || queryClean.includes('vietcombank')) return '(VCB) Vietcombank';
+    if (queryClean.includes('acb') || queryClean.includes('a chau')) return '(ACB) Á Châu';
+    if (queryClean.includes('mb') || queryClean.includes('mbb') || queryClean.includes('quan doi')) return '(MB) Quân Đội';
+    if (queryClean.includes('vib')) return '(VIB) Ngân hàng Quốc tế';
+    if (queryClean.includes('bidv')) return '(BIDV) Đầu tư & Phát triển';
+    if (queryClean.includes('vietin')) return '(VIETINBANK) Công Thương';
+    if (queryClean.includes('agri') || queryClean.includes('agribank') || queryClean.includes('vba')) return '(AGRIBANK) Nông nghiệp & PTNT';
+    if (queryClean.includes('tcb') || queryClean.includes('techcombank')) return '(TECHCOMBANK) Kỹ Thương';
+    if (queryClean.includes('vp') || queryClean.includes('vpb')) return '(VPBANK) Việt Nam Thịnh Vượng';
+    if (queryClean.includes('tp') || queryClean.includes('tien phong')) return '(TPBANK) Tiên Phong';
+    if (queryClean.includes('sacom') || queryClean.includes('stb')) return '(SACOMBANK) Sài Gòn Thương Tín';
+
+    return cleanRaw;
+  };
+
   // Validation function
-  const validateRecord = (emp: Partial<TransferEmployee>): { isValid: boolean; errors: string[] } => {
+  const validateRecord = (emp: Partial<TransferEmployee>, activeBank: 'vib' | 'vcb' = bankTemplate): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
     // 1. Name Check
     if (!emp.name || emp.name.trim() === '') {
       errors.push('Tên người nhận không được rỗng.');
     } else {
-      const nameVal = emp.name.trim().replace(/\s+/g, ' ');
-      if (nameVal.length > 35) {
-        errors.push('Tên không được vượt quá 35 ký tự.');
-      }
-      // Allowed: a-z, 0-9, space and ,.-+():_&?
-      // Unicode vietnamese is allowed too (strip tones for strict systems, but we allow accented Vietnamese text here as per instruction)
-      const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
-      if (!allowedRegex.test(nameVal)) {
-        errors.push('Tên chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
+      const nameVal = emp.name.trim();
+      if (activeBank === 'vcb') {
+        const normalized = normalizeVietnameseName(nameVal);
+        if (normalized.length === 0) {
+          errors.push('Tên sau khi chuyển không dấu bị rỗng.');
+        }
+        // VCB strictly permits only uppercase letters without accent
+        const vcbNameRegex = /^[A-Z0-9\s]*$/;
+        if (!vcbNameRegex.test(normalized)) {
+          errors.push('Tên thụ hưởng Vietcombank chỉ được chứa chữ cái IN HOA không dấu.');
+        }
+      } else {
+        if (nameVal.length > 35) {
+          errors.push('Tên không được vượt quá 35 ký tự.');
+        }
+        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
+        if (!allowedRegex.test(nameVal)) {
+          errors.push('Tên chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
+        }
       }
     }
 
@@ -138,11 +277,16 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     if (emp.amount === undefined || isNaN(emp.amount)) {
       errors.push('Số tiền chuyển không hợp lệ.');
     } else {
-      if (emp.amount < 10000) {
-        errors.push('Số tiền chuyển tối thiểu là 10.000 đ.');
+      if (emp.amount <= 0) {
+        errors.push('Số tiền chuyển phải lớn hơn 0 đ.');
       }
-      if (emp.amount > 499999999) {
-        errors.push('Số tiền chuyển tối đa là 499.999.999 đ.');
+      if (activeBank === 'vib') {
+        if (emp.amount < 10000) {
+          errors.push('VIB yêu cầu chuyển khoản tối thiểu 10.000 đ.');
+        }
+        if (emp.amount > 499999999) {
+          errors.push('VIB giới hạn chuyển khoản tối đa 499.999.999 đ.');
+        }
       }
     }
 
@@ -154,9 +298,17 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       if (memoText.length > 120) {
         errors.push('Nội dung không vượt quá 120 ký tự.');
       }
-      const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
-      if (!allowedRegex.test(memoText)) {
-        errors.push('Nội dung chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
+      // VCB usually expects uppercase unaccented contents
+      if (activeBank === 'vcb') {
+        const vcbMemoRegex = /^[A-Z0-9\s,\.\-+\(\):_&?]*$/;
+        if (!vcbMemoRegex.test(memoText.toUpperCase())) {
+          errors.push('Nội dung chuyển khoản chứa ký tự lạ không được Vietcombank hỗ trợ.');
+        }
+      } else {
+        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
+        if (!allowedRegex.test(memoText)) {
+          errors.push('Nội dung chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
+        }
       }
     }
 
@@ -164,9 +316,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     if (!emp.bankCodeName || emp.bankCodeName.trim() === '') {
       errors.push('Ngân hàng nhận không được trống.');
     } else {
-      const matched = VIB_BANKS.some(b => b.codeName === emp.bankCodeName);
+      const bankList = activeBank === 'vib' ? VIB_BANKS : VCB_BANKS;
+      const matched = bankList.some(b => b.codeName === emp.bankCodeName);
       if (!matched) {
-        errors.push('Ngân hàng không khớp danh mục mẫu MyVIB.');
+        errors.push(`Ngân hàng không khớp danh mục mẫu ${activeBank.toUpperCase()}.`);
       }
     }
 
@@ -177,9 +330,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   };
 
   // Run validation on all records
-  const revalidateAll = (list: TransferEmployee[]): TransferEmployee[] => {
+  const revalidateAll = (list: TransferEmployee[], activeBank: 'vib' | 'vcb' = bankTemplate): TransferEmployee[] => {
     return list.map(item => {
-      const res = validateRecord(item);
+      const res = validateRecord(item, activeBank);
       return {
         ...item,
         isValid: res.isValid,
@@ -187,6 +340,27 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       };
     });
   };
+
+  // Trigger validation immediately when template bank changes
+  useEffect(() => {
+    if (employees.length > 0) {
+      // Map banks and validate
+      const converted = employees.map(emp => {
+        let bankCodeName = emp.bankCodeName;
+        // Re-resolve bank format
+        if (bankTemplate === 'vcb') {
+          bankCodeName = resolveVcbBankName(emp.bankCodeName);
+        } else {
+          bankCodeName = resolveVibBankName(emp.bankCodeName);
+        }
+        return {
+          ...emp,
+          bankCodeName
+        };
+      });
+      setEmployees(revalidateAll(converted, bankTemplate));
+    }
+  }, [bankTemplate]);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -197,105 +371,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     return { total, validCount, invalidCount, totalAmount };
   }, [employees]);
 
-  // Strip Vietnamese tones for search
-  const stripTones = (str: string): string => {
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase();
-  };
-
-  // Filter banks for selection
-  const filteredBanks = useMemo(() => {
-    const q = stripTones(bankSearchQuery.trim());
-    if (!q) return VIB_BANKS;
-    return VIB_BANKS.filter(b => 
-      stripTones(b.codeName).includes(q) || 
-      stripTones(b.fullName).includes(q)
-    );
-  }, [bankSearchQuery]);
-
-  // Map arbitrary bank code (from export/import) to VIB codeName
-  const resolveVibBankName = (rawBank: string): string => {
-    if (!rawBank) return '';
-    const cleanRaw = rawBank.trim();
-    
-    // Direct match check
-    const direct = VIB_BANKS.find(b => b.codeName.toLowerCase() === cleanRaw.toLowerCase() || b.fullName.toLowerCase() === cleanRaw.toLowerCase());
-    if (direct) return direct.codeName;
-
-    // Check code prefix or name contents
-    const queryClean = stripTones(cleanRaw);
-    
-    // Check if starts with a number representing bank code
-    const numberCode = cleanRaw.match(/^\d+/);
-    if (numberCode) {
-      const codeMatch = VIB_BANKS.find(b => b.codeName.startsWith(numberCode[0]));
-      if (codeMatch) return codeMatch.codeName;
-    }
-
-    // Heuristics mappings
-    const matches = VIB_BANKS.filter(b => {
-      const targetClean = stripTones(b.codeName);
-      const fullClean = stripTones(b.fullName);
-      return targetClean.includes(queryClean) || queryClean.includes(targetClean) || fullClean.includes(queryClean);
-    });
-
-    if (matches.length > 0) {
-      // Find shortest match or best fit
-      return matches[0].codeName;
-    }
-
-    // Standard short name fallbacks
-    if (queryClean.includes('vcb') || queryClean.includes('vietcombank')) {
-      return '203 - Vietcombank';
-    }
-    if (queryClean.includes('agri') || queryClean.includes('agribank') || queryClean.includes('vba')) {
-      return '204 - Agribank';
-    }
-    if (queryClean.includes('tcb') || queryClean.includes('techcom') || queryClean.includes('techcombank')) {
-      return '310 - Techcombank';
-    }
-    if (queryClean.includes('bidv') || queryClean.includes('dau tu')) {
-      return '202 - BIDV';
-    }
-    if (queryClean.includes('vietin') || queryClean.includes('ctg')) {
-      return '201 - Vietinbank';
-    }
-    if (queryClean.includes('mb') || queryClean.includes('mbb') || queryClean.includes('quan doi')) {
-      return '311 - Quân đội';
-    }
-    if (queryClean.includes('acb') || queryClean.includes('a chau')) {
-      return '307 - Á Châu';
-    }
-    if (queryClean.includes('vib')) {
-      return '314 - NH Quốc tế VIB';
-    }
-    if (queryClean.includes('tp') || queryClean.includes('tpb') || queryClean.includes('tien phong')) {
-      return '358 - TPBank';
-    }
-    if (queryClean.includes('vp') || queryClean.includes('vpb') || queryClean.includes('viet nam thinh vuong')) {
-      return '309 - VPBank';
-    }
-    if (queryClean.includes('shb') || queryClean.includes('sai gon ha noi')) {
-      return '348 - Sài Gòn - Hà Nội (SHB)';
-    }
-
-    return cleanRaw; // fallback to raw string if completely unmappable
-  };
-
   // Helper to compile transaction memo with variables
   const compileMemo = (template: string, name: string, month: string, dept: string = ''): string => {
     let result = template
-      .replace(/{ten_nhan_vien}/gi, stripTones(name).toUpperCase())
+      .replace(/{ten_nhan_vien}/gi, removeVietnameseAccents(name).toUpperCase())
       .replace(/{thang_luong}/gi, month)
-      .replace(/{bo_phan}/gi, stripTones(dept).toUpperCase());
+      .replace(/{bo_phan}/gi, removeVietnameseAccents(dept).toUpperCase());
     
-    // Sanitize to only allowed chars for bank compatibility
-    result = result.replace(/[^a-zA-Z0-9\s,.\-+\(\):_&?]/g, '');
-    // Replace multiple spaces
+    // Clean spaces
     result = result.trim().replace(/\s+/g, ' ');
     if (result.length > 120) {
       result = result.substring(0, 120);
@@ -326,7 +409,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       const savedAccountsList = rawAccounts ? JSON.parse(rawAccounts) : [];
 
       const newEntries: TransferEmployee[] = payrollEmployees.map((pe: any) => {
-        // Find matching saved account by name
         const matchName = pe.name.toUpperCase().trim().replace(/\s+/g, ' ');
         const accountMatch = savedAccountsList.find((acc: any) => 
           acc.accountHolder.toUpperCase().trim().replace(/\s+/g, ' ') === matchName
@@ -336,10 +418,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         let accountNo = '';
         if (accountMatch) {
           accountNo = accountMatch.accountNo || '';
-          bankCodeName = resolveVibBankName(accountMatch.bankName || accountMatch.bankCode || '');
+          bankCodeName = bankTemplate === 'vib' 
+            ? resolveVibBankName(accountMatch.bankName || accountMatch.bankCode || '')
+            : resolveVcbBankName(accountMatch.bankName || accountMatch.bankCode || '');
         }
 
-        const generatedMemo = compileMemo(defaultMemoTemplate, pe.name, payMonth);
+        const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
+        const compiled = compileMemo(templateToUse, pe.name, payMonth);
+        const finalMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
 
         return {
           id: 'payroll-' + pe.id + '-' + Date.now(),
@@ -347,7 +433,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           accountNo: accountNo,
           bankCodeName: bankCodeName,
           amount: Math.round(pe.amount || 0),
-          memo: generatedMemo,
+          memo: finalMemo,
           payMonth: payMonth,
           source: 'payroll',
           isValid: false,
@@ -355,7 +441,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         };
       });
 
-      const validated = revalidateAll(newEntries);
+      const validated = revalidateAll(newEntries, bankTemplate);
       setEmployees(validated);
       showToast(`Đã nạp thành công ${validated.length} nhân viên từ Bảng Lương!`, 'success');
     } catch (e) {
@@ -431,7 +517,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       return;
     }
 
-    // Heuristics: Skip header row if first cell is not a number or contains headers
     let startIdx = 0;
     const headerSample = String(rows[0][0] || '').toLowerCase();
     if (headerSample.includes('stt') || headerSample.includes('họ tên') || headerSample.includes('tên') || isNaN(Number(rows[0][0]))) {
@@ -441,19 +526,43 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     const importedEntries: TransferEmployee[] = [];
     for (let i = startIdx; i < rows.length; i++) {
       const row = rows[i];
-      if (row.length < 3) continue; // Must have Name, Account, Amount
+      if (row.length < 3) continue;
 
-      // Columns mapping guess:
-      // We assume order: STT (optional), Name, Account, Amount, Memo (optional), Bank (optional)
       let name = '';
       let accountNo = '';
       let amount = 0;
       let memo = '';
       let bankCodeName = '';
+      // extra fields
+      let idNo = '';
+      let issuedDate = '';
+      let issuedPlace = '';
+      let refNo = '';
+      let address = '';
 
-      if (row.length >= 5) {
-        // Full fields: [STT/Name, Name/Account, Account/Amount, Amount/Memo, Memo/Bank, Bank]
-        // Let's check if col 0 is STT
+      if (bankTemplate === 'vcb') {
+        // VCB template layout mapping:
+        // Col A: STT, Col B: Ref, Col C: Account, Col D: CMND, Col E: Issued Date, Col F: Issued Place, Col G: Name, Col H: Address, Col I: Bank, Col J: Amount, Col K: Currency, Col L: Content
+        const col0IsNum = !isNaN(Number(row[0])) && String(row[0]).trim() !== '';
+        if (col0IsNum && row.length >= 10) {
+          refNo = String(row[1] || '').trim();
+          accountNo = String(row[2] || '').trim();
+          idNo = String(row[3] || '').trim();
+          issuedDate = String(row[4] || '').trim();
+          issuedPlace = String(row[5] || '').trim();
+          name = String(row[6] || '').trim();
+          address = String(row[7] || '').trim();
+          bankCodeName = resolveVcbBankName(String(row[8] || ''));
+          amount = Math.round(Number(String(row[9] || '').replace(/[^0-9.-]+/g, '')) || 0);
+          memo = String(row[11] || '').trim();
+        } else {
+          name = String(row[0] || '').trim();
+          accountNo = String(row[1] || '').trim();
+          amount = Math.round(Number(String(row[2] || '').replace(/[^0-9.-]+/g, '')) || 0);
+          memo = String(row[3] || '').trim();
+        }
+      } else {
+        // VIB template layout
         const col0IsNum = !isNaN(Number(row[0])) && String(row[0]).trim() !== '';
         if (col0IsNum && row.length >= 6) {
           name = String(row[1] || '').trim();
@@ -468,25 +577,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           memo = String(row[3] || '').trim();
           bankCodeName = resolveVibBankName(String(row[4] || ''));
         }
-      } else {
-        // [Name, Account, Amount, Memo/Bank]
-        name = String(row[0] || '').trim();
-        accountNo = String(row[1] || '').trim();
-        amount = Math.round(Number(String(row[2] || '').replace(/[^0-9.-]+/g, '')) || 0);
-        if (row[3]) {
-          const val3 = String(row[3]).trim();
-          if (val3.length > 25 && val3.includes(' ')) {
-            memo = val3;
-          } else {
-            bankCodeName = resolveVibBankName(val3);
-          }
-        }
       }
 
       if (!name) continue;
 
       if (!memo) {
-        memo = compileMemo(defaultMemoTemplate, name, '06-2026');
+        const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
+        const compiled = compileMemo(templateToUse, name, '06-2026');
+        memo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
       }
 
       importedEntries.push({
@@ -496,13 +594,18 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         bankCodeName,
         amount,
         memo,
+        idNo,
+        issuedDate,
+        issuedPlace,
+        refNo,
+        address,
         source: 'import',
         isValid: false,
         errors: []
       });
     }
 
-    const validated = revalidateAll(importedEntries);
+    const validated = revalidateAll(importedEntries, bankTemplate);
     setEmployees(prev => [...prev, ...validated]);
     showToast(`Đã import thành công ${validated.length} nhân viên từ tệp!`, 'success');
     setIsImporting(false);
@@ -520,15 +623,20 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     const parsedEntries: TransferEmployee[] = [];
     
     rows.forEach((row, i) => {
-      // Clean cells
       const cleanRow = row.map(c => c.trim());
       if (cleanRow.length < 3 || !cleanRow[0]) return;
 
       const name = cleanRow[0];
       const accountNo = cleanRow[1];
       const amount = Math.round(Number(cleanRow[2].replace(/[^0-9.-]+/g, '')) || 0);
-      const memo = cleanRow[3] || compileMemo(defaultMemoTemplate, name, '06-2026');
-      const bankCodeName = cleanRow[4] ? resolveVibBankName(cleanRow[4]) : '';
+      
+      const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
+      const compiled = compileMemo(templateToUse, name, '06-2026');
+      const memo = cleanRow[3] || (bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled);
+      
+      const bankCodeName = cleanRow[4] 
+        ? (bankTemplate === 'vib' ? resolveVibBankName(cleanRow[4]) : resolveVcbBankName(cleanRow[4])) 
+        : '';
 
       parsedEntries.push({
         id: 'paste-' + i + '-' + Date.now(),
@@ -543,7 +651,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       });
     });
 
-    const validated = revalidateAll(parsedEntries);
+    const validated = revalidateAll(parsedEntries, bankTemplate);
     setEmployees(prev => [...prev, ...validated]);
     showToast(`Đã dán và nạp ${validated.length} nhân viên thành công!`, 'success');
     setShowBulkModal(false);
@@ -552,13 +660,18 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
   // 4. MANUAL ROW ADD/EDIT/DELETE
   const handleAddManualRow = () => {
+    const defaultName = 'NHAN VIEN MOI';
+    const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
+    const compiled = compileMemo(templateToUse, defaultName, '06-2026');
+    const finalMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
+
     const newEmp: TransferEmployee = {
       id: 'manual-' + Date.now(),
-      name: 'Nhan vien moi',
+      name: defaultName,
       accountNo: '',
       bankCodeName: '',
       amount: 5000000,
-      memo: compileMemo(defaultMemoTemplate, 'Nhan vien moi', '06-2026'),
+      memo: finalMemo,
       source: 'manual',
       isValid: false,
       errors: ['Vui lòng điền thông tin tài khoản và ngân hàng.']
@@ -576,7 +689,13 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   const handleSaveActiveEdit = () => {
     if (!activeEmployeeEdit) return;
 
-    const validated = validateRecord(activeEmployeeEdit);
+    // Capitalize name if VCB
+    if (bankTemplate === 'vcb') {
+      activeEmployeeEdit.name = normalizeVietnameseName(activeEmployeeEdit.name);
+      activeEmployeeEdit.memo = activeEmployeeEdit.memo.toUpperCase();
+    }
+
+    const validated = validateRecord(activeEmployeeEdit, bankTemplate);
     const updated: TransferEmployee = {
       ...activeEmployeeEdit,
       isValid: validated.isValid,
@@ -602,50 +721,34 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     }
   };
 
-  // 5. EXPORT BANK TRANSFER EXCEL
-  const handleExportExcel = async () => {
-    if (employees.length === 0) {
-      showToast('Không có dữ liệu để xuất file chuyển tiền.', 'error');
-      return;
-    }
-
-    const invalidCount = employees.filter(e => !e.isValid).length;
-    if (invalidCount > 0) {
-      showToast(`Không thể tạo file. Vui lòng khắc phục ${invalidCount} lỗi thông tin tài khoản/ngân hàng trước.`, 'error');
-      return;
-    }
-
+  // 5. EXPORT BANK TRANSFER EXCEL VIB
+  const handleExportExcelVib = async () => {
     setIsExporting(true);
-    showToast('Đang tạo file Excel chuyển tiền...', 'info');
+    showToast('Đang tạo file Excel chuyển tiền MyVIB...', 'info');
 
     try {
-      // 1. Fetch template file from server
       const response = await fetch('/templates/myvib-transfer-template.xlsx');
       if (!response.ok) {
-        throw new Error('Không thể tải file mẫu MyVIB từ máy chủ. Vui lòng kiểm tra thư mục public/templates/');
+        throw new Error('Không thể tải file mẫu MyVIB từ máy chủ.');
       }
 
       const arrayBuffer = await response.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
-      // 2. Open main transfer list sheet (Sheet 1)
       const sheet = workbook.worksheets[0];
       if (!sheet) {
         throw new Error('Không tìm thấy Sheet "Danh sách chuyển tiền" trong file mẫu.');
       }
 
-      // 3. Keep styling/validation references of Row 5 (the first data row)
       const templateRow = sheet.getRow(5);
       const N = employees.length;
 
-      // 4. Populate employees data starting at Row 5
       for (let i = 0; i < N; i++) {
         const emp = employees[i];
         const r = 5 + i;
         const row = sheet.getRow(r);
 
-        // Copy styles and validation rules if index exceeds default template rows (14)
         if (r > 14) {
           for (let c = 1; c <= 6; c++) {
             const templateCell = templateRow.getCell(c);
@@ -657,16 +760,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           }
         }
 
-        // Set row values strictly keeping format
         row.getCell(1).value = i + 1; // STT
-        row.getCell(2).value = emp.name.toUpperCase().trim(); // Tên người nhận
-        row.getCell(3).value = String(emp.accountNo).trim(); // Số tài khoản (string to keep leading zeros)
-        row.getCell(4).value = Number(emp.amount); // Số tiền
-        row.getCell(5).value = emp.memo.trim(); // Nội dung
-        row.getCell(6).value = emp.bankCodeName; // Tên ngân hàng nhận (phải khớp dạng "Mã - Tên")
+        row.getCell(2).value = emp.name.toUpperCase().trim(); 
+        row.getCell(3).value = String(emp.accountNo).trim(); 
+        row.getCell(4).value = Number(emp.amount); 
+        row.getCell(5).value = emp.memo.trim(); 
+        row.getCell(6).value = emp.bankCodeName; 
       }
 
-      // 5. Clear surplus rows inside template to prevent processing demo names
       const lastRow = Math.max(sheet.rowCount, 100);
       for (let r = 5 + N; r <= lastRow; r++) {
         const row = sheet.getRow(r);
@@ -678,7 +779,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         row.getCell(6).value = null;
       }
 
-      // 6. Write to buffer and trigger download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
@@ -698,6 +798,113 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       showToast(`Lỗi xuất file Excel: ${err.message}`, 'error');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // 6. EXPORT BANK TRANSFER EXCEL VIETCOMBANK
+  const handleExportExcelVcb = async () => {
+    setIsExporting(true);
+    showToast('Đang tạo file Excel chuyển tiền Vietcombank...', 'info');
+
+    try {
+      // Fetch converted VCB xlsx template
+      const response = await fetch('/templates/vietcombank-transfer-template.xlsx');
+      if (!response.ok) {
+        throw new Error('Không thể tải file mẫu Vietcombank A222 từ máy chủ.');
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+
+      const sheet = workbook.worksheets[0];
+      if (!sheet) {
+        throw new Error('Không tìm thấy Sheet1 trong file mẫu Vietcombank.');
+      }
+
+      // VCB starts data at row 2
+      const templateRow = sheet.getRow(2);
+      const N = employees.length;
+
+      for (let i = 0; i < N; i++) {
+        const emp = employees[i];
+        const r = 2 + i;
+        const row = sheet.getRow(r);
+
+        // Copy styles from row 2 down if we exceed the default templates length
+        if (r > 12) {
+          for (let c = 1; c <= 12; c++) {
+            const templateCell = templateRow.getCell(c);
+            const targetCell = row.getCell(c);
+            targetCell.style = { ...templateCell.style };
+            if (templateCell.dataValidation) {
+              targetCell.dataValidation = { ...templateCell.dataValidation };
+            }
+          }
+        }
+
+        // Set row values
+        row.getCell(1).value = i + 1; // STT / No (col A)
+        row.getCell(2).value = emp.refNo ? String(emp.refNo).trim() : null; // so ref (col B)
+        row.getCell(3).value = String(emp.accountNo).trim(); // so tai khoan (col C)
+        row.getCell(4).value = emp.idNo ? String(emp.idNo).trim() : null; // so cmnd (col D)
+        row.getCell(5).value = emp.issuedDate ? String(emp.issuedDate).trim() : null; // ngay cap (col E)
+        row.getCell(6).value = emp.issuedPlace ? String(emp.issuedPlace).trim() : null; // noi cap (col F)
+        row.getCell(7).value = normalizeVietnameseName(emp.name); // ten nguoi huong (col G)
+        row.getCell(8).value = emp.address ? String(emp.address).trim() : null; // dia chi (col H)
+        row.getCell(9).value = emp.bankCodeName; // ten ngan hang (col I)
+        row.getCell(10).value = Number(emp.amount); // so tien (col J)
+        row.getCell(11).value = "VND"; // loai tien (col K)
+        row.getCell(12).value = emp.memo.toUpperCase().trim(); // noi dung (col L)
+      }
+
+      // Clear surplus rows from 2 + N to rowCount
+      const lastRow = Math.max(sheet.rowCount, 50);
+      for (let r = 2 + N; r <= lastRow; r++) {
+        const row = sheet.getRow(r);
+        for (let c = 1; c <= 12; c++) {
+          row.getCell(c).value = null;
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      const cleanMonth = (employees[0]?.payMonth || '06-2026').replace(/\//g, '-');
+      const filename = `vcb-chuyen-tien-kings-grill-${cleanMonth}.xlsx`;
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('Đã xuất file chuyển tiền Vietcombank thành công! (Tải tệp .xlsx, tự đổi đuôi thành .xls nếu cổng VCB yêu cầu định dạng cũ)', 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Lỗi xuất file Vietcombank: ${err.message}`, 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportClick = () => {
+    if (employees.length === 0) {
+      showToast('Không có dữ liệu để xuất file chuyển tiền.', 'error');
+      return;
+    }
+
+    const invalidCount = employees.filter(e => !e.isValid).length;
+    if (invalidCount > 0) {
+      showToast(`Không thể tạo file. Vui lòng khắc phục ${invalidCount} lỗi trước khi tải.`, 'error');
+      return;
+    }
+
+    if (bankTemplate === 'vib') {
+      handleExportExcelVib();
+    } else {
+      handleExportExcelVcb();
     }
   };
 
@@ -733,16 +940,56 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       <div className="head" style={{ marginBottom: '1.5rem' }}>
         <div className="title">
           <h1>Tạo File Chuyển Tiền <span className="blue-dot"></span></h1>
-          <p>Tạo file Excel chuyển tiền hàng loạt đúng mẫu MyVIB 2.0 để tải trực tiếp lên cổng ngân hàng doanh nghiệp.</p>
+          <p>Tạo file chuyển tiền hàng loạt theo đúng khuôn mẫu của các ngân hàng thương mại để upload trực tiếp.</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button 
             className="primary" 
-            onClick={handleExportExcel}
+            onClick={handleExportClick}
             disabled={employees.length === 0 || stats.invalidCount > 0 || isExporting}
           >
             {isExporting ? <RefreshCw className="spinner" size={18} /> : <Download size={18} />}
-            <span>Tải File Excel</span>
+            <span>Tải File Chuyển Tiền</span>
+          </button>
+        </div>
+      </div>
+
+      {/* BANK TEMPLATE SELECTOR TABS */}
+      <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            type="button" 
+            onClick={() => setBankTemplate('vib')}
+            style={{ 
+              flexGrow: 1, 
+              padding: '12px', 
+              borderRadius: '8px', 
+              background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+              border: 'none',
+              color: 'white',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            🏦 Mẫu MyVIB 2.0
+          </button>
+          <button 
+            type="button" 
+            onClick={() => setBankTemplate('vcb')}
+            style={{ 
+              flexGrow: 1, 
+              padding: '12px', 
+              borderRadius: '8px', 
+              background: bankTemplate === 'vcb' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
+              border: 'none',
+              color: 'white',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            💚 Mẫu Vietcombank (A222)
           </button>
         </div>
       </div>
@@ -753,45 +1000,62 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           icon="👥" 
           label="Tổng tiền chuyển" 
           value={`${stats.totalAmount.toLocaleString('vi-VN')} đ`} 
-          subtext={`Qũy chuyển cho ${stats.total} nhân viên`}
+          subtext={`Chuyển khoản cho ${stats.total} dòng nhân viên`}
           hasData={employees.length > 0} 
         />
         <StatCard 
           icon="✅" 
-          label="Nhân viên hợp lệ" 
+          label="Người thụ hưởng hợp lệ" 
           value={`${stats.validCount} / ${stats.total}`} 
-          subtext="Đủ điều kiện xuất file"
+          subtext={`Đạt chuẩn mẫu ${bankTemplate.toUpperCase()}`}
           hasData={employees.length > 0} 
         />
         <StatCard 
           icon="⚠️" 
-          label="Thiếu/Sai thông tin" 
+          label="Số dòng bị lỗi" 
           value={`${stats.invalidCount} dòng`} 
-          subtext="Yêu cầu sửa đổi ngay"
+          subtext="Cần chỉnh sửa ngay"
           hasData={employees.length > 0} 
         />
       </div>
 
       {/* INSTRUCTIONS PANEL */}
-      <GuidePanel 
-        title="File Chuyển Tiền MyVIB 2.0"
-        purpose="Module hỗ trợ kết hợp bảng tính lương, tự động phân tích và chuyển định dạng số tài khoản/ngân hàng thành định dạng bảng nạp tiền chuẩn của Ngân hàng Quốc tế VIB, loại bỏ hoàn toàn các lỗi định dạng hoặc trùng lặp."
-        steps={[
-          "Bấm 'Lấy từ Phiếu Lương' để tự động nạp danh sách thực nhận và đối chiếu tài khoản đã lưu, hoặc bấm 'Import Excel/CSV' để tải danh sách khác.",
-          "Kiểm tra cột 'Trạng thái' trong bảng. Bất kỳ dòng nào báo đỏ (Thiếu thông tin hoặc Ngân hàng không khớp mẫu VIB) cần được cập nhật.",
-          "Chạm vào ô Ngân hàng để hiển thị Bank Selector tìm kiếm chuẩn từ danh mục 104 ngân hàng.",
-          "Nhấp 'Tải File Excel' để tạo workbook mới kế thừa cấu trúc 3 sheet gốc (Danh sách chuyển tiền, Hướng dẫn, ref) và nạp dữ liệu thật từ hàng 5.",
-          "Đăng nhập ngân hàng MyVIB Doanh nghiệp, tải tệp tin Excel vừa xuất lên hệ thống chuyển tiền lô để thực hiện."
-        ]}
-        notes={[
-          "File mẫu xuất ra phải giữ nguyên tên cột, tên sheet, thứ tự sheet để không bị hệ thống Core ngân hàng từ chối.",
-          "Số tài khoản nhận luôn được lưu dưới dạng text để không làm mất số 0 ở đầu (ví dụ: '0200...').",
-          "Ký tự đặc biệt cho phép trong Tên và Nội dung bao gồm: , . - + ( ) : _ & ?"
-        ]}
-        errors={[
-          "Mã lỗi 'Ngân hàng không khớp danh mục': VIB yêu cầu điền đúng chuỗi dạng 'Mã - Tên ngắn' (ví dụ: '203 - Vietcombank'). Hãy nhấp vào ô ngân hàng bị lỗi và chọn lại từ Bank Selector."
-        ]}
-      />
+      {bankTemplate === 'vib' ? (
+        <GuidePanel 
+          title="File Chuyển Tiền MyVIB 2.0"
+          purpose="Module hỗ trợ kết hợp bảng tính lương, tự động phân tích và chuyển định dạng số tài khoản/ngân hàng thành định dạng bảng nạp tiền chuẩn của Ngân hàng Quốc tế VIB."
+          steps={[
+            "Bấm 'Lấy từ Phiếu Lương' để tự động nạp danh sách thực nhận và đối chiếu tài khoản đã lưu, hoặc bấm 'Import Excel/CSV' để tải danh sách khác.",
+            "Kiểm tra cột 'Trạng thái' trong bảng. Bất kỳ dòng nào báo đỏ (Thiếu thông tin hoặc Ngân hàng không khớp mẫu VIB) cần được cập nhật.",
+            "Nhấp 'Tải File Chuyển Tiền' để xuất tệp Excel nạp vào cổng ngân hàng VIB."
+          ]}
+          notes={[
+            "Số tài khoản nhận luôn được lưu dưới dạng text để không làm mất số 0 ở đầu (ví dụ: '0200...').",
+            "Ký tự đặc biệt cho phép trong Tên và Nội dung bao gồm: , . - + ( ) : _ & ?"
+          ]}
+          errors={[
+            "Mã lỗi 'Ngân hàng không khớp danh mục': VIB yêu cầu điền đúng chuỗi dạng 'Mã - Tên ngắn' (ví dụ: '203 - Vietcombank'). Hãy nhấp vào ô ngân hàng bị lỗi và chọn lại từ Bank Selector."
+          ]}
+        />
+      ) : (
+        <GuidePanel 
+          title="File Chuyển Tiền Vietcombank A222"
+          purpose="Tự động chuẩn hóa toàn bộ họ tên thụ hưởng sang chữ IN HOA KHÔNG DẤU, map mã ngân hàng interbank (ACB, MB, VIB...) theo định dạng Vietcombank yêu cầu và xuất tệp Excel nạp cổng."
+          steps={[
+            "Nạp danh sách nhân viên từ Phiếu Lương hoặc tệp CSV/Excel.",
+            "Tất cả họ tên sẽ được chuẩn hóa sang định dạng IN HOA KHÔNG DẤU (ví dụ: 'DAO MINH TRI') tự động khi ghi file.",
+            "Kiểm tra cột lỗi và sử dụng Bank Selector của Vietcombank để chọn đúng format (ví dụ: '(ACB) Á Châu').",
+            "Bấm 'Tải File Chuyển Tiền' để download tệp tin mẫu đã được điền đầy đủ."
+          ]}
+          notes={[
+            "Định dạng xuất file là .xlsx. Nếu cổng Vietcombank yêu cầu file .xls nhị phân nguyên bản, bạn hãy đổi tên đuôi file hoặc mở bằng Excel và lưu lại dạng Excel 97-2003 (.xls).",
+            "Cột 'ten nguoi huong' (tên người hưởng) bắt buộc là chữ viết hoa không có dấu."
+          ]}
+          errors={[
+            "Lỗi 'Ngân hàng không khớp danh mục VCB': Yêu cầu đúng chuỗi dạng '(ShortName) FullName' (ví dụ: '(MB) Quân Đội'). Hãy nhấp ô ngân hàng và chỉnh lại."
+          ]}
+        />
+      )}
 
       {/* OPERATIONS & ACTION BUTTONS PANEL */}
       <div className="card panel" style={{ marginBottom: '1.5rem', background: 'var(--panel-bg)' }}>
@@ -801,7 +1065,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <button className="primary" onClick={handleLoadFromPayroll} style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+            <button className="primary" onClick={handleLoadFromPayroll} style={{ background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'linear-gradient(135deg, #10b981, #059669)' }}>
               <Sparkles size={18} />
               <span>Lấy từ Phiếu Lương</span>
             </button>
@@ -846,25 +1110,33 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         {/* MEMO CONFIGURATION ROW */}
         <div className="form-group" style={{ marginTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem' }}>
           <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Nội dung chuyển khoản mặc định</span>
+            <span>Nội dung chuyển khoản mặc định ({bankTemplate === 'vib' ? 'MyVIB' : 'Vietcombank'})</span>
             <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Các biến hỗ trợ: &#123;ten_nhan_vien&#125;, &#123;thang_luong&#125;, &#123;bo_phan&#125;</span>
           </label>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <input 
               type="text" 
               className="form-control" 
-              placeholder="VD: KINGS GRILL thanh toan luong {ten_nhan_vien} {thang_luong}"
-              value={defaultMemoTemplate}
-              onChange={e => setDefaultMemoTemplate(e.target.value)}
+              placeholder={bankTemplate === 'vib' ? "VD: KINGS GRILL thanh toan luong {ten_nhan_vien} {thang_luong}" : "VD: KG LUONG NV T{thang_luong}"}
+              value={bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate}
+              onChange={e => {
+                if (bankTemplate === 'vib') {
+                  setDefaultMemoTemplate(e.target.value);
+                } else {
+                  setVcbMemoTemplate(e.target.value);
+                }
+              }}
               style={{ flexGrow: 1 }}
             />
             <button 
               className="btn-outline"
               onClick={() => {
                 if (confirm('Bạn có muốn áp dụng nội dung mẫu này cho toàn bộ dòng hiện có?')) {
+                  const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
                   const updated = employees.map(emp => {
                     const payMonthVal = emp.payMonth || '06-2026';
-                    const newMemo = compileMemo(defaultMemoTemplate, emp.name, payMonthVal, emp.dept || '');
+                    const compiled = compileMemo(templateToUse, emp.name, payMonthVal, emp.dept || '');
+                    const newMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
                     const updatedEmp = { ...emp, memo: newMemo };
                     const validation = validateRecord(updatedEmp);
                     return {
@@ -884,6 +1156,19 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         </div>
       </div>
 
+      {/* TECHNICAL WARNING FOR VIETCOMBANK */}
+      {bankTemplate === 'vcb' && (
+        <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Info size={16} />
+            <span>Thông báo định dạng Vietcombank (.xls / .xlsx)</span>
+          </h3>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.45 }}>
+            Do giới hạn kỹ thuật phía client, file xuất ra từ webapp sẽ có định dạng hiện đại **.xlsx**. Nếu trang tải file của Vietcombank báo lỗi hoặc từ chối do bắt buộc định dạng **.xls** cũ, bạn chỉ cần mở file đã tải bằng ứng dụng Excel trên máy tính, bấm **File &rarr; Save As** và chọn lưu lại dưới định dạng **Excel 97-2003 Workbook (*.xls)** là có thể upload bình thường.
+          </p>
+        </div>
+      )}
+
       {/* DATA VALIDATION & ERROR REPORT PANEL */}
       {stats.invalidCount > 0 && (
         <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
@@ -892,7 +1177,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
             <span>Phát hiện {stats.invalidCount} lỗi dữ liệu chuyển khoản</span>
           </h3>
           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)', lineHeight: 1.4 }}>
-            File Excel MyVIB yêu cầu đầy đủ thông tin tài khoản hợp lệ, không chứa ký tự đặc biệt lạ trong tên, và tên ngân hàng phải đúng theo danh mục. Hãy nhấp nút Sửa bên cạnh mỗi dòng lỗi để cập nhật thông tin chính xác.
+            Vui lòng kiểm tra các dòng bị lỗi đỏ dưới đây và cập nhật lại thông tin tài khoản, hoặc sửa ngân hàng tương ứng để đạt điều kiện xuất file.
           </p>
         </div>
       )}
@@ -901,7 +1186,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       <div className="card panel" style={{ padding: '1rem 0', background: 'var(--panel-bg)', overflow: 'visible' }}>
         <div style={{ padding: '0 1.25rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ fontSize: '1.1rem', margin: 0 }}>📋 Preview danh sách xuất file ({employees.length})</h2>
-          <span style={{ fontSize: '0.8rem', opacity: 0.6, fontStyle: 'italic' }}>* Bắt đầu ghi từ hàng 5 của sheet "Danh sách chuyển tiền"</span>
+          <span style={{ fontSize: '0.8rem', opacity: 0.6, fontStyle: 'italic' }}>
+            * Bắt đầu ghi từ hàng {bankTemplate === 'vib' ? '5' : '2'} của Sheet
+          </span>
         </div>
 
         {employees.length === 0 ? (
@@ -932,7 +1219,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     position: 'relative'
                   }}
                 >
-                  {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>#{idx + 1}</span>
                     {emp.isValid ? (
@@ -949,9 +1235,15 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     )}
                   </div>
 
-                  {/* Name & Source */}
                   <div>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{emp.name}</h4>
+                    {bankTemplate === 'vcb' ? (
+                      <>
+                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{normalizeVietnameseName(emp.name)}</h4>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', fontStyle: 'italic' }}>Tên gốc: {emp.name}</span>
+                      </>
+                    ) : (
+                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{emp.name}</h4>
+                    )}
                     {emp.source === 'payroll' && (
                       <span className="badge" style={{ display: 'inline-block', fontSize: '9px', padding: '1px 4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--green)', borderRadius: '4px', marginTop: '2px' }}>
                         Phiếu lương
@@ -959,7 +1251,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     )}
                   </div>
 
-                  {/* Details */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
                     <div>
                       <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Số tài khoản:</span>
@@ -971,8 +1262,25 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     </div>
                   </div>
 
+                  {bankTemplate === 'vcb' && (emp.idNo || emp.refNo) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '4px' }}>
+                      {emp.idNo && (
+                        <div>
+                          <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>CMND/CCCD:</span>
+                          <span>{emp.idNo}</span>
+                        </div>
+                      )}
+                      {emp.refNo && (
+                        <div>
+                          <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Số Ref:</span>
+                          <span>{emp.refNo}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ fontSize: '0.85rem' }}>
-                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Ngân hàng:</span>
+                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Ngân hàng nhận:</span>
                     <div 
                       onClick={() => {
                         setShowBankSelectorForId(emp.id);
@@ -996,7 +1304,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                       <ChevronDown size={14} style={{ opacity: 0.5 }} />
                     </div>
                     
-                    {/* Inline Mobile Bank Selector Dropdown */}
                     {hasSelector && (
                       <div 
                         ref={bankDropdownRef}
@@ -1055,11 +1362,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   </div>
 
                   <div style={{ fontSize: '0.85rem' }}>
-                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Nội dung:</span>
+                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Nội dung chuyển:</span>
                     <span style={{ color: 'var(--text-muted)' }}>{emp.memo}</span>
                   </div>
 
-                  {/* Error messages if invalid */}
                   {!emp.isValid && (
                     <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)', borderRadius: '6px', padding: '6px 8px', fontSize: '0.75rem', color: 'var(--red)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       {emp.errors.map((err, errIdx) => (
@@ -1068,7 +1374,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     </div>
                   )}
 
-                  {/* Actions */}
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                     <button 
                       className="btn-outline" 
@@ -1096,12 +1401,15 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
             <table className="emp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '60px' }}>STT</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Người nhận (B)</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Số tài khoản (C)</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Số tiền (D)</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nội dung (E)</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '220px' }}>Ngân hàng nhận (F)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '50px' }}>STT</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Người nhận (Gốc)</th>
+                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>Tên xuất file (IN HOA)</th>}
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Số tài khoản</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Số tiền</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nội dung</th>
+                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>CMND</th>}
+                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>Ref</th>}
+                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '220px' }}>Ngân hàng xuất</th>
                   <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Trạng thái</th>
                   <th style={{ padding: '12px 16px', textAlign: 'center', width: '90px' }}>Thao tác</th>
                 </tr>
@@ -1119,6 +1427,12 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                         {emp.source === 'payroll' && <span className="badge" style={{ display: 'inline-block', fontSize: '10px', padding: '1px 4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--green)', borderRadius: '4px', marginTop: '2px' }}>Phiếu lương</span>}
                       </td>
 
+                      {bankTemplate === 'vcb' && (
+                        <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--cyan)' }}>
+                          {normalizeVietnameseName(emp.name)}
+                        </td>
+                      )}
+
                       <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>
                         {emp.accountNo || <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Trống</span>}
                       </td>
@@ -1127,11 +1441,18 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                         {emp.amount.toLocaleString('vi-VN')} đ
                       </td>
 
-                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--muted)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {emp.memo}
                       </td>
 
-                      {/* Bank selection td cell dropdown */}
+                      {bankTemplate === 'vcb' && (
+                        <>
+                          <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{emp.idNo || '-'}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{emp.refNo || '-'}</td>
+                        </>
+                      )}
+
+                      {/* Bank selection dropdown */}
                       <td style={{ padding: '12px 16px', position: 'relative' }}>
                         <div 
                           className={`form-control select-trigger ${!emp.bankCodeName ? 'error' : ''}`}
@@ -1157,7 +1478,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                           <ChevronDown size={14} style={{ opacity: 0.5 }} />
                         </div>
 
-                        {/* Inline bank dropdown */}
                         {hasSelector && (
                           <div 
                             ref={bankDropdownRef}
@@ -1182,7 +1502,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                               <Search size={14} style={{ opacity: 0.5 }} />
                               <input 
                                 type="text" 
-                                placeholder="Tìm mã hoặc tên ngân hàng..."
+                                placeholder="Tìm mã hoặc tên..."
                                 value={bankSearchQuery}
                                 onChange={e => setBankSearchQuery(e.target.value)}
                                 style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', fontSize: '0.8rem', outline: 'none' }}
@@ -1278,7 +1598,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
             <textarea 
               className="form-control"
-              placeholder="VD: Nguyen Van A	0000000001	100000	Thanh toan luong	203 - Vietcombank"
+              placeholder="VD: Nguyen Van A	0000000001	100000	Thanh toan luong	(ACB) Á Châu"
               style={{ width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', color: 'white' }}
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
@@ -1301,7 +1621,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               <button onClick={() => setActiveEmployeeEdit(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
               <div className="form-group">
                 <label className="form-label">Họ và tên người nhận</label>
                 <input 
@@ -1310,6 +1630,11 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   value={activeEmployeeEdit.name}
                   onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, name: e.target.value }))}
                 />
+                {bankTemplate === 'vcb' && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--cyan)' }}>
+                    Sẽ xuất file: {normalizeVietnameseName(activeEmployeeEdit.name)}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -1338,11 +1663,64 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   type="text" 
                   className="form-control" 
                   value={activeEmployeeEdit.memo}
-                  onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, memo: e.target.value }))}
+                  onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, memo: bankTemplate === 'vcb' ? e.target.value.toUpperCase() : e.target.value }))}
                 />
               </div>
 
-              {/* Editable bank dropdown in modal */}
+              {/* Extra VCB columns in modal */}
+              {bankTemplate === 'vcb' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Số CMND/CCCD (D)</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={activeEmployeeEdit.idNo || ''}
+                      onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, idNo: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Ngày cấp (E)</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={activeEmployeeEdit.issuedDate || ''}
+                      placeholder="VD: 15/06/2020"
+                      onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, issuedDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Nơi cấp (F)</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={activeEmployeeEdit.issuedPlace || ''}
+                      placeholder="VD: CA HA NOI"
+                      onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, issuedPlace: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Số Ref (B)</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={activeEmployeeEdit.refNo || ''}
+                      onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, refNo: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Địa chỉ người thụ hưởng (H)</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={activeEmployeeEdit.address || ''}
+                      onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, address: e.target.value }))}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Bank selector */}
               <div className="form-group" style={{ position: 'relative' }}>
                 <label className="form-label">Ngân hàng nhận</label>
                 <div 
