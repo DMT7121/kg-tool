@@ -205,6 +205,23 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>('current');
   const [paperSize, setPaperSize] = useState<'a4' | 'k80'>('a4');
 
+  const [thermalOptions, setThermalOptions] = useState(() => {
+    const saved = localStorage.getItem('kg_tool_thermal_options');
+    return saved ? JSON.parse(saved) : {
+      splitEachSlip: true,
+      compactCut: true,
+      bottomFeedMm: 6,
+      hideSignature: true,
+      hideEmptyNotes: true,
+      hideEmptyRows: true,
+      showCutLine: false
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('kg_tool_thermal_options', JSON.stringify(thermalOptions));
+  }, [thermalOptions]);
+
   const [isMobileScreen, setIsMobileScreen] = useState(false);
   const [mobileActiveTab, setMobileActiveTab] = useState<'data' | 'settings' | 'preview' | 'export'>('preview');
 
@@ -212,9 +229,17 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const handleResize = () => {
       setIsMobileScreen(window.innerWidth < 768);
     };
+    const handleAfterPrint = () => {
+      document.body.classList.remove('print-k80-mode');
+      document.body.classList.remove('print-k80-no-split');
+    };
     handleResize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
   }, []);
 
   // Load state from localStorage on mount
@@ -1076,11 +1101,167 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const row3Label = isHourly ? "Công thức tính" : "Hệ số tính lương";
     const row3Val = isHourly ? "Lương giờ × Số giờ" : `${emp.days}/${standardDays}`;
 
-    const lineCount = visibility.showSignatures ? 540 : 420;
+    // Dynamic Y calculation
+    let currentY = 15;
+    const elements: string[] = [];
+
+    // Header Title
+    elements.push(`<text x="160" y="${currentY + 15}" class="k80-title">PHIẾU LƯƠNG</text>`);
+    currentY += 20;
+
+    elements.push(`<text x="160" y="${currentY + 15}" class="k80-subtitle">${mLabel}</text>`);
+    currentY += 25;
+
+    // Divider
+    elements.push(`<line x1="15" y1="${currentY}" x2="305" y2="${currentY}" class="k80-divider" />`);
+    currentY += 10;
+
+    // Employee details
+    let hasEmpInfo = false;
+    if (visibility.showEmpName) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-bold">Họ và tên:</text>
+        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(emp.name)}</text>
+      `);
+      currentY += 20;
+      hasEmpInfo = true;
+    }
+    
+    if (visibility.showEmpRole) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-bold">Chức vụ:</text>
+        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(defaultPosition)}</text>
+      `);
+      currentY += 20;
+      hasEmpInfo = true;
+    }
+    
+    if (visibility.showEmpDept) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-bold">Bộ phận:</text>
+        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(defaultDept)}</text>
+      `);
+      currentY += 20;
+      hasEmpInfo = true;
+    }
+
+    if (hasEmpInfo) {
+      // Divider after employee info
+      elements.push(`<line x1="15" y1="${currentY + 5}" x2="305" y2="${currentY + 5}" class="k80-divider" />`);
+      currentY += 15;
+    }
+
+    // Salary rows
+    if (!thermalOptions.hideEmptyRows || visibility.showBaseSalary) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-text">${row1Label}</text>
+        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${visibility.showBaseSalary ? formatMoney(emp.salary) : '***'}</text>
+      `);
+      currentY += 25;
+    }
+
+    elements.push(`
+      <text x="20" y="${currentY + 12}" class="k80-text">${row2Label}</text>
+      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${row2Val}</text>
+    `);
+    currentY += 25;
+
+    elements.push(`
+      <text x="20" y="${currentY + 12}" class="k80-text">${row3Label}</text>
+      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${row3Val}</text>
+    `);
+    currentY += 25;
+
+    // Advance payment
+    const empAdvance = emp.advance !== undefined ? emp.advance : advance;
+    if (empAdvance > 0 || !thermalOptions.hideEmptyRows) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-text">Tạm ứng lương</text>
+        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(empAdvance)}</text>
+      `);
+      currentY += 25;
+    }
+
+    // Deductions
+    const totalDeduct = deductions.reduce((sum, d) => sum + d.amount, 0);
+    if (totalDeduct > 0 || !thermalOptions.hideEmptyRows) {
+      deductions.forEach(d => {
+        if (d.amount > 0 || !thermalOptions.hideEmptyRows) {
+          elements.push(`
+            <text x="20" y="${currentY + 12}" class="k80-text">${escapeHtml(d.label)}</text>
+            <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(d.amount)}</text>
+          `);
+          currentY += 20;
+        }
+      });
+    }
+
+    // Divider before total
+    elements.push(`<line x1="15" y1="${currentY + 5}" x2="305" y2="${currentY + 5}" class="k80-divider" />`);
+    currentY += 15;
+
+    // Net total
+    elements.push(`
+      <text x="20" y="${currentY + 15}" class="k80-total">TỔNG THỰC NHẬN</text>
+      <text x="300" y="${currentY + 18}" class="k80-price">${formatMoney(emp.amount)}</text>
+    `);
+    currentY += 30;
+
+    // Notes
+    const wordsText = numberToVietnamese(emp.amount);
+    const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
+    if (hasNotes) {
+      elements.push(`
+        <text x="20" y="${currentY + 10}" class="k80-text" font-style="italic">Bằng chữ:</text>
+        <rect x="20" y="${currentY + 20}" width="280" height="40" fill="#f8fafc" rx="4" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="25" y="${currentY + 36}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
+          ${escapeHtml(wordsText.substring(0, 48))}
+        </text>
+        <text x="25" y="${currentY + 50}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
+          ${escapeHtml(wordsText.substring(48))}
+        </text>
+      `);
+      currentY += 70;
+    }
+
+    // Signatures
+    const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
+    if (showSignatures) {
+      elements.push(`
+        <text x="160" y="${currentY + 15}" text-anchor="middle" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
+        
+        <text x="80" y="${currentY + 40}" text-anchor="middle" class="k80-bold">Người nhận</text>
+        <text x="80" y="${currentY + 55}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
+        
+        <text x="240" y="${currentY + 40}" text-anchor="middle" class="k80-bold">Người lập</text>
+        <text x="240" y="${currentY + 55}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
+      `);
+      currentY += 75;
+    } else if (visibility.showSignatures && thermalOptions.hideSignature) {
+      elements.push(`
+        <text x="20" y="${currentY + 15}" class="k80-bold">Người nhận: ________________________</text>
+      `);
+      currentY += 25;
+    }
+
+    // Cut Line indicator
+    if (thermalOptions.showCutLine) {
+      elements.push(`
+        <line x1="10" y1="${currentY + 10}" x2="310" y2="${currentY + 10}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8, 5" />
+        <text x="160" y="${currentY + 22}" font-size="8" font-family="sans-serif" fill="#94a3b8" text-anchor="middle">✂--- Đường cắt ---✂</text>
+      `);
+      currentY += 30;
+    }
+
+    // Bottom feed margin padding
+    if (!thermalOptions.compactCut) {
+      currentY += 40;
+    }
+    currentY += (thermalOptions.bottomFeedMm || 6) * 4;
 
     return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${lineCount}" fill="none" role="img" aria-label="Phiếu lương K80 ${escapeHtml(emp.name)}">
-      <rect width="320" height="${lineCount}" fill="#fff"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
+      <rect width="320" height="${currentY}" fill="#fff"/>
       <style>
         ${getGoogleFontsImport()}
         .k80-text-base { font-family: '${selectedFont}', system-ui, sans-serif; }
@@ -1093,62 +1274,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         .k80-divider { stroke: #000; stroke-width: 1; stroke-dasharray: 4, 3; }
       </style>
       
-      <text x="160" y="32" class="k80-title">PHIẾU LƯƠNG K80</text>
-      <text x="160" y="48" class="k80-subtitle">${mLabel}</text>
-      
-      <line x1="15" y1="62" x2="305" y2="62" class="k80-divider" />
-      
-      ${visibility.showEmpName ? `
-        <text x="20" y="85" class="k80-bold">Họ và tên:</text>
-        <text x="110" y="85" class="k80-text">${escapeHtml(emp.name)}</text>
-      ` : ''}
-      
-      ${visibility.showEmpRole ? `
-        <text x="20" y="105" class="k80-bold">Chức vụ:</text>
-        <text x="110" y="105" class="k80-text">${escapeHtml(defaultPosition)}</text>
-      ` : ''}
-      
-      ${visibility.showEmpDept ? `
-        <text x="20" y="125" class="k80-bold">Bộ phận:</text>
-        <text x="110" y="125" class="k80-text">${escapeHtml(defaultDept)}</text>
-      ` : ''}
-
-      <line x1="15" y1="140" x2="305" y2="140" class="k80-divider" />
-      
-      <text x="20" y="165" class="k80-text">${row1Label}</text>
-      <text x="300" y="165" text-anchor="end" class="k80-text">${visibility.showBaseSalary ? formatMoney(emp.salary) : '***'}</text>
-      
-      <text x="20" y="190" class="k80-text">${row2Label}</text>
-      <text x="300" y="190" text-anchor="end" class="k80-text">${row2Val}</text>
-      
-      <text x="20" y="215" class="k80-text">${row3Label}</text>
-      <text x="300" y="215" text-anchor="end" class="k80-text">${row3Val}</text>
-      
-      <line x1="15" y1="235" x2="305" y2="235" class="k80-divider" />
-      
-      <text x="20" y="262" class="k80-total">TỔNG THỰC NHẬN</text>
-      <text x="300" y="265" class="k80-price">${formatMoney(emp.amount)}</text>
-      
-      ${visibility.showNotes ? `
-        <text x="20" y="300" class="k80-text" font-style="italic">Bằng chữ:</text>
-        <rect x="20" y="310" width="280" height="40" fill="#f8fafc" rx="4" stroke="#e2e8f0" stroke-width="1"/>
-        <text x="25" y="326" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
-          ${escapeHtml(numberToVietnamese(emp.amount).substring(0, 48))}
-        </text>
-        <text x="25" y="340" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
-          ${escapeHtml(numberToVietnamese(emp.amount).substring(48))}
-        </text>
-      ` : ''}
-
-      ${visibility.showSignatures ? `
-        <text x="160" y="380" text-anchor="middle" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
-        
-        <text x="80" y="420" text-anchor="middle" class="k80-bold">Người nhận</text>
-        <text x="80" y="435" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
-        
-        <text x="240" y="420" text-anchor="middle" class="k80-bold">Người lập</text>
-        <text x="240" y="435" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
-      ` : ''}
+      ${elements.join('\n')}
     </svg>`;
   };
 
@@ -1161,34 +1287,116 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const net = totalSalary - advance - totalDeduct;
     const isHourly = salaryMode === 'hourly';
 
-    const rows = employees.slice(0, 10).map((e, i) => {
-      const y = 145 + i * 22;
-      return `
-        <text x="20" y="${y}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#000">${i + 1}. ${escapeHtml(e.name.substring(0, 16))}</text>
-        <text x="175" y="${y}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="middle" fill="#000">${e.days}${isHourly ? 'g' : ''}</text>
-        <text x="300" y="${y}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(e.amount)}</text>
-      `;
-    }).join('');
+    let currentY = 15;
+    const elements: string[] = [];
 
-    const tableBottom = 135 + Math.max(employees.length, 3) * 22;
-    const summaryTop = tableBottom + 15;
-    const deductionsTop = summaryTop + 65;
+    // Header Title
+    elements.push(`<text x="160" y="${currentY + 15}" class="k80-title">BẢNG TỔNG HỢP LƯƠNG</text>`);
+    currentY += 20;
 
-    const deductionRows = deductions.map((d, i) => {
-      const y = deductionsTop + 20 + i * 20;
-      return `
-        <text x="20" y="${y}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">${escapeHtml(d.label)}</text>
-        <text x="300" y="${y}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#dc2626">${formatMoney(d.amount)}</text>
-      `;
-    }).join('');
+    elements.push(`<text x="160" y="${currentY + 15}" class="k80-subtitle">${mLabel}</text>`);
+    currentY += 25;
 
-    const netTop = deductionsTop + 30 + deductions.length * 20;
+    // Divider
+    elements.push(`<line x1="15" y1="${currentY}" x2="305" y2="${currentY}" class="k80-divider" />`);
+    currentY += 10;
+
     const col2Header = isHourly ? "Giờ" : "Công";
+    elements.push(`
+      <text x="20" y="${currentY + 10}" class="k80-bold">Nhân viên</text>
+      <text x="175" y="${currentY + 10}" class="k80-bold" text-anchor="middle">${col2Header}</text>
+      <text x="300" y="${currentY + 10}" class="k80-bold" text-anchor="end">Thực nhận</text>
+      <line x1="15" y1="${currentY + 20}" x2="305" y2="${currentY + 20}" stroke="#000" stroke-width="1"/>
+    `);
+    currentY += 30;
+
+    // Employee rows
+    employees.forEach((e, i) => {
+      elements.push(`
+        <text x="20" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#000">${i + 1}. ${escapeHtml(e.name.substring(0, 16))}</text>
+        <text x="175" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="middle" fill="#000">${e.days}${isHourly ? 'g' : ''}</text>
+        <text x="300" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(e.amount)}</text>
+      `);
+      currentY += 22;
+    });
+
+    // Divider after table
+    elements.push(`<line x1="15" y1="${currentY}" class="k80-divider" />`);
+    currentY += 15;
+
     const bottomTotalLabel = isHourly ? "Tổng giờ làm việc" : "Tổng công nhân viên";
-    
+    elements.push(`
+      <text x="20" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">${bottomTotalLabel}</text>
+      <text x="300" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${totalDays}</text>
+    `);
+    currentY += 20;
+
+    elements.push(`
+      <text x="20" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">Tổng tiền lương</text>
+      <text x="300" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(totalSalary)}</text>
+    `);
+    currentY += 20;
+
+    // Advance
+    if (advance > 0 || !thermalOptions.hideEmptyRows) {
+      elements.push(`
+        <text x="20" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">Tạm ứng</text>
+        <text x="300" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(advance)}</text>
+      `);
+      currentY += 20;
+    }
+
+    // Deductions
+    deductions.forEach(d => {
+      if (d.amount > 0 || !thermalOptions.hideEmptyRows) {
+        elements.push(`
+          <text x="20" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">${escapeHtml(d.label)}</text>
+          <text x="300" y="${currentY + 10}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#dc2626">${formatMoney(d.amount)}</text>
+        `);
+        currentY += 20;
+      }
+    });
+
+    // Divider before Net
+    elements.push(`<line x1="15" y1="${currentY + 5}" class="k80-divider" />`);
+    currentY += 15;
+
+    // Net Pay
+    elements.push(`
+      <text x="20" y="${currentY + 15}" font-size="12" font-family="'${selectedFont}', sans-serif" font-weight="700" fill="#000">THANH TOÁN THỰC NHẬN</text>
+      <text x="300" y="${currentY + 15}" font-size="14" font-family="'${selectedFont}', sans-serif" font-weight="700" text-anchor="end" fill="#dc2626">${formatMoney(net)}</text>
+    `);
+    currentY += 30;
+
+    // Signatures
+    const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
+    if (showSignatures) {
+      elements.push(`
+        <text x="160" y="${currentY + 15}" text-anchor="middle" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
+        <text x="80" y="${currentY + 45}" text-anchor="middle" class="k80-bold">Người lập</text>
+        <text x="240" y="${currentY + 45}" text-anchor="middle" class="k80-bold">Kế toán trưởng</text>
+      `);
+      currentY += 65;
+    }
+
+    // Cut Line indicator
+    if (thermalOptions.showCutLine) {
+      elements.push(`
+        <line x1="10" y1="${currentY + 10}" x2="310" y2="${currentY + 10}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8, 5" />
+        <text x="160" y="${currentY + 22}" font-size="8" font-family="sans-serif" fill="#94a3b8" text-anchor="middle">✂--- Đường cắt ---✂</text>
+      `);
+      currentY += 30;
+    }
+
+    // Bottom feed margin padding
+    if (!thermalOptions.compactCut) {
+      currentY += 40;
+    }
+    currentY += (thermalOptions.bottomFeedMm || 6) * 4;
+
     return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${netTop + 140}" fill="none" role="img" aria-label="Phiếu tổng hợp lương K80">
-      <rect width="320" height="${netTop + 140}" fill="#fff"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu tổng hợp lương">
+      <rect width="320" height="${currentY}" fill="#fff"/>
       <style>
         ${getGoogleFontsImport()}
         .k80-title { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle - 8}px; font-weight: ${titleWeight}; fill: #000; text-anchor: middle; }
@@ -1197,40 +1405,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         .k80-bold { font-family: '${selectedFont}', system-ui, sans-serif; font-size: 10px; font-weight: bold; fill: #000; }
       </style>
       
-      <text x="160" y="32" class="k80-title">TỔNG HỢP LƯƠNG K80</text>
-      <text x="160" y="48" class="k80-subtitle">${mLabel}</text>
-      
-      <line x1="15" y1="62" x2="305" y2="62" class="k80-divider" />
-      
-      <text x="20" y="80" class="k80-bold">Nhân viên</text>
-      <text x="175" y="80" class="k80-bold" text-anchor="middle">${col2Header}</text>
-      <text x="300" y="80" class="k80-bold" text-anchor="end">Thực nhận</text>
-      
-      <line x1="15" y1="90" x2="305" y2="90" stroke="#000" stroke-width="1"/>
-      
-      ${rows}
-      
-      <line x1="15" y1="${tableBottom}" class="k80-divider" />
-      
-      <text x="20" y="${summaryTop + 15}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">${bottomTotalLabel}</text>
-      <text x="300" y="${summaryTop + 15}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${totalDays}</text>
-      
-      <text x="20" y="${summaryTop + 35}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">Tổng tiền lương</text>
-      <text x="300" y="${summaryTop + 35}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(totalSalary)}</text>
-      
-      <text x="20" y="${summaryTop + 55}" font-size="10" font-family="'${selectedFont}', sans-serif" fill="#000">Tạm ứng</text>
-      <text x="300" y="${summaryTop + 55}" font-size="10" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(advance)}</text>
-      
-      ${deductionRows}
-      
-      <line x1="15" y1="${netTop - 10}" class="k80-divider" />
-      
-      <text x="20" y="${netTop + 15}" font-size="12" font-family="'${selectedFont}', sans-serif" font-weight="700" fill="#000">THANH TOÁN THỰC NHẬN</text>
-      <text x="300" y="${netTop + 15}" font-size="14" font-family="'${selectedFont}', sans-serif" font-weight="700" text-anchor="end" fill="#dc2626">${formatMoney(net)}</text>
-      
-      <text x="160" y="${netTop + 45}" text-anchor="middle" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
-      <text x="80" y="${netTop + 75}" text-anchor="middle" class="k80-bold">Người lập</text>
-      <text x="240" y="${netTop + 75}" text-anchor="middle" class="k80-bold">Kế toán trưởng</text>
+      ${elements.join('\n')}
     </svg>`;
   };
 
@@ -1554,7 +1729,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         setExportProgress(Math.round(((i + 1) / employees.length) * 100));
         const svgText = getActiveSvgText(emp);
         const isK80 = activeTemplate === 'k80';
-        const filename = `phieu-luong-${emp.name.toLowerCase().replace(/\s+/g, '-')}-${payMonth}.png`;
+        const suffix = isK80 ? '-k80' : '';
+        const filename = `phieu-luong-${emp.name.toLowerCase().replace(/\s+/g, '-')}-${payMonth}${suffix}.png`;
         
         const blob = await new Promise<Blob>((resolve, reject) => {
           const parser = new DOMParser();
@@ -1690,8 +1866,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const handlePrint = () => {
     if (activeTemplate === 'k80') {
       document.body.classList.add('print-k80-mode');
+      if (!thermalOptions.splitEachSlip) {
+        document.body.classList.add('print-k80-no-split');
+      } else {
+        document.body.classList.remove('print-k80-no-split');
+      }
     } else {
       document.body.classList.remove('print-k80-mode');
+      document.body.classList.remove('print-k80-no-split');
     }
     window.print();
   };
@@ -2302,13 +2484,104 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   </div>
                   <div className="form-group">
                     <label className="form-label">Chọn khổ giấy</label>
-                    <select className="form-control" value={paperSize} onChange={e => setPaperSize(e.target.value as any)}>
+                    <select 
+                      className="form-control" 
+                      value={paperSize} 
+                      onChange={e => {
+                        const val = e.target.value as 'a4' | 'k80';
+                        setPaperSize(val);
+                        if (val === 'k80') {
+                          setActiveTemplate('k80');
+                        } else {
+                          setActiveTemplate('standard');
+                        }
+                      }}
+                    >
                       <option value="a4">Khổ giấy chuẩn A4 / A5</option>
                       <option value="k80">Khổ giấy in nhiệt K80 (80mm)</option>
                     </select>
                   </div>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Cài đặt này sẽ được áp dụng trực tiếp khi bạn bấm nút In Phiếu.</p>
+
+                {(paperSize === 'k80' || activeTemplate === 'k80') && (
+                  <div style={{ marginTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.85rem' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
+                      ⚙️ TÙY CHỌN IN NHIỆT (K80)
+                    </span>
+                    <div className="checkbox-grid" style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.splitEachSlip} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, splitEachSlip: e.target.checked }))} 
+                        />
+                        <span>Tách từng phiếu khi in hàng loạt</span>
+                      </label>
+                      
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.compactCut} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, compactCut: e.target.checked }))} 
+                        />
+                        <span>Cắt gọn cuối phiếu (Co theo nội dung)</span>
+                      </label>
+
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.hideSignature} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideSignature: e.target.checked }))} 
+                        />
+                        <span>Ẩn phần ký tên xác nhận</span>
+                      </label>
+
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.hideEmptyNotes} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideEmptyNotes: e.target.checked }))} 
+                        />
+                        <span>Ẩn ghi chú rỗng</span>
+                      </label>
+
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.hideEmptyRows} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideEmptyRows: e.target.checked }))} 
+                        />
+                        <span>Ẩn các dòng không có số liệu phát sinh</span>
+                      </label>
+
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={thermalOptions.showCutLine} 
+                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, showCutLine: e.target.checked }))} 
+                        />
+                        <span>In đường cắt răng cưa (---)</span>
+                      </label>
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '8px' }}>
+                      <label className="form-label">Khoảng cách cuối phiếu</label>
+                      <select 
+                        className="form-control" 
+                        value={thermalOptions.bottomFeedMm} 
+                        onChange={e => setThermalOptions((prev: any) => ({ ...prev, bottomFeedMm: Number(e.target.value) }))}
+                      >
+                        <option value="0">0mm</option>
+                        <option value="4">4mm</option>
+                        <option value="6">6mm (Mặc định)</option>
+                        <option value="8">8mm</option>
+                        <option value="12">12mm</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, marginTop: '8px' }}>Cài đặt này sẽ được áp dụng trực tiếp khi bạn bấm nút In Phiếu.</p>
               </>
             ))}
 

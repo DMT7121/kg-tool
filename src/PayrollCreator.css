@@ -481,15 +481,54 @@
 @media print {
   body.print-k80-mode {
     width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  
+  body.print-k80-mode .print-only-container {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
     margin: 0 !important;
     padding: 0 !important;
   }
-  
-  body.print-k80-mode .preview-receipt-card {
+
+  body.print-k80-mode .print-page {
     width: 80mm !important;
+    max-width: 80mm !important;
+    display: block !important;
+    margin: 0 0 6mm 0 !important;
+    padding: 0 !important;
     page-break-after: always !important;
+    break-after: page !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+
+  body.print-k80-mode.print-k80-no-split .print-page {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  body.print-k80-mode .print-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    margin-bottom: 0 !important;
   }
   
+  body.print-k80-mode .print-page svg {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    display: block !important;
+  }
+
   body.print-k80-mode .receipt-svg-holder svg {
     width: 80mm !important;
     height: auto !important;
