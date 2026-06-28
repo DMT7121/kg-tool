@@ -1,0 +1,522 @@
+/* Scoped stylesheet for the Employee Payroll Tool component in kg-tool */
+
+.payroll-creator {
+  --blue: #1e3a8a;
+  --light-blue: #eff6ff;
+  --red: #dc2626;
+  --slate: #475569;
+  
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.payroll-layout {
+  display: grid;
+  grid-template-columns: 450px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* LEFT COLUMN - CONFIG PANE */
+.config-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* Scrollbar customization for config column */
+.config-pane::-webkit-scrollbar {
+  width: 6px;
+}
+.config-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.config-pane::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 3px;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.card-heading-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.form-control {
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  outline: none;
+  transition: all 0.2s;
+}
+
+body:not(.dark-theme) .form-control {
+  background-color: #ffffff;
+}
+
+.form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* Bulk actions row */
+.bulk-import-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Dynamic Rows */
+.employee-input-row, .deduction-input-row {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+body:not(.dark-theme) .employee-input-row,
+body:not(.dark-theme) .deduction-input-row {
+  background-color: #fafbfc;
+}
+
+.employee-row-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--primary-color);
+}
+
+.employees-list-container, .deductions-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.employees-list-container::-webkit-scrollbar,
+.deductions-list-container::-webkit-scrollbar {
+  width: 4px;
+}
+.employees-list-container::-webkit-scrollbar-thumb,
+.deductions-list-container::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 2px;
+}
+
+/* Collapsible Section styles */
+.collapsible-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.collapsible-section .section-header::after {
+  content: '▼';
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.collapsible-section .section-header.collapsed::after {
+  transform: rotate(-90deg);
+}
+
+.collapsible-section .section-header.collapsed + .section-content {
+  display: none;
+}
+
+/* Sync History Box */
+.sync-box {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.03), rgba(99, 102, 241, 0.08));
+}
+
+.history-list-header {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.75rem;
+}
+
+.history-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.history-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+body:not(.dark-theme) .history-item-row {
+  background-color: #ffffff;
+}
+
+.history-item-row:hover {
+  background-color: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary-color);
+}
+
+.history-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.history-meta .h-month {
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.history-meta .h-info {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* RIGHT COLUMN - PREVIEW PANE */
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  min-height: calc(100vh - 180px);
+}
+
+.preview-header-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 1rem;
+}
+
+.preview-views-toggle, .preview-templates-toggle {
+  display: flex;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 0.25rem;
+  gap: 0.25rem;
+}
+
+body:not(.dark-theme) .preview-views-toggle,
+body:not(.dark-theme) .preview-templates-toggle {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.view-toggle-btn, .template-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.view-toggle-btn.active, .template-toggle-btn.active {
+  background-color: var(--primary-color);
+  color: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Quick Metrics Bar */
+.metrics-strip-pnl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+.metric-box {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+body:not(.dark-theme) .metric-box {
+  background-color: #fafbfc;
+}
+
+.metric-box span {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.metric-box strong {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.metric-box strong.red {
+  color: var(--red);
+}
+
+/* Previews Scroll Container */
+.preview-scroll-container {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: calc(100vh - 350px);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.preview-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+.preview-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 3px;
+}
+
+.preview-receipt-card {
+  background-color: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.receipt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+body:not(.dark-theme) .receipt-card-header {
+  background-color: #fafbfc;
+}
+
+.receipt-card-header span {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.receipt-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.receipt-svg-holder {
+  background-color: #ffffff;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.receipt-svg-holder svg {
+  width: 100%;
+  height: auto;
+  max-width: 700px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.empty-preview-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 2rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================================
+   RESPONSIVE DESIGN (MOBILE & TABLET VIEWPORTS)
+   ======================================================== */
+@media (max-width: 980px) {
+  .payroll-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .config-pane {
+    max-height: none;
+  }
+  
+  .preview-pane {
+    min-height: auto;
+  }
+  
+  .preview-scroll-container {
+    max-height: none;
+  }
+  
+  .metrics-strip-pnl {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ========================================================
+   PRINT STYLES FOR PAYROLL SYSTEM
+   ======================================================== */
+@media print {
+  /* Hide standard Web UI wrappers of kg-tool */
+  .sidebar,
+  .sidebar-overlay,
+  .sidebar-toggle,
+  .toast-container,
+  .view-header,
+  .config-pane,
+  .preview-header-panel,
+  .metrics-strip-pnl,
+  .receipt-card-header,
+  .empty-preview-state {
+    display: none !important;
+  }
+  
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+  }
+
+  .payroll-creator, .payroll-layout, .preview-pane, .preview-scroll-container {
+    display: block !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .preview-receipt-card {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .receipt-svg-holder {
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  
+  .receipt-svg-holder svg {
+    box-shadow: none !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Specific K80 roll print adjustments */
+@media print {
+  body.print-k80-mode {
+    width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  body.print-k80-mode .preview-receipt-card {
+    width: 80mm !important;
+    page-break-after: always !important;
+  }
+  
+  body.print-k80-mode .receipt-svg-holder svg {
+    width: 80mm !important;
+    height: auto !important;
+  }
+}
