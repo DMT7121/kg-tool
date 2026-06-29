@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Plus, 
   Download, 
@@ -222,32 +222,43 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     localStorage.setItem('kg_tool_thermal_options', JSON.stringify(thermalOptions));
   }, [thermalOptions]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
-  const previewViewportRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [showToolbarOptions, setShowToolbarOptions] = useState(false);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
+  const containerResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    if (containerResizeObserverRef.current) {
+      containerResizeObserverRef.current.disconnect();
+      containerResizeObserverRef.current = null;
+    }
+    if (node) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      });
+      observer.observe(node);
+      containerResizeObserverRef.current = observer;
+    }
   }, []);
 
-  useEffect(() => {
-    if (!previewViewportRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setViewportWidth(entry.contentRect.width);
-      }
-    });
-    observer.observe(previewViewportRef.current);
-    return () => observer.disconnect();
+  const previewViewportRef = useCallback((node: HTMLDivElement | null) => {
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+    if (node) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setViewportWidth(entry.contentRect.width);
+        }
+      });
+      observer.observe(node);
+      resizeObserverRef.current = observer;
+    }
   }, []);
 
   const layoutMode = useMemo(() => {
