@@ -17,7 +17,7 @@ import {
   Cpu
 } from 'lucide-react';
 import './App.css';
-import { parseFile, processRecords, exportToExcel, type ProcessedRecord } from './processor';
+import { parseFile, processRecords, exportToExcel, type ProcessedRecord, type TimeRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
 import TransferFileTool from './components/TransferFileTool';
 import TTSPage from './components/TTSPage';

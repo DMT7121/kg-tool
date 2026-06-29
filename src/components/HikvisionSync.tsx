@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   RefreshCw, 
-  HelpCircle, 
   Copy, 
   Check, 
   Wifi, 
@@ -238,7 +237,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
           <div style={{ background: 'rgba(34, 211, 238, 0.04)', border: '1px solid rgba(34, 211, 238, 0.15)', borderRadius: '10px', padding: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
             <AlertCircle size={18} style={{ color: 'var(--cyan)', flexShrink: 0, marginTop: '2px' }} />
             <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
-              <strong>Hướng dẫn nhanh:</strong> Mở trình duyệt truy cập vào IP máy chấm công, vào <strong>Configuration -> Network -> Advanced Settings -> HTTP Listening</strong>. Điền địa chỉ Worker URL và đặt cổng là <code>443</code>, phương thức gửi là <code>HTTPS</code>.
+              <strong>Hướng dẫn nhanh:</strong> Mở trình duyệt truy cập vào IP máy chấm công, vào <strong>Configuration &rarr; Network &rarr; Advanced Settings &rarr; HTTP Listening</strong>. Điền địa chỉ Worker URL và đặt cổng là <code>443</code>, phương thức gửi là <code>HTTPS</code>.
             </p>
           </div>
         </div>

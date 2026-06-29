@@ -88,7 +88,7 @@ export default {
       // 3. CHUYỂN TIẾP LÊN GOOGLE APPS SCRIPT
       const gasPayload = {
         action: "hikvision_sync",
-        spreadsheetId: null, // Sẽ tự động lấy sheet Active hoặc cấu hình trong Webapp
+        spreadsheetId: "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
         payload: {
           secret_key: WEBHOOK_SECRET,
           ma_nv: empId,

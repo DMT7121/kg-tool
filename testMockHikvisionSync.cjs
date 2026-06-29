@@ -31,7 +31,7 @@ function runMockTest() {
   // 1. Giả lập tín hiệu gửi từ Cloudflare Worker sang Google Apps Script
   const mockPayload = {
     action: "hikvision_sync",
-    spreadsheetId: "1jL7m6dZuuxOdpMPSOO1KfMviUmbI1VJXAq3Hmwz9DGk", 
+    spreadsheetId: "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU", 
     payload: {
       secret_key: WEBHOOK_SECRET,
       ma_nv: TEST_EMPLOYEE_ID,
