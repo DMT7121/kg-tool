@@ -34,7 +34,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
   const [searchQuery, setSearchQuery] = useState('');
   
   // Webhook settings variables
-  const [workerUrl, setWorkerUrl] = useState(() => localStorage.getItem('kg_tool_worker_url') || 'https://kingsgrill-hikvision-sync.username.workers.dev');
+  const [workerUrl, setWorkerUrl] = useState(() => localStorage.getItem('kg_tool_worker_url') || 'https://kingsgrill-hikvision-sync.dmt-kgwork.workers.dev');
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const secretKey = 'KINGS_GRILL_HIKVISION_SECRET_2026';

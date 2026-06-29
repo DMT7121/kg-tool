@@ -705,7 +705,7 @@ function externalHikvisionSync(data, ss) {
     var lastRow = sheet.getLastRow();
     var matchRowIndex = -1;
     if (lastRow > 1) {
-      var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+      var values = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
       for (var i = values.length - 1; i >= 0; i--) {
         if (values[i][0] === employeeName && values[i][1] === dateStringObj && values[i][2] !== "" && (!values[i][3] || values[i][3] === "")) {
           matchRowIndex = i + 2;

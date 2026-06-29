@@ -11,7 +11,7 @@
 const https = require('https');
 
 // Sửa đường dẫn này bằng Link Web App Apps Script đã deploy của bạn để test thực tế
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz_YOUR_WEB_APP_ID/exec";
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz2fdSYe_QQ33AkwAIH4XIUZ4SJLQRhAevnjm_-Rsnupj5A6QKBFLX16qpMLUThf5J5-A/exec";
 const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026";
 
 // Thay tên nhân viên hợp lệ có sẵn trong sheet của bạn để test
@@ -31,7 +31,7 @@ function runMockTest() {
   // 1. Giả lập tín hiệu gửi từ Cloudflare Worker sang Google Apps Script
   const mockPayload = {
     action: "hikvision_sync",
-    spreadsheetId: null, // Sẽ tự động lấy sheet đang hoạt động
+    spreadsheetId: "1jL7m6dZuuxOdpMPSOO1KfMviUmbI1VJXAq3Hmwz9DGk", 
     payload: {
       secret_key: WEBHOOK_SECRET,
       ma_nv: TEST_EMPLOYEE_ID,

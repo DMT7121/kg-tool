@@ -317,6 +317,92 @@ function App() {
     }
   };
 
+  const handleFetchAndProcessFromSheet = async () => {
+    if (!gasUrl) {
+      showToast('Vui lòng cấu hình URL Google Apps Script trong phần Cài đặt trước!', 'error');
+      setCurrentView('settings');
+      return;
+    }
+    
+    setIsProcessing(true);
+    setErrorMsg(null);
+    setIsSuccess(false);
+    setProcessedBlob(null);
+    setProcessedRecords([]);
+    
+    try {
+      showToast('Đang tải dữ liệu chấm công từ Google Sheets...', 'info');
+      const url = `${gasUrl}?action=getAttendanceLogs&ssId=${encodeURIComponent(spreadsheetId)}`;
+      const res = await fetch(url);
+      const result = await res.json();
+      
+      if (!result.success || !Array.isArray(result.data)) {
+        throw new Error(result.error || 'Dữ liệu phản hồi từ Apps Script không đúng cấu trúc.');
+      }
+      
+      const logs = result.data;
+      if (logs.length === 0) {
+        throw new Error('Sheet Bang_Cham_Cong_Log đang trống. Chưa có dữ liệu chấm công nào để xử lý.');
+      }
+      
+      // Convert AttendanceLog to TimeRecord
+      const records: TimeRecord[] = [];
+      logs.forEach((log: any) => {
+        const parts = log.date.split('/');
+        if (parts.length !== 3) return;
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        
+        if (log.checkIn) {
+          const timeParts = log.checkIn.split(':');
+          if (timeParts.length >= 2) {
+            const h = parseInt(timeParts[0], 10);
+            const min = parseInt(timeParts[1], 10);
+            const inDate = new Date(y, m, d, h, min, 0, 0);
+            records.push({ name: log.name, timestamp: inDate });
+          }
+        }
+        
+        if (log.checkOut) {
+          const timeParts = log.checkOut.split(':');
+          if (timeParts.length >= 2) {
+            const h = parseInt(timeParts[0], 10);
+            const min = parseInt(timeParts[1], 10);
+            let outDate = new Date(y, m, d, h, min, 0, 0);
+            if (h < 6) {
+              outDate = new Date(outDate.getTime() + 86400000);
+            }
+            records.push({ name: log.name, timestamp: outDate });
+          }
+        }
+      });
+
+      if (records.length === 0) {
+        throw new Error('Không thể phân tích dữ liệu chấm công hợp lệ từ Google Sheet.');
+      }
+
+      // Process records using existing engine
+      const processed = processRecords(records);
+      const blob = await exportToExcel(processed);
+      
+      setProcessedBlob(blob);
+      setProcessedRecords(processed);
+      setIsSuccess(true);
+      
+      // Mock File object to transition the UI state
+      setFile(new File([], `Dữ_Liệu_Sheet_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`));
+      
+      showToast(`Đã xử lý chấm công của ${processed.length} dòng dữ liệu thành công!`, 'success');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Lỗi khi tải hoặc xử lý dữ liệu từ Google Sheet.');
+      console.error(err);
+      showToast('Lỗi xử lý dữ liệu chấm công Cloud!', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleDownload = () => {
     if (!processedBlob) return;
     const url = URL.createObjectURL(processedBlob);
@@ -835,21 +921,56 @@ function App() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <div className="upload-content">
+                <div className="upload-content" style={{ width: '100%' }}>
                   <div className="file-icon">☁</div>
-                  <h2>Kéo thả file Excel hoặc CSV vào đây</h2>
-                  <p style={{ margin: '0.5rem 0 1rem' }}>hoặc</p>
-                  <label className="primary" style={{ padding: '8px 24px', cursor: 'pointer', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
-                    <span>Chọn tệp từ máy tính</span>
-                    <input 
-                      type="file" 
-                      style={{ display: 'none' }}
-                      ref={fileInputRef}
-                      accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                      onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
-                    />
-                  </label>
-                  <p style={{ marginTop: '1.25rem' }}>Hỗ trợ định dạng: .xlsx, .xls, .csv ⓘ</p>
+                  <h2>Xử lý chấm công nhân viên</h2>
+                  <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                    Chọn tải tệp thô từ máy tính hoặc tải dữ liệu đồng bộ trực tuyến từ Google Sheets
+                  </p>
+                  
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: '100%', margin: '0.5rem 0 1.25rem', zIndex: 10 }}>
+                    <label className="primary" style={{ padding: '10px 20px', cursor: 'pointer', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                      <span>Chọn tệp từ máy tính</span>
+                      <input 
+                        type="file" 
+                        style={{ display: 'none' }}
+                        ref={fileInputRef}
+                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                        onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
+                      />
+                    </label>
+                    <button 
+                      type="button" 
+                      className="primary" 
+                      onClick={handleFetchAndProcessFromSheet}
+                      disabled={isProcessing}
+                      style={{ 
+                        padding: '10px 20px', 
+                        borderRadius: '8px', 
+                        fontSize: '0.85rem', 
+                        background: 'linear-gradient(135deg, var(--cyan), var(--blue))',
+                        boxShadow: '0 0 16px rgba(34,211,238,.25)', 
+                        border: 'none', 
+                        color: 'white', 
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="loader" size={14} />
+                          Đang tải...
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡️ Xử lý từ Google Sheet</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p style={{ marginTop: '0.5rem' }}>Hỗ trợ định dạng file thô: .xlsx, .xls, .csv ⓘ</p>
                   <p style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '8px' }}>🛡 Dữ liệu của bạn được bảo mật tuyệt đối và chỉ sử dụng để xử lý chấm công.</p>
                 </div>
                 {errorMsg && <p style={{ color: '#ff5c7a', marginTop: '1rem', fontWeight: 500, zIndex: 5 }}>{errorMsg}</p>}
