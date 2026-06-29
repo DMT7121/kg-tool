@@ -489,7 +489,7 @@
   
   body.print-k80-mode .print-only-container {
     display: block !important;
-    position: absolute !important;
+    position: relative !important;
     left: 0 !important;
     top: 0 !important;
     width: 80mm !important;
@@ -926,7 +926,7 @@
   }
   .print-only-container {
     display: block !important;
-    position: absolute !important;
+    position: relative !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
