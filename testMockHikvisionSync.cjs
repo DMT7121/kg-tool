@@ -11,7 +11,7 @@
 const https = require('https');
 
 // Sửa đường dẫn này bằng Link Web App Apps Script đã deploy của bạn để test thực tế
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz2fdSYe_QQ33AkwAIH4XIUZ4SJLQRhAevnjm_-Rsnupj5A6QKBFLX16qpMLUThf5J5-A/exec";
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyWhtyEggy1Kx13LXLzllnbBhofIES6K12wlsegUPagoc6a1M-PKqpwvq--iPukEvnlmg/exec";
 const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026";
 
 // Thay tên nhân viên hợp lệ có sẵn trong sheet của bạn để test
