@@ -506,6 +506,8 @@
     padding: 0 !important;
     page-break-after: always !important;
     break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     height: auto !important;
     min-height: 0 !important;
     background: #ffffff !important;
@@ -918,6 +920,17 @@
   display: none;
 }
 @media print {
+  /* Reset all shell containers to normal flow to allow page breaks */
+  html, body, #root, .dashboard-layout, .main-content, .screen, .payroll-creator {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
@@ -933,6 +946,9 @@
   }
   .print-page {
     page-break-after: always !important;
+    break-after: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
