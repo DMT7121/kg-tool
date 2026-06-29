@@ -13,13 +13,15 @@ import {
   Save, 
   Send,
   HelpCircle,
-  Volume2
+  Volume2,
+  Cpu
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, type ProcessedRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
 import TransferFileTool from './components/TransferFileTool';
 import TTSPage from './components/TTSPage';
+import HikvisionSync from './components/HikvisionSync';
 import { StatCard, EmptyState, GuidePanel } from './components/Shared';
 
 // Interface definitions
@@ -66,7 +68,7 @@ const FALLBACK_BANKS: Bank[] = [
 
 function App() {
   // Navigation & UI state
-  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts'>('attendance');
+  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts' | 'hikvision'>('attendance');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -708,6 +710,14 @@ function App() {
           >
             <span className="ico"><Volume2 size={20} /></span>
             <span>Đọc TTS</span>
+          </button>
+          <button 
+            className={`nav-item ${currentView === 'hikvision' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('hikvision'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Máy Chấm Công" : undefined}
+          >
+            <span className="ico"><Cpu size={20} /></span>
+            <span>Máy Chấm Công</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
@@ -1643,6 +1653,14 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {currentView === 'hikvision' && (
+          <HikvisionSync 
+            gasUrl={gasUrl} 
+            spreadsheetId={spreadsheetId} 
+            showToast={showToast} 
+          />
         )}
 
       </main>

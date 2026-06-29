@@ -99,6 +99,9 @@ function doGet(e) {
     } else if (action === "get_tts_settings") {
       res.data = fetchTtsSettings(ss, ssId);
       res.success = true;
+    } else if (action === "getAttendanceLogs") {
+      res.data = fetchAttendanceLogs(ss, ssId);
+      res.success = true;
     } else {
       throw new Error("Hành động GET không hợp lệ: " + action);
     }
@@ -175,6 +178,11 @@ function doPost(e) {
     }
     
     // 2. LƯU CHẤM CÔNG (ATTENDANCE)
+    if (action === "hikvision_sync") {
+      return ContentService.createTextOutput(JSON.stringify(externalHikvisionSync(data, ss)))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "save_attendance") {
       var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
       if (!sheet) {
@@ -636,4 +644,137 @@ function saveTtsSettingsRows(sheet, settingsList, ssId) {
 
 function test() {
   getOrCreateSheets("1jL7m6dZuuxOdpMPSOO1KfMviUmbI1VJXAq3Hmwz9DGk");
+}
+
+/**
+ * Lấy lịch sử chấm công từ sheet Bang_Cham_Cong_Log
+ */
+function fetchAttendanceLogs(ss, ssId) {
+  var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
+  if (!sheet) return [];
+  var rows = getSheetValues(sheet, ssId, "A2:E");
+  var list = [];
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (rows[i][0]) {
+      list.push({
+        name: rows[i][0],
+        date: rows[i][1],
+        checkIn: rows[i][2] || "",
+        checkOut: rows[i][3] || "",
+        notes: rows[i][4] || ""
+      });
+    }
+  }
+  return list;
+}
+
+/**
+ * Xử lý đồng bộ chấm công từ máy chấm công Hikvision (qua Cloudflare Worker)
+ */
+function externalHikvisionSync(data, ss) {
+  try {
+    var payload = data.payload || {};
+    if (payload.secret_key !== "KINGS_GRILL_HIKVISION_SECRET_2026") {
+      return { success: false, status: "error", message: "Sai khóa bảo mật Webhook." };
+    }
+
+    var employeeName = payload.name || payload.ma_nv;
+    if (!employeeName) {
+      return { success: false, status: "error", message: "Thiếu tên hoặc mã nhân viên." };
+    }
+
+    var timeString = payload.thoi_gian;
+    var now = new Date();
+    if (timeString) {
+      var parsedDate = new Date(timeString);
+      if (!isNaN(parsedDate.getTime())) {
+        now = parsedDate;
+      }
+    }
+
+    var dateStringObj = Utilities.formatDate(now, "GMT+7", "dd/MM/yyyy");
+    var gioString = Utilities.formatDate(now, "GMT+7", "HH:mm");
+
+    var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
+    if (!sheet) {
+      sheet = ss.insertSheet("Bang_Cham_Cong_Log");
+      sheet.appendRow(['Tên nhân viên', 'Ngày', 'Giờ vào', 'Giờ ra', 'Ghi chú']);
+      sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
+    }
+
+    var lastRow = sheet.getLastRow();
+    var matchRowIndex = -1;
+    if (lastRow > 1) {
+      var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+      for (var i = values.length - 1; i >= 0; i--) {
+        if (values[i][0] === employeeName && values[i][1] === dateStringObj && values[i][2] !== "" && (!values[i][3] || values[i][3] === "")) {
+          matchRowIndex = i + 2;
+          break;
+        }
+      }
+    }
+
+    if (matchRowIndex !== -1) {
+      // --- XỬ LÝ RA CA (OUT) ---
+      sheet.getRange(matchRowIndex, 4).setValue(gioString);
+      sheet.getRange(matchRowIndex, 5).setValue("Đồng bộ máy chấm công (Ra)");
+
+      // Gửi thông báo Telegram
+      sendTelegram("🔴 <b>[KING'S GRILL - HIKVISION RA CA]</b>\n" +
+                   "Nhân viên: <b>" + employeeName + "</b>\n" +
+                   "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+
+      return { success: true, status: "success", message: "Ghi nhận Ra Ca (Hikvision) thành công lúc " + gioString };
+    } else {
+      // --- XỬ LÝ VÀO CA (IN) ---
+      sheet.appendRow([employeeName, dateStringObj, gioString, "", "Đồng bộ máy chấm công (Vào)"]);
+
+      // Gửi thông báo Telegram
+      sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
+                   "Nhân viên: <b>" + employeeName + "</b>\n" +
+                   "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+
+      return { success: true, status: "success", message: "Ghi nhận Vào Ca (Hikvision) thành công lúc " + gioString };
+    }
+  } catch (err) {
+    return { success: false, status: "error", message: "Lỗi đồng bộ: " + err.message };
+  }
+}
+
+/**
+ * Gửi thông báo Telegram tự động qua cấu hình trong sheet CauHinh_HT
+ */
+function sendTelegram(message, ss) {
+  try {
+    var sheet = ss.getSheetByName("Cấu Hình Hệ Thống") 
+             || ss.getSheetByName("CauHinh_HT") 
+             || ss.getSheetByName("Cấu hình hệ thống");
+    if (!sheet) return;
+    var headers = sheet.getRange(2, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var tokenCol = -1, chatIdCol = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i] === "telegram_bot_token") tokenCol = i + 1;
+      if (headers[i] === "telegram_chat_id_bgd") chatIdCol = i + 1;
+    }
+    if (tokenCol !== -1 && chatIdCol !== -1) {
+      var botToken = sheet.getRange(3, tokenCol).getValue();
+      var chatId = sheet.getRange(3, chatIdCol).getValue();
+      if (botToken && chatId) {
+        var url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
+        var payload = JSON.stringify({
+          chat_id: chatId,
+          parse_mode: "HTML",
+          text: message
+        });
+        UrlFetchApp.fetch(url, {
+          method: "post",
+          contentType: "application/json",
+          payload: payload,
+          muteHttpExceptions: true
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Lỗi gửi Telegram: " + err.message);
+  }
 }
