@@ -222,22 +222,58 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     localStorage.setItem('kg_tool_thermal_options', JSON.stringify(thermalOptions));
   }, [thermalOptions]);
 
-  const [isMobileScreen, setIsMobileScreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const previewViewportRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [showToolbarOptions, setShowToolbarOptions] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!previewViewportRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setViewportWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(previewViewportRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const layoutMode = useMemo(() => {
+    if (containerWidth === 0) {
+      const w = window.innerWidth;
+      if (w >= 1100) return 'wide';
+      if (w >= 800) return 'compact';
+      if (w >= 600) return 'narrow';
+      return 'mobile';
+    }
+    if (containerWidth >= 1100) return 'wide';
+    if (containerWidth >= 800) return 'compact';
+    if (containerWidth >= 600) return 'narrow';
+    return 'mobile';
+  }, [containerWidth]);
+
+  const isMobileScreen = layoutMode === 'mobile';
   const [mobileActiveTab, setMobileActiveTab] = useState<'data' | 'settings' | 'preview' | 'export'>('preview');
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobileScreen(window.innerWidth < 768);
-    };
     const handleAfterPrint = () => {
       document.body.classList.remove('print-k80-mode');
       document.body.classList.remove('print-k80-no-split');
     };
-    handleResize();
-    window.addEventListener('resize', handleResize);
     window.addEventListener('afterprint', handleAfterPrint);
     return () => {
-      window.removeEventListener('resize', handleResize);
       window.removeEventListener('afterprint', handleAfterPrint);
     };
   }, []);
@@ -1951,18 +1987,29 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   
   const isAccordionOpen = (key: string) => activeAccordion.includes(key);
 
+  const paperBaseWidthPx = activeTemplate === 'k80' ? 320 : 1000;
+  const fitScale = useMemo(() => {
+    if (!viewportWidth) return 1;
+    const padding = activeTemplate === 'k80' ? 0 : 32;
+    const availableWidth = viewportWidth - padding;
+    return Math.min(1, availableWidth / paperBaseWidthPx);
+  }, [viewportWidth, activeTemplate, paperBaseWidthPx]);
+
   const getZoomWidthStyle = () => {
     if (zoomLevel === 'fit') {
-      return { width: '100%', maxWidth: '100%', transform: 'none' };
+      return { 
+        width: `${paperBaseWidthPx * fitScale}px`, 
+        maxWidth: '100%', 
+        transform: 'none' 
+      };
     }
     const zoomVal = Number(zoomLevel) || 100;
-    if (activeTemplate === 'k80') {
-      const widthPx = (360 * zoomVal) / 100;
-      return { width: `${widthPx}px`, maxWidth: '100%', transform: 'none' };
-    } else {
-      const widthPx = (960 * zoomVal) / 100;
-      return { width: `${widthPx}px`, maxWidth: 'none', transform: 'none' };
-    }
+    const scaleVal = zoomVal / 100;
+    return { 
+      width: `${paperBaseWidthPx * scaleVal}px`, 
+      maxWidth: 'none', 
+      transform: 'none' 
+    };
   };
 
   const renderAccordionSection = (key: string, title: string, icon: string, children: React.ReactNode) => {
@@ -1988,13 +2035,20 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     );
   };
 
-  // Warnings list
   const warningsList = useMemo(() => {
     return Object.values(validationMap).flat();
   }, [validationMap]);
 
+  const showConfigPane = layoutMode === 'mobile' 
+    ? (mobileActiveTab === 'data' || mobileActiveTab === 'settings' || mobileActiveTab === 'export')
+    : !isLeftPanelCollapsed;
+
+  const showPreviewPane = layoutMode === 'mobile'
+    ? (mobileActiveTab === 'preview' || mobileActiveTab === 'export')
+    : true;
+
   return (
-    <div className={`payroll-creator ${isFullscreenPreview ? 'fullscreen-preview-active' : ''}`}>
+    <div ref={containerRef} className={`payroll-creator mode-${layoutMode} ${isFullscreenPreview ? 'fullscreen-preview-active' : ''}`}>
       
       {/* Hidden Print only container */}
       <div className="print-only-container">
@@ -2082,9 +2136,27 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
       <div className={`payroll-layout ${isLeftPanelCollapsed ? 'left-panel-collapsed' : ''} ${isMobileScreen ? 'layout-mobile' : ''}`}>
         
+        {/* Backdrop for narrow mode drawer */}
+        {layoutMode === 'narrow' && !isLeftPanelCollapsed && (
+          <div className="drawer-backdrop" onClick={() => setIsLeftPanelCollapsed(true)} />
+        )}
+
         {/* LEFT COLUMN: Input form configs */}
-        {!isLeftPanelCollapsed && (!isMobileScreen || mobileActiveTab === 'data' || mobileActiveTab === 'settings' || mobileActiveTab === 'export') && (
+        {showConfigPane && (
           <div className="config-pane">
+            {/* Close button for narrow mode drawer */}
+            {layoutMode === 'narrow' && (
+              <div className="drawer-close-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn-ghost" 
+                  onClick={() => setIsLeftPanelCollapsed(true)} 
+                  style={{ color: '#9eb3d7', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '4px 10px', background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}
+                >
+                  ✕ Đóng
+                </button>
+              </div>
+            )}
             
             {/* Section 1: General configurations */}
             {(!isMobileScreen || mobileActiveTab === 'data') && renderAccordionSection('general', 'Cấu hình phiếu lương chung', '⚙️', (
@@ -2654,7 +2726,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         )}
 
         {/* RIGHT COLUMN: Live dynamic preview rendering */}
-        {(!isMobileScreen || mobileActiveTab === 'preview' || mobileActiveTab === 'export') && (
+        {showPreviewPane && (
           <div className="preview-pane">
             
             {/* Preview Tab Control Panel */}
@@ -2726,29 +2798,90 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             {/* Quick Preview Toolbar: zoom, template, full-screen, print actions */}
             <div className="preview-toolbar-bar">
               <div className="toolbar-left-group">
-                <div className="zoom-controller-box">
-                  <span style={{ fontSize: '12px', fontWeight: 600 }}>Tỷ lệ:</span>
-                  <select 
-                    className="form-control select-compact" 
-                    style={{ width: '100px', height: '32px', padding: '0 8px', fontSize: '12px' }} 
-                    value={zoomLevel} 
-                    onChange={e => setZoomLevel(e.target.value)}
-                  >
-                    <option value="fit">Vừa khít</option>
-                    <option value="50">50%</option>
-                    <option value="75">75%</option>
-                    <option value="100">100%</option>
-                    <option value="125">125%</option>
-                    <option value="150">150%</option>
-                    <option value="200">200%</option>
-                  </select>
-                </div>
+                {(layoutMode === 'wide' || layoutMode === 'compact') ? (
+                  <>
+                    <div className="zoom-controller-box">
+                      <span style={{ fontSize: '12px', fontWeight: 600 }}>Tỷ lệ:</span>
+                      <select 
+                        className="form-control select-compact" 
+                        style={{ width: '100px', height: '32px', padding: '0 8px', fontSize: '12px' }} 
+                        value={zoomLevel} 
+                        onChange={e => setZoomLevel(e.target.value)}
+                      >
+                        <option value="fit">Vừa khít</option>
+                        <option value="50">50%</option>
+                        <option value="75">75%</option>
+                        <option value="100">100%</option>
+                        <option value="125">125%</option>
+                        <option value="150">150%</option>
+                        <option value="200">200%</option>
+                      </select>
+                    </div>
 
-                {activeView === 'receipt' && (
-                  <div className="preview-modes-toggle">
-                    <button type="button" className={`mode-toggle-btn ${previewMode === 'single' ? 'active' : ''}`} onClick={() => setPreviewMode('single')} title="Xem một phiếu">Phiếu</button>
-                    <button type="button" className={`mode-toggle-btn ${previewMode === 'list' ? 'active' : ''}`} onClick={() => setPreviewMode('list')} title="Xem danh sách liên tục">Liên tiếp</button>
-                    <button type="button" className={`mode-toggle-btn ${previewMode === 'thumbnail' ? 'active' : ''}`} onClick={() => setPreviewMode('thumbnail')} title="Xem dạng lưới nhỏ">Lưới</button>
+                    {activeView === 'receipt' && (
+                      <div className="preview-modes-toggle">
+                        <button type="button" className={`mode-toggle-btn ${previewMode === 'single' ? 'active' : ''}`} onClick={() => setPreviewMode('single')} title="Xem một phiếu">Phiếu</button>
+                        <button type="button" className={`mode-toggle-btn ${previewMode === 'list' ? 'active' : ''}`} onClick={() => setPreviewMode('list')} title="Xem danh sách liên tục">Liên tiếp</button>
+                        <button type="button" className={`mode-toggle-btn ${previewMode === 'thumbnail' ? 'active' : ''}`} onClick={() => setPreviewMode('thumbnail')} title="Xem dạng lưới nhỏ">Lưới</button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    <button 
+                      type="button" 
+                      className="btn-outline" 
+                      onClick={() => setShowToolbarOptions(!showToolbarOptions)}
+                      style={{ height: '32px', padding: '0 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', color: 'white', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      ⚙️ Tùy chọn ▾
+                    </button>
+                    {showToolbarOptions && (
+                      <>
+                        <div className="dropdown-click-outside-backdrop" onClick={() => setShowToolbarOptions(false)} style={{ zIndex: 1000, position: 'fixed', inset: 0 }} />
+                        <div className="toolbar-options-dropdown" style={{ position: 'absolute', top: '36px', left: 0, background: 'linear-gradient(145deg, #0d1e44, #060e22)', border: '1px solid rgba(77,134,224,0.4)', borderRadius: '8px', padding: '12px', zIndex: 1001, display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '220px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+                          <div className="zoom-controller-box" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#b6c7e8' }}>TỶ LỆ XEM:</span>
+                            <select 
+                              className="form-control select-compact" 
+                              style={{ width: '100%', height: '30px', padding: '0 8px', fontSize: '12px', background: 'rgba(5, 17, 42, 0.75)', border: '1px solid rgba(91,134,211,0.3)', color: 'white', borderRadius: '6px' }} 
+                              value={zoomLevel} 
+                              onChange={e => { setZoomLevel(e.target.value); setShowToolbarOptions(false); }}
+                            >
+                              <option value="fit">Vừa khít</option>
+                              <option value="50">50%</option>
+                              <option value="75">75%</option>
+                              <option value="100">100%</option>
+                              <option value="125">125%</option>
+                              <option value="150">150%</option>
+                              <option value="200">200%</option>
+                            </select>
+                          </div>
+                          
+                          {activeView === 'receipt' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#b6c7e8' }}>CHẾ ĐỘ HIỂN THỊ:</span>
+                              <div className="preview-modes-toggle" style={{ width: '100%', display: 'flex', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', borderRadius: '6px', padding: '2px' }}>
+                                <button type="button" className={`mode-toggle-btn ${previewMode === 'single' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('single'); setShowToolbarOptions(false); }}>Phiếu</button>
+                                <button type="button" className={`mode-toggle-btn ${previewMode === 'list' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('list'); setShowToolbarOptions(false); }}>Liên tiếp</button>
+                                <button type="button" className={`mode-toggle-btn ${previewMode === 'thumbnail' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('thumbnail'); setShowToolbarOptions(false); }}>Lưới</button>
+                              </div>
+                            </div>
+                          )}
+
+                          {layoutMode === 'narrow' && (
+                            <button 
+                              type="button" 
+                              className="btn-outline" 
+                              onClick={() => { setIsLeftPanelCollapsed(!isLeftPanelCollapsed); setShowToolbarOptions(false); }}
+                              style={{ height: '30px', fontSize: '12px', width: '100%', padding: '0 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', color: 'white', borderRadius: '6px', cursor: 'pointer' }}
+                            >
+                              {isLeftPanelCollapsed ? '⚙️ Hiện Cấu hình' : '⚙️ Ẩn Cấu hình'}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -2762,7 +2895,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   {isFullscreenPreview ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
                 </button>
                 
-                {!isMobileScreen && (
+                {(layoutMode === 'wide' || layoutMode === 'compact') && (
                   <button 
                     type="button" 
                     className="btn-ghost" 
@@ -2771,6 +2904,18 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     style={{ padding: '0 8px', height: '32px', fontSize: '12px' }}
                   >
                     {isLeftPanelCollapsed ? ' Hiện cấu hình ›' : '‹ Ẩn cấu hình'}
+                  </button>
+                )}
+
+                {layoutMode === 'narrow' && isLeftPanelCollapsed && (
+                  <button 
+                    type="button" 
+                    className="btn-ghost" 
+                    onClick={() => setIsLeftPanelCollapsed(false)} 
+                    title="Hiện cột cấu hình"
+                    style={{ padding: '0 8px', height: '32px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(99,132,206,0.15)', borderRadius: '6px' }}
+                  >
+                    ⚙️ Cấu hình
                   </button>
                 )}
               </div>
@@ -2838,7 +2983,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             )}
 
             {/* Render target content preview canvas viewport */}
-            <div className="preview-scroll-container">
+            <div className="preview-scroll-container PayrollPreviewViewport" ref={previewViewportRef}>
               {employees.length === 0 ? (
                 <EmptyState 
                   icon="📄"

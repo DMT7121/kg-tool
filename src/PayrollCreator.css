@@ -1029,3 +1029,220 @@
   }
 }
 
+/* ========================================================
+   CONTAINER RESPONSIVE OVERRIDES
+   ======================================================== */
+
+/* General container overrides */
+.payroll-creator {
+  min-width: 0;
+  width: 100%;
+}
+
+.payroll-creator .head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+/* WIDE MODE (>= 1100px) */
+.payroll-creator.mode-wide .payroll-layout {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 1.5rem;
+}
+.payroll-creator.mode-wide .payroll-layout.left-panel-collapsed {
+  grid-template-columns: 1fr;
+}
+
+/* COMPACT MODE (800px - 1099px) */
+.payroll-creator.mode-compact .head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+.payroll-creator.mode-compact .kpis {
+  grid-template-columns: repeat(2, 1fr) !important;
+  min-width: 0 !important;
+  width: 100%;
+}
+.payroll-creator.mode-compact .payroll-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1.25rem;
+}
+.payroll-creator.mode-compact .payroll-layout.left-panel-collapsed {
+  grid-template-columns: 1fr;
+}
+.payroll-creator.mode-compact .navigator-horizontal-scroll {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  gap: 8px !important;
+  overflow-x: visible !important;
+  max-height: 180px !important;
+  overflow-y: auto !important;
+}
+
+/* NARROW MODE (600px - 799px) */
+.payroll-creator.mode-narrow .head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+.payroll-creator.mode-narrow .kpis {
+  grid-template-columns: repeat(2, 1fr) !important;
+  min-width: 0 !important;
+  width: 100%;
+}
+.payroll-creator.mode-narrow .payroll-layout {
+  display: block;
+  width: 100%;
+}
+.payroll-creator.mode-narrow .drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 11, 30, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 2400;
+  animation: fadeIn 0.2s ease-out;
+}
+.payroll-creator.mode-narrow .config-pane {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: 90vw;
+  z-index: 2500;
+  background: linear-gradient(145deg, #09132c, #050b1a);
+  border-right: 1px solid rgba(77, 134, 224, 0.4);
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.6);
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: 100vh;
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.payroll-creator.mode-narrow .navigator-horizontal-scroll {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+.payroll-creator.mode-narrow .navigator-item-card {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* MOBILE MODE (< 600px) */
+.payroll-creator.mode-mobile .head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+.payroll-creator.mode-mobile .kpis {
+  grid-template-columns: 1fr !important;
+  min-width: 0 !important;
+  width: 100%;
+}
+.payroll-creator.mode-mobile .payroll-layout {
+  display: block;
+  width: 100%;
+}
+.payroll-creator.mode-mobile .preview-toolbar-bar {
+  flex-direction: column !important;
+  gap: 10px !important;
+  align-items: stretch !important;
+}
+.payroll-creator.mode-mobile .toolbar-left-group, 
+.payroll-creator.mode-mobile .toolbar-right-group {
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 8px !important;
+}
+.payroll-creator.mode-mobile .action-buttons-box {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  width: 100% !important;
+  gap: 8px !important;
+}
+.payroll-creator.mode-mobile .action-buttons-box button {
+  width: 100% !important;
+}
+.payroll-creator.mode-mobile .preview-header-panel {
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+.payroll-creator.mode-mobile .preview-views-toggle, 
+.payroll-creator.mode-mobile .preview-templates-toggle {
+  display: flex !important;
+  width: 100% !important;
+}
+.payroll-creator.mode-mobile .view-toggle-btn, 
+.payroll-creator.mode-mobile .template-toggle-btn {
+  flex-grow: 1 !important;
+  text-align: center !important;
+  font-size: 11px !important;
+  padding: 8px 4px !important;
+}
+
+/* Local scrolling viewport limits to prevent horizontal page scrolling */
+.PayrollPreviewViewport {
+  overflow-x: auto !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Stretch SVG wrapper for fit zoom */
+.sheet-canvas-wrapper svg {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+}
+
+/* KPI Card Scaling to prevent cutting money */
+.payroll-creator .kpis {
+  min-width: 0 !important;
+  max-width: 100%;
+}
+.payroll-creator .kpi {
+  padding: 12px 14px !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+.payroll-creator .kpi b {
+  font-size: clamp(1rem, 2.5vw, 1.25rem) !important;
+  word-break: break-all;
+}
+.payroll-creator .kpi span {
+  font-size: 11px !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* Dropdown click outside backdrop & popover */
+.dropdown-click-outside-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 999;
+}
+.toolbar-options-dropdown {
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  animation: fadeIn 0.15s ease-out;
+}
+
+
