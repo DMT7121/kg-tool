@@ -726,6 +726,8 @@ function externalHikvisionSync(data, ss) {
 
     if (matchRowIndex !== -1) {
       // --- XỬ LÝ RA CA (OUT) ---
+      var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Ra", sheet);
+
       sheet.getRange(matchRowIndex, 4).setValue(gioString);
       sheet.getRange(matchRowIndex, 5).setValue("Đồng bộ máy chấm công (Ra)");
 
@@ -734,12 +736,16 @@ function externalHikvisionSync(data, ss) {
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
 
-      // Gửi email thông báo cho nhân viên
-      sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+      // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
+      if (canSend) {
+        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+      }
 
       return { success: true, status: "success", message: "Ghi nhận Ra Ca (Hikvision) thành công lúc " + gioString };
     } else {
       // --- XỬ LÝ VÀO CA (IN) ---
+      var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", sheet);
+
       sheet.appendRow([employeeName, dateStringObj, gioString, "", "Đồng bộ máy chấm công (Vào)"]);
 
       // Gửi thông báo Telegram
@@ -747,8 +753,10 @@ function externalHikvisionSync(data, ss) {
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
 
-      // Gửi email thông báo cho nhân viên
-      sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+      // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
+      if (canSend) {
+        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+      }
 
       return { success: true, status: "success", message: "Ghi nhận Vào Ca (Hikvision) thành công lúc " + gioString };
     }
@@ -841,20 +849,30 @@ function externalHikvisionBulkSync(data, ss) {
       }
 
       if (matchRowIndex !== -1) {
+        // Gửi email thông báo cho nhân viên khi ra ca bù
+        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Ra", sheet);
+
         sheet.getRange(matchRowIndex, 4).setValue(gioString);
         sheet.getRange(matchRowIndex, 5).setValue(noteString);
         existingRecords[matchRowIndex - 2][3] = gioString;
         existingRecords[matchRowIndex - 2][4] = noteString;
         importedCount++;
-        // Gửi email thông báo cho nhân viên khi ra ca bù
-        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+
+        if (canSend) {
+          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+        }
       } else {
+        // Gửi email thông báo cho nhân viên khi vào ca bù
+        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", sheet);
+
         var newRow = [employeeName, dateStringObj, gioString, "", noteString];
         sheet.appendRow(newRow);
         existingRecords.push(newRow);
         importedCount++;
-        // Gửi email thông báo cho nhân viên khi vào ca bù
-        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+
+        if (canSend) {
+          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+        }
       }
     }
 
@@ -1117,6 +1135,57 @@ function initSystemSheets(ss, brevoKey, brevoSender) {
   }
   
   return "Khởi tạo các bảng cấu hình thành công!";
+}
+
+/**
+ * Xác định xem có nên gửi email cho lượt chấm công này hay không (giãn cách tối thiểu 30 phút giữa các lần gửi cùng loại trong ngày)
+ */
+function shouldSendEmail(employeeName, dateString, timeString, type, sheet) {
+  try {
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return true; // Bảng rỗng, cho phép gửi
+    
+    var values = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+    var isCheckIn = type === "Vào";
+    var colIndex = isCheckIn ? 2 : 3; // Cột Giờ vào (chỉ số 2) hoặc Giờ ra (chỉ số 3)
+    
+    var newTimeMinutes = parseTimeToMinutes(timeString);
+    var lastEventMinutes = -1;
+    
+    for (var i = 0; i < values.length; i++) {
+      var rowName = values[i][0];
+      var rowDate = values[i][1];
+      var rowTime = values[i][colIndex];
+      
+      if (rowName === employeeName && rowDate === dateString && rowTime && rowTime.trim() !== "") {
+        var minutes = parseTimeToMinutes(rowTime);
+        if (minutes > lastEventMinutes) {
+          lastEventMinutes = minutes;
+        }
+      }
+    }
+    
+    if (lastEventMinutes === -1) {
+      return true; // Chưa có lượt chấm công nào cùng loại trong ngày, cho phép gửi
+    }
+    
+    // Tính khoảng cách phút giữa lần mới và lần gần nhất cùng loại
+    var diff = Math.abs(newTimeMinutes - lastEventMinutes);
+    return diff >= 30; // Trả về true nếu cách nhau >= 30 phút
+  } catch (err) {
+    Logger.log("Lỗi trong shouldSendEmail: " + err.message);
+    return true; // Nếu có lỗi thì vẫn cho phép gửi email để tránh mất thông tin
+  }
+}
+
+/**
+ * Chuyển đổi định dạng giờ "HH:mm" thành số phút trong ngày
+ */
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  var parts = timeStr.toString().split(":");
+  if (parts.length < 2) return 0;
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
 /**
