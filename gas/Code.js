@@ -729,6 +729,9 @@ function externalHikvisionSync(data, ss) {
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
 
+      // Gửi email thông báo cho nhân viên
+      sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+
       return { success: true, status: "success", message: "Ghi nhận Ra Ca (Hikvision) thành công lúc " + gioString };
     } else {
       // --- XỬ LÝ VÀO CA (IN) ---
@@ -738,6 +741,9 @@ function externalHikvisionSync(data, ss) {
       sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+
+      // Gửi email thông báo cho nhân viên
+      sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
 
       return { success: true, status: "success", message: "Ghi nhận Vào Ca (Hikvision) thành công lúc " + gioString };
     }
@@ -835,11 +841,15 @@ function externalHikvisionBulkSync(data, ss) {
         existingRecords[matchRowIndex - 2][3] = gioString;
         existingRecords[matchRowIndex - 2][4] = noteString;
         importedCount++;
+        // Gửi email thông báo cho nhân viên khi ra ca bù
+        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
       } else {
         var newRow = [employeeName, dateStringObj, gioString, "", noteString];
         sheet.appendRow(newRow);
         existingRecords.push(newRow);
         importedCount++;
+        // Gửi email thông báo cho nhân viên khi vào ca bù
+        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
       }
     }
 
@@ -885,4 +895,150 @@ function sendTelegram(message, ss) {
   } catch (err) {
     console.warn("Lỗi gửi Telegram: " + err.message);
   }
+}
+
+/**
+ * Lấy email của nhân viên từ sheet Danh_Sach_Nhan_Vien
+ */
+function getEmployeeEmail(employeeName, ss) {
+  var sheetName = "Danh_Sach_Nhan_Vien";
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow(["Tên nhân viên", "Email", "Ghi chú"]);
+    sheet.getRange(1, 1, 1, 3).setFontWeight("bold").setBackground("#f1f5f9");
+    // Add instruction row
+    sheet.appendRow(["Nguyễn Văn A", "nva@gmail.com", "Nhập tên khớp với tên trên máy chấm công"]);
+    return null;
+  }
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  
+  var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (var i = 0; i < data.length; i++) {
+    var name = data[i][0].toString().trim().toLowerCase();
+    if (name === employeeName.trim().toLowerCase()) {
+      return data[i][1].toString().trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Gửi email thông báo chấm công cho nhân viên
+ */
+function sendAttendanceEmail(employeeName, dateString, gioString, type, ss) {
+  try {
+    var email = getEmployeeEmail(employeeName, ss);
+    if (!email) {
+      Logger.log("Không tìm thấy email cho nhân viên: " + employeeName);
+      return;
+    }
+    
+    var isCheckIn = type.toLowerCase().includes("vào");
+    var typeText = isCheckIn ? "🟢 VÀO CA" : "🔴 RA CA";
+    var color = isCheckIn ? "#10b981" : "#ef4444";
+    
+    var subject = "[King's Grill] Thông báo chấm công " + (isCheckIn ? "Vào ca" : "Ra ca") + " - " + employeeName;
+    
+    var htmlContent = '<div style="font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">' +
+      '<div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">' +
+        '<h2 style="color: #1e3a8a; margin: 0;">KING\'S GRILL</h2>' +
+        '<p style="color: #64748b; font-size: 14px; margin: 5px 0 0 0;">Hệ Thống Chấm Công Tự Động</p>' +
+      '</div>' +
+      '<div style="margin-bottom: 25px;">' +
+        '<p style="color: #334155; font-size: 16px;">Xin chào <strong>' + employeeName + '</strong>,</p>' +
+        '<p style="color: #334155; font-size: 15px; line-height: 1.5;">Hệ thống ghi nhận bạn đã chấm công thành công trên thiết bị:</p>' +
+        '<div style="background-color: #f8fafc; border-left: 4px solid ' + color + '; padding: 15px; border-radius: 4px; margin: 20px 0;">' +
+          '<table style="width: 100%; border-collapse: collapse;">' +
+            '<tr>' +
+              '<td style="color: #64748b; padding: 5px 0; font-size: 14px; width: 35%;">Trạng thái:</td>' +
+              '<td style="color: ' + color + '; padding: 5px 0; font-weight: bold; font-size: 15px;">' + typeText + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td style="color: #64748b; padding: 5px 0; font-size: 14px;">Thời gian:</td>' +
+              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + gioString + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td style="color: #64748b; padding: 5px 0; font-size: 14px;">Ngày:</td>' +
+              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + dateString + '</td>' +
+            '</tr>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 12px; color: #94a3b8;">' +
+        '<p style="margin: 0 0 5px 0;">Email này được gửi tự động từ hệ thống nhân sự King\'s Grill.</p>' +
+        '<p style="margin: 0;">Chúc bạn có một ngày làm việc vui vẻ và hiệu quả!</p>' +
+      '</div>' +
+    '</div>';
+    
+    var configSheet = ss.getSheetByName("Cấu Hình Hệ Thống") 
+                   || ss.getSheetByName("CauHinh_HT") 
+                   || ss.getSheetByName("Cấu hình hệ thống");
+    var brevoApiKey = "";
+    var senderEmail = "";
+    
+    if (configSheet) {
+      var headers = configSheet.getRange(2, 1, 1, configSheet.getLastColumn()).getValues()[0];
+      var apiKeyCol = -1, senderCol = -1;
+      for (var i = 0; i < headers.length; i++) {
+        if (headers[i] === "brevo_api_key") apiKeyCol = i + 1;
+        if (headers[i] === "brevo_sender_email") senderCol = i + 1;
+      }
+      
+      if (apiKeyCol !== -1 && senderCol !== -1) {
+        brevoApiKey = configSheet.getRange(3, apiKeyCol).getValue().toString().trim();
+        senderEmail = configSheet.getRange(3, senderCol).getValue().toString().trim();
+      }
+    }
+    
+    if (brevoApiKey && senderEmail) {
+      Logger.log("Đang gửi email qua Brevo API đến: " + email);
+      sendViaBrevo(brevoApiKey, senderEmail, email, subject, htmlContent);
+    } else {
+      Logger.log("Đang gửi email qua GmailApp đến: " + email);
+      sendViaGmail(email, subject, htmlContent);
+    }
+  } catch (err) {
+    Logger.log("Lỗi gửi email thông báo: " + err.message);
+  }
+}
+
+/**
+ * Gửi email qua Brevo API
+ */
+function sendViaBrevo(apiKey, senderEmail, recipientEmail, subject, htmlContent) {
+  var url = "https://api.brevo.com/v3/smtp/email";
+  var payload = JSON.stringify({
+    sender: { email: senderEmail, name: "King's Grill HR" },
+    to: [{ email: recipientEmail }],
+    subject: subject,
+    htmlContent: htmlContent
+  });
+  
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      "api-key": apiKey
+    },
+    payload: payload,
+    muteHttpExceptions: true
+  };
+  
+  var response = UrlFetchApp.fetch(url, options);
+  var resText = response.getContentText();
+  Logger.log("Brevo response: " + resText);
+  return response.getResponseCode() === 201 || response.getResponseCode() === 200;
+}
+
+/**
+ * Gửi email qua GmailApp mặc định (miễn phí)
+ */
+function sendViaGmail(recipientEmail, subject, htmlContent) {
+  GmailApp.sendEmail(recipientEmail, subject, "", {
+    htmlBody: htmlContent,
+    name: "King's Grill HR"
+  });
 }
