@@ -286,9 +286,15 @@ async function handleOfflineSync(data, env) {
     );
 
     if (response.status !== 200) {
+      let diagnostic = "Kiểm tra lại địa chỉ kết nối, tài khoản và mật khẩu.";
+      if (response.status === 403) {
+        diagnostic = "Lỗi 403 Forbidden: Thường do chưa kích hoạt giao thức ISAPI/CGI trên máy chấm công, tài khoản bị khóa tạm thời (30 phút) do nhập sai pass nhiều lần, hoặc tài khoản không có quyền Admin.";
+      } else if (response.status === 401) {
+        diagnostic = "Lỗi 401 Unauthorized: Sai tài khoản hoặc mật khẩu máy chấm công.";
+      }
       return { 
         success: false, 
-        message: `Kết nối máy chấm công thất bại. HTTP Status: ${response.status}. Kiểm tra lại URL, tài khoản và mật khẩu.` 
+        message: `Kết nối máy chấm công thất bại. HTTP Status: ${response.status}. ${diagnostic}` 
       };
     }
 
