@@ -105,10 +105,23 @@ function App() {
   };
 
   // Config State
-  const [gasUrl, setGasUrl] = useState(() => localStorage.getItem('kg_tool_gas_url') || '');
+  const [gasUrl, setGasUrl] = useState(() => {
+    const cached = localStorage.getItem('kg_tool_gas_url');
+    // Tự động nâng cấp URL cũ bị hỏng sang URL hoạt động mới
+    if (cached && cached.includes("AKfycbyWhtyEggy1Kx13LXLzllnbBhofIES6K12wlsegUPagoc6a1M-PKqpwvq--iPukEvnlmg")) {
+      const upgraded = "https://script.google.com/macros/s/AKfycbzWodFSWnnBK71ryZxB8UHdytHIE5DDuR3GYl_PDOQXzPwftyedJpNPdE1BRLvT4qJLnw/exec";
+      localStorage.setItem('kg_tool_gas_url', upgraded);
+      return upgraded;
+    }
+    return cached || '';
+  });
   const [spreadsheetId, setSpreadsheetId] = useState(() => localStorage.getItem('kg_tool_spreadsheet_id') || '');
   const [connectionStatus, setConnectionStatus] = useState<'not_configured' | 'testing' | 'connected' | 'failed'>(() => {
-    return gasUrl ? 'connected' : 'not_configured';
+    const cached = localStorage.getItem('kg_tool_gas_url');
+    const activeGasUrl = (cached && cached.includes("AKfycbyWhtyEggy1Kx13LXLzllnbBhofIES6K12wlsegUPagoc6a1M-PKqpwvq--iPukEvnlmg"))
+      ? "https://script.google.com/macros/s/AKfycbzWodFSWnnBK71ryZxB8UHdytHIE5DDuR3GYl_PDOQXzPwftyedJpNPdE1BRLvT4qJLnw/exec"
+      : cached;
+    return activeGasUrl ? 'connected' : 'not_configured';
   });
 
   // 1. Attendance processing state
