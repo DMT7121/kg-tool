@@ -736,6 +736,11 @@ function externalHikvisionSync(data, ss) {
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
 
+      // Gửi thông báo Google Chat
+      sendGoogleChat("🔴 *[KING'S GRILL - HIKVISION RA CA]*\n" +
+                     "Nhân viên: *" + employeeName + "*\n" +
+                     "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
+
       // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
       if (canSend) {
         sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
@@ -752,6 +757,11 @@ function externalHikvisionSync(data, ss) {
       sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
                    "Nhân viên: <b>" + employeeName + "</b>\n" +
                    "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+
+      // Gửi thông báo Google Chat
+      sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
+                     "Nhân viên: *" + employeeName + "*\n" +
+                     "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
 
       // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
       if (canSend) {
@@ -858,6 +868,11 @@ function externalHikvisionBulkSync(data, ss) {
         existingRecords[matchRowIndex - 2][4] = noteString;
         importedCount++;
 
+        // Gửi thông báo Google Chat
+        sendGoogleChat("🔴 *[ĐỒNG BỘ BÙ - RA CA]*\n" +
+                       "Nhân viên: *" + employeeName + "*\n" +
+                       "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
+
         if (canSend) {
           sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
         }
@@ -869,6 +884,11 @@ function externalHikvisionBulkSync(data, ss) {
         sheet.appendRow(newRow);
         existingRecords.push(newRow);
         importedCount++;
+
+        // Gửi thông báo Google Chat
+        sendGoogleChat("🟢 *[ĐỒNG BỘ BÙ - VÀO CA]*\n" +
+                       "Nhân viên: *" + employeeName + "*\n" +
+                       "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
 
         if (canSend) {
           sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
@@ -917,6 +937,50 @@ function sendTelegram(message, ss) {
     }
   } catch (err) {
     console.warn("Lỗi gửi Telegram: " + err.message);
+  }
+}
+
+/**
+ * Gửi thông báo tự động tới Google Chat Space qua Incoming Webhook
+ */
+function sendGoogleChat(message, ss) {
+  try {
+    var sheet = ss.getSheetByName("Cấu Hình Hệ Thống") 
+             || ss.getSheetByName("CauHinh_HT") 
+             || ss.getSheetByName("Cấu hình hệ thống");
+             
+    if (!sheet) return;
+    
+    var lastCol = sheet.getLastColumn();
+    var lastRow = sheet.getLastRow();
+    
+    if (lastRow >= 3) {
+      var headers = sheet.getRange(2, 1, 1, lastCol).getValues()[0];
+      var gchatCol = -1;
+      for (var i = 0; i < headers.length; i++) {
+        if (headers[i] === "google_chat_webhook_url") {
+          gchatCol = i + 1;
+          break;
+        }
+      }
+      
+      if (gchatCol === -1) return;
+      var webhookUrl = sheet.getRange(3, gchatCol).getValue().toString().trim();
+      if (!webhookUrl) return; // Không cấu hình webhook, bỏ qua
+      
+      var payload = { "text": message };
+      var options = {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      };
+      
+      var response = UrlFetchApp.fetch(webhookUrl, options);
+      Logger.log("Google Chat response status: " + response.getResponseCode());
+    }
+  } catch (err) {
+    Logger.log("Lỗi gửi Google Chat: " + err.message);
   }
 }
 
@@ -1083,27 +1147,30 @@ function initSystemSheets(ss, brevoKey, brevoSender) {
   var lastRow = configSheet.getLastRow();
   if (lastRow < 3) {
     configSheet.getRange(1, 1).setValue("BẢNG CẤU HÌNH HỆ THỐNG - KHÔNG ĐƯỢC XÓA DÒNG 2 VÀ DÒNG 3");
-    configSheet.getRange(1, 1, 1, 4).merge().setFontWeight("bold").setFontColor("#1e3a8a").setBackground("#eff6ff");
+    configSheet.getRange(1, 1, 1, 5).merge().setFontWeight("bold").setFontColor("#1e3a8a").setBackground("#eff6ff");
     
-    configSheet.getRange(2, 1, 1, 4).setValues([[
+    configSheet.getRange(2, 1, 1, 5).setValues([[
       "telegram_bot_token", 
       "telegram_chat_id_bgd", 
       "brevo_api_key", 
-      "brevo_sender_email"
+      "brevo_sender_email",
+      "google_chat_webhook_url"
     ]]).setFontWeight("bold").setBackground("#f1f5f9");
     
-    configSheet.getRange(3, 1, 1, 4).setValues([[
+    configSheet.getRange(3, 1, 1, 5).setValues([[
       "", 
       "", 
       brevoKey || "", 
-      brevoSender || ""
+      brevoSender || "",
+      ""
     ]]);
   } else {
     var headers = configSheet.getRange(2, 1, 1, configSheet.getLastColumn()).getValues()[0];
-    var apiKeyCol = -1, senderCol = -1;
+    var apiKeyCol = -1, senderCol = -1, gchatCol = -1;
     for (var i = 0; i < headers.length; i++) {
       if (headers[i] === "brevo_api_key") apiKeyCol = i + 1;
       if (headers[i] === "brevo_sender_email") senderCol = i + 1;
+      if (headers[i] === "google_chat_webhook_url") gchatCol = i + 1;
     }
     
     var lastCol = configSheet.getLastColumn();
@@ -1119,8 +1186,14 @@ function initSystemSheets(ss, brevoKey, brevoSender) {
     if (senderCol === -1) {
       configSheet.getRange(2, lastCol + 1).setValue("brevo_sender_email").setFontWeight("bold").setBackground("#f1f5f9");
       configSheet.getRange(3, lastCol + 1).setValue(brevoSender || "");
+      lastCol++;
     } else if (brevoSender) {
       configSheet.getRange(3, senderCol).setValue(brevoSender);
+    }
+
+    if (gchatCol === -1) {
+      configSheet.getRange(2, lastCol + 1).setValue("google_chat_webhook_url").setFontWeight("bold").setBackground("#f1f5f9");
+      configSheet.getRange(3, lastCol + 1).setValue("");
     }
   }
 
