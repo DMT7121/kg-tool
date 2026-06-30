@@ -23,6 +23,19 @@ const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026";
 
 export default {
   async fetch(request, env, ctx) {
+    // 0. XỬ LÝ CORS PREFLIGHT
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Max-Age": "86400"
+        }
+      });
+    }
+
     if (request.method !== "POST") {
       return new Response("Chỉ hỗ trợ phương thức POST.", { status: 405 });
     }
@@ -75,6 +88,26 @@ export default {
       } else {
         // Trường hợp chỉ gửi log dạng JSON hoặc XML thuần
         rawText = await request.text();
+
+        // Kiểm tra lệnh điều khiển đồng bộ bổ sung từ Web App
+        try {
+          if (rawText.trim().startsWith("{")) {
+            const data = JSON.parse(rawText);
+            if (data.action === "sync_offline_logs") {
+              const syncResult = await handleOfflineSync(data, env);
+              return new Response(JSON.stringify(syncResult), {
+                status: 200,
+                headers: { 
+                  "Content-Type": "application/json",
+                  "Access-Control-Allow-Origin": "*"
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.log("JSON parse error, treating as standard Hikvision payload:", e.message);
+        }
+
         const parsed = parsePayloadText(rawText);
         empId = parsed.empId;
         name = parsed.name;
@@ -202,4 +235,186 @@ function parsePayloadText(text) {
   }
 
   return { empId, name, time, macAddress };
+}
+
+/**
+ * Hàm gọi API máy chấm công lấy danh sách sự kiện offline
+ */
+async function handleOfflineSync(data, env) {
+  const { tunnelUrl, username, password, fromDate, toDate, secret_key } = data;
+
+  if (secret_key !== WEBHOOK_SECRET) {
+    return { success: false, message: "Sai khóa bảo mật Webhook." };
+  }
+
+  if (!tunnelUrl) {
+    return { success: false, message: "Thiếu địa chỉ kết nối máy chấm công (tunnelUrl)." };
+  }
+
+  // Format date range: YYYY-MM-DDT00:00:00+07:00
+  const startTime = `${fromDate}T00:00:00+07:00`;
+  const endTime = `${toDate}T23:59:59+07:00`;
+
+  const targetUrl = `${tunnelUrl.replace(/\/$/, "")}/ISAPI/AccessControl/AcsEvent?format=json`;
+  
+  const requestBody = {
+    AcsEventCond: {
+      searchID: "1",
+      searchResultPosition: 0,
+      maxResults: 1000,
+      startTime: startTime,
+      endTime: endTime
+    }
+  };
+
+  try {
+    const response = await fetchWithDigest(
+      targetUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      },
+      username || "admin",
+      password
+    );
+
+    if (response.status !== 200) {
+      return { 
+        success: false, 
+        message: `Kết nối máy chấm công thất bại. HTTP Status: ${response.status}. Kiểm tra lại URL, tài khoản và mật khẩu.` 
+      };
+    }
+
+    const resJson = await response.json();
+    const acsEvent = resJson.AcsEvent || {};
+    const infoList = acsEvent.InfoList || [];
+
+    // Lọc các sự kiện có mã nhân viên
+    const eventsToSync = infoList
+      .filter(item => item.employeeNoString)
+      .map(item => ({
+        empId: item.employeeNoString,
+        name: item.name || "",
+        time: item.time,
+        macAddress: item.macAddress || ""
+      }));
+
+    if (!eventsToSync.length) {
+      return { 
+        success: true, 
+        message: "Không tìm thấy lượt chấm công nào trong khoảng thời gian này.", 
+        importedCount: 0 
+      };
+    }
+
+    // Chuyển tiếp lên Google Apps Script Web App
+    const gasPayload = {
+      action: "hikvision_bulk_sync",
+      spreadsheetId: "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
+      payload: {
+        secret_key: WEBHOOK_SECRET,
+        events: eventsToSync
+      }
+    };
+
+    const gasResponse = await fetch(env.GAS_WEBAPP_URL || GAS_WEBAPP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(gasPayload),
+      redirect: "follow"
+    });
+
+    return await gasResponse.json();
+
+  } catch (error) {
+    return { 
+      success: false, 
+      message: "Lỗi thực hiện đồng bộ bổ sung: " + error.message 
+    };
+  }
+}
+
+/**
+ * Hàm hỗ trợ Digest Authentication cho fetch
+ */
+async function fetchWithDigest(url, options = {}, username, password) {
+  // Gửi request lần đầu để lấy challenge (401)
+  let response = await fetch(url, options);
+  if (response.status !== 401) {
+    return response;
+  }
+
+  const authHeader = response.headers.get("www-authenticate");
+  if (!authHeader || !authHeader.startsWith("Digest")) {
+    return response;
+  }
+
+  const params = parseDigestHeader(authHeader);
+  const realm = params.realm;
+  const nonce = params.nonce;
+  const qop = params.qop;
+  const opaque = params.opaque;
+
+  const parsedUrl = new URL(url);
+  const uri = parsedUrl.pathname + parsedUrl.search;
+  const method = options.method || "GET";
+
+  const cn = "0a4f113b"; // Client nonce ngẫu nhiên
+  const nc = "00000001"; // Nonce count
+
+  const HA1 = await md5(`${username}:${realm}:${password}`);
+  const HA2 = await md5(`${method}:${uri}`);
+
+  let responseHash;
+  if (qop === "auth" || qop === "auth-int") {
+    responseHash = await md5(`${HA1}:${nonce}:${nc}:${cn}:${qop}:${HA2}`);
+  } else {
+    responseHash = await md5(`${HA1}:${nonce}:${HA2}`);
+  }
+
+  let authStr = `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${responseHash}"`;
+  if (qop) {
+    authStr += `, qop=${qop}, nc=${nc}, cnonce="${cn}"`;
+  }
+  if (opaque) {
+    authStr += `, opaque="${opaque}"`;
+  }
+
+  const authOptions = {
+    ...options,
+    headers: {
+      ...options.headers,
+      "Authorization": authStr
+    }
+  };
+
+  return await fetch(url, authOptions);
+}
+
+/**
+ * Hàm parse header WWW-Authenticate Digest
+ */
+function parseDigestHeader(header) {
+  const matches = header.matchAll(/(\w+)=["']?([^"',]+)["']?/g);
+  const params = {};
+  for (const match of matches) {
+    params[match[1]] = match[2];
+  }
+  return params;
+}
+
+/**
+ * Hàm tính MD5 hash
+ */
+async function md5(string) {
+  const msgUint8 = new TextEncoder().encode(string);
+  const hashBuffer = await crypto.subtle.digest("MD5", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  return hashHex;
 }

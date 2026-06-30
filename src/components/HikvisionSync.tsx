@@ -38,6 +38,23 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
   const [copiedSecret, setCopiedSecret] = useState(false);
   const secretKey = 'KINGS_GRILL_HIKVISION_SECRET_2026';
 
+  // Offline sync settings variables
+  const getTodayDateStr = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const [syncDeviceUrl, setSyncDeviceUrl] = useState(() => localStorage.getItem('kg_tool_sync_device_url') || '');
+  const [syncUsername, setSyncUsername] = useState('admin');
+  const [syncPassword, setSyncPassword] = useState(() => localStorage.getItem('kg_tool_sync_password') || '');
+  const [syncFromDate, setSyncFromDate] = useState(getTodayDateStr);
+  const [syncToDate, setSyncToDate] = useState(getTodayDateStr);
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
+  const [syncResultMsg, setSyncResultMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
   const fetchLogs = async () => {
     if (!gasUrl) {
       setErrorMsg('Vui lòng cấu hình URL Google Apps Script trong phần Cài đặt trước!');
@@ -72,6 +89,66 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
   const handleSaveWorkerUrl = () => {
     localStorage.setItem('kg_tool_worker_url', workerUrl);
     showToast('Đã lưu URL Cloudflare Worker của bạn!', 'success');
+  };
+
+  const handleOfflineSync = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workerUrl) {
+      showToast('Vui lòng nhập đường dẫn Cloudflare Worker trước!', 'error');
+      return;
+    }
+    if (!syncDeviceUrl) {
+      showToast('Vui lòng nhập địa chỉ kết nối máy chấm công!', 'error');
+      return;
+    }
+
+    setIsSyncingOffline(true);
+    setSyncResultMsg(null);
+    localStorage.setItem('kg_tool_sync_device_url', syncDeviceUrl);
+    localStorage.setItem('kg_tool_sync_password', syncPassword);
+
+    try {
+      const response = await fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'sync_offline_logs',
+          tunnelUrl: syncDeviceUrl,
+          username: syncUsername,
+          password: syncPassword,
+          fromDate: syncFromDate,
+          toDate: syncToDate,
+          secret_key: secretKey
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSyncResultMsg({
+          text: result.message || 'Đồng bộ bổ sung hoàn tất thành công.',
+          type: 'success'
+        });
+        showToast(result.message || 'Đồng bộ bổ sung hoàn tất!', 'success');
+        fetchLogs();
+      } else {
+        setSyncResultMsg({
+          text: result.message || 'Đồng bộ thất bại. Vui lòng kiểm tra lại thông tin cấu hình.',
+          type: 'error'
+        });
+        showToast(result.message || 'Lỗi đồng bộ bổ sung!', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setSyncResultMsg({
+        text: `Lỗi kết nối tới Cloudflare Worker: ${err.message || 'Lỗi mạng'}`,
+        type: 'error'
+      });
+      showToast('Lỗi kết nối tới Worker!', 'error');
+    } finally {
+      setIsSyncingOffline(false);
+    }
   };
 
   const handleCopy = (text: string, type: 'url' | 'secret') => {
@@ -179,67 +256,170 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
 
       <div className="two-col">
         {/* LEFT COLUMN: Configurations */}
-        <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <h2>⚙️ Cấu hình Webhook</h2>
-          <p className="sub" style={{ margin: 0 }}>Cài đặt đường link nhận dữ liệu từ Cloudflare Worker để dán vào máy chấm công Hikvision.</p>
-          
-          <div className="field full" style={{ marginTop: '0.5rem' }}>
-            <label>Đường dẫn Cloudflare Worker của bạn</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '480px', flexShrink: 0 }}>
+          {/* Card 1: Webhook Config */}
+          <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', margin: 0 }}>
+            <h2>⚙️ Cấu hình Webhook</h2>
+            <p className="sub" style={{ margin: 0 }}>Cài đặt đường link nhận dữ liệu từ Cloudflare Worker để dán vào máy chấm công Hikvision.</p>
+            
+            <div className="field full" style={{ marginTop: '0.5rem' }}>
+              <label>Đường dẫn Cloudflare Worker của bạn</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={workerUrl}
+                  onChange={(e) => setWorkerUrl(e.target.value)}
+                  placeholder="https://kingsgrill-attendance-webhook.username.workers.dev"
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                />
+                <button 
+                  className="primary" 
+                  onClick={handleSaveWorkerUrl}
+                  style={{ height: '44px', padding: '0 16px', borderRadius: '8px', minWidth: '80px', flexShrink: 0 }}
+                >
+                  Lưu
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
+                  <code style={{ fontSize: '0.85rem', color: 'var(--cyan)', wordBreak: 'break-all' }}>{workerUrl}</code>
+                  <button 
+                    type="button" 
+                    onClick={() => handleCopy(workerUrl, 'url')}
+                    style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                  >
+                    {copiedUrl ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
+                  <code style={{ fontSize: '0.85rem', color: 'var(--cyan)' }}>{secretKey}</code>
+                  <button 
+                    type="button" 
+                    onClick={() => handleCopy(secretKey, 'secret')}
+                    style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                  >
+                    {copiedSecret ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ background: 'rgba(34, 211, 238, 0.04)', border: '1px solid rgba(34, 211, 238, 0.15)', borderRadius: '10px', padding: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <AlertCircle size={18} style={{ color: 'var(--cyan)', flexShrink: 0, marginTop: '2px' }} />
+              <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
+                <strong>Hướng dẫn nhanh:</strong> Mở trình duyệt truy cập vào IP máy chấm công, vào <strong>Configuration &rarr; Network &rarr; Advanced Settings &rarr; HTTP Listening</strong>. Điền địa chỉ Worker URL và đặt cổng là <code>443</code>, phương thức gửi là <code>HTTPS</code>.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 2: Offline Sync */}
+          <form onSubmit={handleOfflineSync} className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', margin: 0 }}>
+            <h2>🔄 Đồng bộ bổ sung</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              Kéo dữ liệu trực tiếp từ máy chấm công để bù các lượt chấm bị thiếu do lỗi mạng hoặc mất kết nối đột ngột.
+            </p>
+
+            <div className="field full">
+              <label>Địa chỉ máy chấm công (IP / Tên miền / Tunnel URL)</label>
               <input 
                 type="text" 
                 className="form-control" 
-                value={workerUrl}
-                onChange={(e) => setWorkerUrl(e.target.value)}
-                placeholder="https://kingsgrill-attendance-webhook.username.workers.dev"
-                style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                value={syncDeviceUrl}
+                onChange={(e) => setSyncDeviceUrl(e.target.value)}
+                placeholder="Ví dụ: http://192.168.1.3 hoặc https://xyz.trycloudflare.com"
+                required
+                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
               />
-              <button 
-                className="primary" 
-                onClick={handleSaveWorkerUrl}
-                style={{ height: '44px', padding: '0 16px', borderRadius: '8px', minWidth: '80px', flexShrink: 0 }}
-              >
-                Lưu
-              </button>
+              <small style={{ color: 'var(--muted)', marginTop: '4px', display: 'block', fontSize: '0.75rem' }}>
+                Nhập IP nội bộ nếu chạy Web App cục bộ, hoặc URL Tunnel nếu chạy bat tạm thời.
+              </small>
             </div>
-          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div>
-              <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
-                <code style={{ fontSize: '0.85rem', color: 'var(--cyan)', wordBreak: 'break-all' }}>{workerUrl}</code>
-                <button 
-                  type="button" 
-                  onClick={() => handleCopy(workerUrl, 'url')}
-                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
-                >
-                  {copiedUrl ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
-                </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Tài khoản máy</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={syncUsername}
+                  onChange={(e) => setSyncUsername(e.target.value)}
+                  placeholder="admin"
+                  required
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Mật khẩu máy</label>
+                <input 
+                  type="password" 
+                  className="form-control" 
+                  value={syncPassword}
+                  onChange={(e) => setSyncPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                />
               </div>
             </div>
 
-            <div>
-              <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
-                <code style={{ fontSize: '0.85rem', color: 'var(--cyan)' }}>{secretKey}</code>
-                <button 
-                  type="button" 
-                  onClick={() => handleCopy(secretKey, 'secret')}
-                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
-                >
-                  {copiedSecret ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
-                </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Từ ngày</label>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={syncFromDate}
+                  onChange={(e) => setSyncFromDate(e.target.value)}
+                  required
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Đến ngày</label>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={syncToDate}
+                  onChange={(e) => setSyncToDate(e.target.value)}
+                  required
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                />
               </div>
             </div>
-          </div>
-          
-          <div style={{ background: 'rgba(34, 211, 238, 0.04)', border: '1px solid rgba(34, 211, 238, 0.15)', borderRadius: '10px', padding: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <AlertCircle size={18} style={{ color: 'var(--cyan)', flexShrink: 0, marginTop: '2px' }} />
-            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
-              <strong>Hướng dẫn nhanh:</strong> Mở trình duyệt truy cập vào IP máy chấm công, vào <strong>Configuration &rarr; Network &rarr; Advanced Settings &rarr; HTTP Listening</strong>. Điền địa chỉ Worker URL và đặt cổng là <code>443</code>, phương thức gửi là <code>HTTPS</code>.
-            </p>
-          </div>
+
+            {syncResultMsg && (
+              <div style={{ 
+                background: syncResultMsg.type === 'success' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                border: syncResultMsg.type === 'success' ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px', 
+                padding: '10px 12px',
+                fontSize: '0.8rem',
+                color: syncResultMsg.type === 'success' ? '#4ade80' : '#f87171',
+                lineHeight: 1.4
+              }}>
+                {syncResultMsg.text}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className="primary" 
+              disabled={isSyncingOffline}
+              style={{ width: '100%', height: '44px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontWeight: 600 }}
+            >
+              <RefreshCw className={isSyncingOffline ? "spinner" : ""} size={16} />
+              {isSyncingOffline ? "Đang đồng bộ..." : "Đồng bộ log từ máy chấm công"}
+            </button>
+          </form>
         </div>
 
         {/* RIGHT COLUMN: Logs list */}

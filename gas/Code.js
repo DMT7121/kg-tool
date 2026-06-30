@@ -183,6 +183,11 @@ function doPost(e) {
                            .setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "hikvision_bulk_sync") {
+      return ContentService.createTextOutput(JSON.stringify(externalHikvisionBulkSync(data, ss)))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "save_attendance") {
       var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
       if (!sheet) {
@@ -738,6 +743,109 @@ function externalHikvisionSync(data, ss) {
     }
   } catch (err) {
     return { success: false, status: "error", message: "Lỗi đồng bộ: " + err.message };
+  }
+}
+
+/**
+ * Xử lý đồng bộ hàng loạt (bulk sync) từ máy chấm công khi khôi phục kết nối
+ */
+function externalHikvisionBulkSync(data, ss) {
+  try {
+    var payload = data.payload || {};
+    if (payload.secret_key !== "KINGS_GRILL_HIKVISION_SECRET_2026") {
+      return { success: false, status: "error", message: "Sai khóa bảo mật Webhook." };
+    }
+
+    var events = payload.events || [];
+    if (!events.length) {
+      return { success: true, status: "success", message: "Không có sự kiện nào cần đồng bộ.", importedCount: 0 };
+    }
+
+    var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
+    if (!sheet) {
+      sheet = ss.insertSheet("Bang_Cham_Cong_Log");
+      sheet.appendRow(['Tên nhân viên', 'Ngày', 'Giờ vào', 'Giờ ra', 'Ghi chú']);
+      sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
+    }
+
+    var importedCount = 0;
+    var lastRow = sheet.getLastRow();
+    
+    // Đọc toàn bộ dữ liệu hiện tại để tránh trùng lặp
+    var existingRecords = [];
+    if (lastRow > 1) {
+      existingRecords = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+    }
+
+    // Tiền xử lý sự kiện: sắp xếp theo thời gian tăng dần
+    events.sort(function(a, b) {
+      return new Date(a.time).getTime() - new Date(b.time).getTime();
+    });
+
+    for (var idx = 0; idx < events.length; idx++) {
+      var event = events[idx];
+      var employeeName = event.name || event.empId;
+      if (!employeeName) continue;
+
+      var eventTime = new Date(event.time);
+      if (isNaN(eventTime.getTime())) continue;
+
+      var dateStringObj = Utilities.formatDate(eventTime, "GMT+7", "dd/MM/yyyy");
+      var gioString = Utilities.formatDate(eventTime, "GMT+7", "HH:mm");
+      var noteString = "đồng bộ bổ sung từ máy chấm công, chấm công không đồng bộ kịp thời do lỗi mạng";
+
+      // Kiểm tra trùng lặp
+      var isDuplicate = false;
+      var matchRowIndex = -1;
+
+      // Tìm bản ghi phù hợp để điền giờ ra hoặc kiểm tra trùng lặp giờ vào
+      for (var i = existingRecords.length - 1; i >= 0; i--) {
+        var rowName = existingRecords[i][0];
+        var rowDate = existingRecords[i][1];
+        var rowIn = existingRecords[i][2];
+        var rowOut = existingRecords[i][3];
+
+        if (rowName === employeeName && rowDate === dateStringObj) {
+          if (rowIn === gioString || rowOut === gioString) {
+            isDuplicate = true;
+            break;
+          }
+          
+          if (rowIn !== "" && rowOut === "") {
+            var inTimeParts = rowIn.split(":");
+            var inMinutes = parseInt(inTimeParts[0], 10) * 60 + parseInt(inTimeParts[1], 10);
+            var outTimeParts = gioString.split(":");
+            var outMinutes = parseInt(outTimeParts[0], 10) * 60 + parseInt(outTimeParts[1], 10);
+            
+            if (outMinutes > inMinutes) {
+              matchRowIndex = i + 2;
+              break;
+            }
+          }
+        }
+      }
+
+      if (isDuplicate) {
+        continue;
+      }
+
+      if (matchRowIndex !== -1) {
+        sheet.getRange(matchRowIndex, 4).setValue(gioString);
+        sheet.getRange(matchRowIndex, 5).setValue(noteString);
+        existingRecords[matchRowIndex - 2][3] = gioString;
+        existingRecords[matchRowIndex - 2][4] = noteString;
+        importedCount++;
+      } else {
+        var newRow = [employeeName, dateStringObj, gioString, "", noteString];
+        sheet.appendRow(newRow);
+        existingRecords.push(newRow);
+        importedCount++;
+      }
+    }
+
+    return { success: true, status: "success", message: "Đã đồng bộ bổ sung thành công " + importedCount + " lượt chấm công.", importedCount: importedCount };
+  } catch (err) {
+    return { success: false, status: "error", message: "Lỗi đồng bộ hàng loạt: " + err.message };
   }
 }
 
