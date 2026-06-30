@@ -173,6 +173,10 @@ export default {
         headers: { "Content-Type": "application/json" } 
       });
     }
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(handleScheduledSync(env));
   }
 };
 
@@ -427,4 +431,49 @@ async function md5(string) {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
   return hashHex;
+}
+
+/**
+ * Tự động chạy hằng ngày để đồng bộ bù log chấm công của ngày hôm trước
+ */
+async function handleScheduledSync(env) {
+  console.log("--- BẮT ĐẦU CHẠY TRIGGER ĐỒNG BỘ TỰ ĐỘNG ---");
+  const tunnelUrl = env.HIKVISION_TUNNEL_URL;
+  const username = env.HIKVISION_USERNAME || "admin";
+  const password = env.HIKVISION_PASSWORD;
+
+  if (!tunnelUrl || !password) {
+    console.error("Thiếu cấu hình biến môi trường HIKVISION_TUNNEL_URL hoặc HIKVISION_PASSWORD. Bỏ qua đồng bộ tự động.");
+    return;
+  }
+
+  // Tính ngày hôm trước (theo múi giờ Việt Nam GMT+7)
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const vntime = new Date(utc + (3600000 * 7));
+  
+  vntime.setDate(vntime.getDate() - 1);
+
+  const yyyy = vntime.getFullYear();
+  const mm = String(vntime.getMonth() + 1).padStart(2, '0');
+  const dd = String(vntime.getDate()).padStart(2, '0');
+  const prevDayStr = `${yyyy}-${mm}-${dd}`;
+
+  console.log(`Đang đồng bộ tự động dữ liệu chấm công cho ngày: ${prevDayStr}`);
+
+  try {
+    const result = await handleOfflineSync({
+      action: "sync_offline_logs",
+      tunnelUrl,
+      username,
+      password,
+      fromDate: prevDayStr,
+      toDate: prevDayStr,
+      secret_key: WEBHOOK_SECRET
+    }, env);
+    
+    console.log("Kết quả đồng bộ tự động:", JSON.stringify(result));
+  } catch (error) {
+    console.error("Lỗi khi chạy đồng bộ tự động:", error.message);
+  }
 }
