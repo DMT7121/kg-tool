@@ -16,7 +16,7 @@
  */
 
 // Cấu hình URL Google Apps Script Web App của bạn
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyWhtyEggy1Kx13LXLzllnbBhofIES6K12wlsegUPagoc6a1M-PKqpwvq--iPukEvnlmg/exec"; 
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzWodFSWnnBK71ryZxB8UHdytHIE5DDuR3GYl_PDOQXzPwftyedJpNPdE1BRLvT4qJLnw/exec"; 
 
 // Khóa bí mật trùng khớp với cài đặt trong Apps Script
 const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026"; 
@@ -29,6 +29,9 @@ export default {
 
     try {
       const contentType = request.headers.get("content-type") || "";
+      console.log("--- BẮT ĐẦU NHẬN REQUEST ---");
+      console.log("Content-Type:", contentType);
+      
       let empId = null;
       let name = null;
       let time = null;
@@ -39,15 +42,26 @@ export default {
       if (contentType.includes("multipart/form-data")) {
         // Trường hợp máy gửi kèm ảnh chụp khuôn mặt (multipart/form-data)
         const formData = await request.formData();
+        console.log("FormData Keys:", Array.from(formData.keys()));
         let eventLogText = "";
 
         for (const [key, value] of formData.entries()) {
+          const isFile = value && typeof value === 'object' && typeof value.text === 'function';
+          console.log(`Field: "${key}", Type: ${typeof value}, isFile: ${isFile}`);
+          
           if (typeof value === "string") {
             eventLogText = value;
+          } else if (isFile) {
+            const textContent = await value.text();
+            console.log(`Content of "${key}" (first 200 chars):`, textContent.substring(0, 200));
+            if (textContent.includes("employeeNoString") || textContent.includes("eventDetail") || textContent.includes("AcsEvent") || key.toLowerCase().includes("log") || key.toLowerCase().includes("event")) {
+              eventLogText = textContent;
+            }
           }
         }
 
         rawText = eventLogText;
+        console.log("RawText Content:", rawText);
 
         // Parse metadata trong phần text
         if (eventLogText) {
@@ -70,12 +84,14 @@ export default {
 
       // 2. KIỂM TRA DỮ LIỆU CƠ BẢN
       if (!empId && !name) {
+        // Trả về 200 OK để máy chấm công không gửi lại (retry) các sự kiện rác/sự kiện lỗi
         return new Response(JSON.stringify({
-          success: false,
-          message: "Không tìm thấy Mã nhân viên (employeeNoString) hoặc Tên trong dữ liệu gửi từ máy chấm công.",
+          success: true,
+          status: "ignored",
+          message: "Bỏ qua sự kiện không phải chấm công (Heartbeat / Invalid Verification / Rác).",
           debug_raw: rawText.substring(0, 500)
         }), { 
-          status: 400, 
+          status: 200, 
           headers: { "Content-Type": "application/json" } 
         });
       }
@@ -108,7 +124,8 @@ export default {
       });
 
       const responseText = await gasResponse.text();
-
+      console.log("GAS Response:", responseText);
+ 
       return new Response(responseText, {
         status: gasResponse.status,
         headers: { "Content-Type": "application/json" }
@@ -141,13 +158,15 @@ function parsePayloadText(text) {
   if (text.startsWith("{")) {
     try {
       const data = JSON.parse(text);
-      const eventDetail = data.eventDetail || data.AcsEvent || {};
+      const eventDetail = data.AccessControllerEvent || data.eventDetail || data.AcsEvent || {};
       empId = eventDetail.employeeNoString || data.employeeNoString;
       name = eventDetail.name || data.name;
       time = data.dateTime || eventDetail.time || data.time;
       macAddress = data.macAddress || "";
       
-      return { empId, name, time, macAddress };
+      if (empId && name) {
+        return { empId, name, time, macAddress };
+      }
     } catch (e) {}
   }
 
