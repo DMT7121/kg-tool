@@ -255,7 +255,11 @@ async function handleOfflineSync(data, env) {
   const startTime = `${fromDate}T00:00:00+07:00`;
   const endTime = `${toDate}T23:59:59+07:00`;
 
-  const targetUrl = `${tunnelUrl.replace(/\/$/, "")}/ISAPI/AccessControl/AcsEvent?format=json`;
+  let formattedUrl = tunnelUrl.trim();
+  if (!/^https?:\/\//i.test(formattedUrl)) {
+    formattedUrl = "http://" + formattedUrl;
+  }
+  const targetUrl = `${formattedUrl.replace(/\/$/, "")}/ISAPI/AccessControl/AcsEvent?format=json`;
   
   const requestBody = {
     AcsEventCond: {
