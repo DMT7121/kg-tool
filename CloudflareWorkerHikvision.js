@@ -16,7 +16,7 @@
  */
 
 // Cấu hình URL Google Apps Script Web App của bạn
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxUhg-aJ7DHdmgIVaif_VZqbjCzUrXwWAzefjQjnv64GqIIaOZiNsWAWP3ltxijZUZxrw/exec";
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyCetIZ7cBHfLOF5eu1PXyeHfg7Gmqo9m-V8j6fJc_-7rjT2_YL4IKvzz6nbOHbsulrCw/exec";
 
 // Khóa bí mật trùng khớp với cài đặt trong Apps Script
 const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026"; 
