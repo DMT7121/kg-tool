@@ -102,6 +102,11 @@ function doGet(e) {
     } else if (action === "getAttendanceLogs") {
       res.data = fetchAttendanceLogs(ss, ssId);
       res.success = true;
+    } else if (action === "init_sheets") {
+      var brevoKey = e.parameter.brevo_key || "";
+      var brevoSender = e.parameter.brevo_sender || "";
+      res.data = initSystemSheets(ss, brevoKey, brevoSender);
+      res.success = true;
     } else {
       throw new Error("Hành động GET không hợp lệ: " + action);
     }
@@ -1041,4 +1046,87 @@ function sendViaGmail(recipientEmail, subject, htmlContent) {
     htmlBody: htmlContent,
     name: "King's Grill HR"
   });
+}
+
+/**
+ * Tự động khởi tạo các sheet Danh_Sach_Nhan_Vien và Cấu Hình Hệ Thống nếu chưa tồn tại
+ */
+function initSystemSheets(ss, brevoKey, brevoSender) {
+  // 1. Khởi tạo sheet Cấu Hình Hệ Thống
+  var configSheetName = "Cấu Hình Hệ Thống";
+  var configSheet = ss.getSheetByName(configSheetName)
+                 || ss.getSheetByName("CauHinh_HT")
+                 || ss.getSheetByName("Cấu hình hệ thống");
+                 
+  if (!configSheet) {
+    configSheet = ss.insertSheet(configSheetName);
+  }
+  
+  var lastRow = configSheet.getLastRow();
+  if (lastRow < 3) {
+    configSheet.getRange(1, 1).setValue("BẢNG CẤU HÌNH HỆ THỐNG - KHÔNG ĐƯỢC XÓA DÒNG 2 VÀ DÒNG 3");
+    configSheet.getRange(1, 1, 1, 4).merge().setFontWeight("bold").setFontColor("#1e3a8a").setBackground("#eff6ff");
+    
+    configSheet.getRange(2, 1, 1, 4).setValues([[
+      "telegram_bot_token", 
+      "telegram_chat_id_bgd", 
+      "brevo_api_key", 
+      "brevo_sender_email"
+    ]]).setFontWeight("bold").setBackground("#f1f5f9");
+    
+    configSheet.getRange(3, 1, 1, 4).setValues([[
+      "", 
+      "", 
+      brevoKey || "", 
+      brevoSender || ""
+    ]]);
+  } else {
+    var headers = configSheet.getRange(2, 1, 1, configSheet.getLastColumn()).getValues()[0];
+    var apiKeyCol = -1, senderCol = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i] === "brevo_api_key") apiKeyCol = i + 1;
+      if (headers[i] === "brevo_sender_email") senderCol = i + 1;
+    }
+    
+    var lastCol = configSheet.getLastColumn();
+    
+    if (apiKeyCol === -1) {
+      configSheet.getRange(2, lastCol + 1).setValue("brevo_api_key").setFontWeight("bold").setBackground("#f1f5f9");
+      configSheet.getRange(3, lastCol + 1).setValue(brevoKey || "");
+      lastCol++;
+    } else if (brevoKey) {
+      configSheet.getRange(3, apiKeyCol).setValue(brevoKey);
+    }
+    
+    if (senderCol === -1) {
+      configSheet.getRange(2, lastCol + 1).setValue("brevo_sender_email").setFontWeight("bold").setBackground("#f1f5f9");
+      configSheet.getRange(3, lastCol + 1).setValue(brevoSender || "");
+    } else if (brevoSender) {
+      configSheet.getRange(3, senderCol).setValue(brevoSender);
+    }
+  }
+
+  // 2. Khởi tạo sheet Danh_Sach_Nhan_Vien
+  var employeeSheetName = "Danh_Sach_Nhan_Vien";
+  var employeeSheet = ss.getSheetByName(employeeSheetName);
+  if (!employeeSheet) {
+    employeeSheet = ss.insertSheet(employeeSheetName);
+    employeeSheet.appendRow(["Tên nhân viên", "Email", "Ghi chú"]);
+    employeeSheet.getRange(1, 1, 1, 3).setFontWeight("bold").setBackground("#f1f5f9");
+    employeeSheet.appendRow(["Nguyễn Văn A", "nva@gmail.com", "Nhập tên khớp với tên trên máy chấm công"]);
+  }
+  
+  return "Khởi tạo các bảng cấu hình thành công!";
+}
+
+/**
+ * Hàm khởi chạy một lần từ Editor để ủy quyền (Authorize) và tạo tự động các sheet
+ */
+function runInitialize() {
+  var ss = SpreadsheetApp.openById("1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU");
+  var brevoKey = "";
+  var brevoSender = "";
+  
+  var result = initSystemSheets(ss, brevoKey, brevoSender);
+  Logger.log(result);
 }

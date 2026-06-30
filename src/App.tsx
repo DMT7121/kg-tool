@@ -107,8 +107,8 @@ function App() {
   // Config State
   const [gasUrl, setGasUrl] = useState(() => {
     const cached = localStorage.getItem('kg_tool_gas_url');
-    const targetUrl = "https://script.google.com/macros/s/AKfycbxiav9YYV21xfqdiZ7ZtiN6wkApoiaBOZRtHa6SIjgwp1KpvhnD_KYEXgPJ7MnEfkQ/exec";
-    if (cached && !cached.includes("AKfycbxiav9YYV21xfqdiZ7ZtiN6wkApoiaBOZRtHa6SIjgwp1KpvhnD_KYEXgPJ7MnEfkQ")) {
+    const targetUrl = "https://script.google.com/macros/s/AKfycbxyOI-USpC1UzjQ74bTsyN1BZNwpIUmRlPgRGjGA3CwIFMfUoZEdF2IHyGVn7NdBgFQjw/exec";
+    if (cached && !cached.includes("AKfycbxyOI-USpC1UzjQ74bTsyN1BZNwpIUmRlPgRGjGA3CwIFMfUoZEdF2IHyGVn7NdBgFQjw")) {
       localStorage.setItem('kg_tool_gas_url', targetUrl);
       return targetUrl;
     }
@@ -117,9 +117,9 @@ function App() {
   const [spreadsheetId, setSpreadsheetId] = useState(() => localStorage.getItem('kg_tool_spreadsheet_id') || '');
   const [connectionStatus, setConnectionStatus] = useState<'not_configured' | 'testing' | 'connected' | 'failed'>(() => {
     const cached = localStorage.getItem('kg_tool_gas_url');
-    const activeGasUrl = (cached && !cached.includes("AKfycbxiav9YYV21xfqdiZ7ZtiN6wkApoiaBOZRtHa6SIjgwp1KpvhnD_KYEXgPJ7MnEfkQ"))
-      ? "https://script.google.com/macros/s/AKfycbxiav9YYV21xfqdiZ7ZtiN6wkApoiaBOZRtHa6SIjgwp1KpvhnD_KYEXgPJ7MnEfkQ/exec"
-      : (cached || "https://script.google.com/macros/s/AKfycbxiav9YYV21xfqdiZ7ZtiN6wkApoiaBOZRtHa6SIjgwp1KpvhnD_KYEXgPJ7MnEfkQ/exec");
+    const activeGasUrl = (cached && !cached.includes("AKfycbxyOI-USpC1UzjQ74bTsyN1BZNwpIUmRlPgRGjGA3CwIFMfUoZEdF2IHyGVn7NdBgFQjw"))
+      ? "https://script.google.com/macros/s/AKfycbxyOI-USpC1UzjQ74bTsyN1BZNwpIUmRlPgRGjGA3CwIFMfUoZEdF2IHyGVn7NdBgFQjw/exec"
+      : (cached || "https://script.google.com/macros/s/AKfycbxyOI-USpC1UzjQ74bTsyN1BZNwpIUmRlPgRGjGA3CwIFMfUoZEdF2IHyGVn7NdBgFQjw/exec");
     return activeGasUrl ? 'connected' : 'not_configured';
   });
 
