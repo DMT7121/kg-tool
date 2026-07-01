@@ -288,6 +288,21 @@ const DEFAULT_SUGGESTIONS: Omit<TTSTemplate, 'id' | 'createdAt' | 'updatedAt'>[]
     pitch: 1.0,
     volume: 1.0,
     isFavorite: false
+  },
+  {
+    title: "Dời xe",
+    category: "Thông báo nhanh",
+    text: "Xin thông báo, Quý khách hàng có biển số xe {bien_so_xe}, vui lòng gặp bảo vệ để di chuyển xe đến vị trí khác. Xin cảm ơn quý khách!",
+    variables: ["bien_so_xe"],
+    providerId: "browser",
+    voiceId: "",
+    gender: "auto",
+    lang: "vi-VN",
+    rate: 1.0,
+    pitch: 1.0,
+    volume: 1.0,
+    isFavorite: false,
+    note: "Thông báo di dời xe của khách hàng"
   }
 ];
 
@@ -299,7 +314,13 @@ const FPT_VOICES = [
   { id: 'myan', name: 'Mỹ An (Nữ miền Trung)' },
   { id: 'thuminh', name: 'Thu Minh (Nữ miền Bắc)' },
   { id: 'giahuy', name: 'Gia Huy (Nam miền Trung)' },
-  { id: 'linhsan', name: 'Linh San (Nữ miền Bắc)' }
+  { id: 'linhsan', name: 'Linh San (Nữ miền Nam)' },
+  { id: 'caoanh', name: 'Cao Anh (Nữ miền Nam - Cao cấp)' },
+  { id: 'ngoclam', name: 'Ngọc Lam (Nữ miền Nam - Mới)' },
+  { id: 'duyphuong', name: 'Duy Phương (Nam miền Nam)' },
+  { id: 'thuha', name: 'Thu Hà (Nữ miền Bắc - Ấm áp)' },
+  { id: 'minhquang', name: 'Minh Quang (Nam miền Bắc)' },
+  { id: 'haicam', name: 'Hải Cẩm (Nữ miền Trung)' }
 ];
 
 // Viettel AI Voices Configuration
@@ -308,7 +329,33 @@ const VIETTEL_VOICES = [
   { id: 'diemmy', name: 'Diễm My (Nữ miền Nam)' },
   { id: 'maihoa', name: 'Mai Hoa (Nữ miền Trung)' },
   { id: 'duongphuong', name: 'Phương Phương (Nam miền Bắc)' },
-  { id: 'quangtuyen', name: 'Quang Tuyên (Nam miền Nam)' }
+  { id: 'quangtuyen', name: 'Quang Tuyên (Nam miền Nam)' },
+  { id: 'hn-quynhanh', name: 'Quỳnh Anh (Nữ miền Bắc - Mới)' },
+  { id: 'hcm-diemmy', name: 'Diễm My (Nữ miền Nam - Cao cấp)' },
+  { id: 'hue-maingoc', name: 'Mai Ngọc (Nữ miền Trung - Mới)' },
+  { id: 'hn-phuongtrang', name: 'Phương Trang (Nữ miền Bắc)' },
+  { id: 'hn-thaochi', name: 'Thảo Chi (Nữ miền Bắc)' },
+  { id: 'hn-thanhha', name: 'Thanh Hà (Nữ miền Bắc)' },
+  { id: 'hcm-phuongly', name: 'Phương Ly (Nữ miền Nam)' },
+  { id: 'hcm-thuydung', name: 'Thùy Dung (Nữ miền Nam)' },
+  { id: 'hn-thanhtung', name: 'Thanh Tùng (Nam miền Bắc)' },
+  { id: 'hue-baoquoc', name: 'Bảo Quốc (Nam miền Trung)' },
+  { id: 'hcm-minhquan', name: 'Minh Quân (Nam miền Nam)' },
+  { id: 'hn-thanhphuong', name: 'Thanh Phương (Nữ miền Bắc)' },
+  { id: 'hn-namkhanh', name: 'Nam Khánh (Nam miền Bắc)' },
+  { id: 'hn-leyen', name: 'Lê Yên (Nữ miền Nam)' },
+  { id: 'hn-tienquan', name: 'Tiến Quân (Nam miền Bắc)' },
+  { id: 'hcm-thuyduyen', name: 'Thúy Duyên (Nữ miền Nam)' }
+];
+
+// Zalo AI Voices Configuration
+const ZALO_VOICES = [
+  { id: '1', name: 'Nữ miền Nam 1' },
+  { id: '2', name: 'Nữ miền Bắc 1' },
+  { id: '3', name: 'Nam miền Nam' },
+  { id: '4', name: 'Nam miền Bắc' },
+  { id: '5', name: 'Nữ miền Bắc 2' },
+  { id: '6', name: 'Nữ miền Nam 2' }
 ];
 
 // Helper to normalize numbers to words for natural Vietnamese speech
@@ -443,7 +490,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   // Providers & active configurations
   const [providerSettings, setProviderSettings] = useState(() => {
     const saved = localStorage.getItem('kg_tool_tts_provider_settings');
-    return saved ? JSON.parse(saved) : {
+    const defaultSettings = {
       activeProvider: 'browser',
       browserVoiceURI: '',
       browserGender: 'auto',
@@ -462,39 +509,52 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       viettelSpeed: 1.0,
       viettelFormat: 'mp3',
       viettelReturnOption: 2,
+      zaloApiKey: '',
+      zaloVoiceId: '1',
+      zaloSpeed: 1.0,
+      zaloEndpoint: 'https://api.zalo.ai/v1/tts/synthesize',
+      zaloDailyLimit: 5000,
+      googleDailyLimit: 5000,
       autoFallback: true,
       fptDailyLimit: 5000,
       viettelDailyLimit: 5000,
       autoOptimize: true
     };
+    if (!saved) return defaultSettings;
+    try {
+      return { ...defaultSettings, ...JSON.parse(saved) };
+    } catch (e) {
+      return defaultSettings;
+    }
   });
 
-  // Quota usage states
-  const [fptUsedToday, setFptUsedToday] = useState<number>(() => {
+  // Consolidated Quota Initialization
+  const initialQuotas = useMemo(() => {
     const today = new Date().toDateString();
     const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
     if (savedDate !== today) {
       localStorage.setItem('kg_tool_tts_quota_date', today);
       localStorage.setItem('kg_tool_tts_quota_fpt_today', '0');
-      return 0;
-    }
-    const val = localStorage.getItem('kg_tool_tts_quota_fpt_today');
-    return val ? parseInt(val, 10) : 0;
-  });
-
-  const [viettelUsedToday, setViettelUsedToday] = useState<number>(() => {
-    const today = new Date().toDateString();
-    const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
-    if (savedDate !== today) {
-      localStorage.setItem('kg_tool_tts_quota_date', today);
       localStorage.setItem('kg_tool_tts_quota_viettel_today', '0');
-      return 0;
+      localStorage.setItem('kg_tool_tts_quota_zalo_today', '0');
+      localStorage.setItem('kg_tool_tts_quota_google_today', '0');
+      return { fpt: 0, viettel: 0, zalo: 0, google: 0 };
     }
-    const val = localStorage.getItem('kg_tool_tts_quota_viettel_today');
-    return val ? parseInt(val, 10) : 0;
-  });
+    return {
+      fpt: parseInt(localStorage.getItem('kg_tool_tts_quota_fpt_today') || '0', 10),
+      viettel: parseInt(localStorage.getItem('kg_tool_tts_quota_viettel_today') || '0', 10),
+      zalo: parseInt(localStorage.getItem('kg_tool_tts_quota_zalo_today') || '0', 10),
+      google: parseInt(localStorage.getItem('kg_tool_tts_quota_google_today') || '0', 10)
+    };
+  }, []);
 
-  const addQuotaUsage = (provider: 'fpt' | 'viettel', charCount: number) => {
+  // Quota usage states
+  const [fptUsedToday, setFptUsedToday] = useState<number>(initialQuotas.fpt);
+  const [viettelUsedToday, setViettelUsedToday] = useState<number>(initialQuotas.viettel);
+  const [zaloUsedToday, setZaloUsedToday] = useState<number>(initialQuotas.zalo);
+  const [googleUsedToday, setGoogleUsedToday] = useState<number>(initialQuotas.google);
+
+  const addQuotaUsage = (provider: 'fpt' | 'viettel' | 'zalo' | 'google', charCount: number) => {
     if (provider === 'fpt') {
       setFptUsedToday(prev => {
         const next = prev + charCount;
@@ -505,6 +565,18 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       setViettelUsedToday(prev => {
         const next = prev + charCount;
         localStorage.setItem('kg_tool_tts_quota_viettel_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'zalo') {
+      setZaloUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_zalo_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'google') {
+      setGoogleUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_google_today', next.toString());
         return next;
       });
     }
@@ -529,7 +601,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     ten_nhan_vien: "Nguyễn Văn Sang",
     thang_luong: "06/2026",
     so_tien: "15.000.000đ",
-    ngay: "28/06/2026"
+    ngay: "28/06/2026",
+    bien_so_xe: "30F - 123.45"
   });
 
   // System voices list
@@ -587,6 +660,60 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       }
     };
   }, []);
+
+  // Load settings from spreadsheet automatically on mount if connected
+  const loadSettingsFromSpreadsheet = async () => {
+    if (!gasUrl || !spreadsheetId) return;
+    try {
+      const getUrl = `${gasUrl}?action=get_tts_settings&ssId=${spreadsheetId}`;
+      const response = await fetch(getUrl);
+      const result = await response.json();
+      if (result.success && result.data) {
+        const cloudSettings = result.data;
+        setProviderSettings((prev: any) => ({
+          ...prev,
+          fptApiKey: cloudSettings.fptApiKey !== undefined ? cloudSettings.fptApiKey : prev.fptApiKey,
+          viettelToken: cloudSettings.viettelToken !== undefined ? cloudSettings.viettelToken : prev.viettelToken,
+          zaloApiKey: cloudSettings.zaloApiKey !== undefined ? cloudSettings.zaloApiKey : prev.zaloApiKey,
+        }));
+      }
+    } catch (e) {
+      console.warn("Failed to load settings from spreadsheet:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (gasUrl && spreadsheetId) {
+      loadSettingsFromSpreadsheet();
+    }
+  }, [gasUrl, spreadsheetId]);
+
+  const handleSaveSettingsToCloud = async () => {
+    if (!gasUrl || !spreadsheetId) {
+      showToast('Vui lòng kết nối Google Sheet trong cấu hình hệ thống trước.', 'error');
+      return;
+    }
+    showToast('Đang lưu và đồng bộ cấu hình lên Google Sheets...', 'info');
+    try {
+      await fetch(gasUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({
+          action: 'save_tts_settings',
+          spreadsheetId: spreadsheetId,
+          settings: [
+            { key: 'fptApiKey', value: providerSettings.fptApiKey || '' },
+            { key: 'viettelToken', value: providerSettings.viettelToken || '' },
+            { key: 'zaloApiKey', value: providerSettings.zaloApiKey || '' }
+          ]
+        })
+      });
+      showToast('Đã lưu cấu hình lên Google Sheets thành công!', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast(`Không thể đồng bộ cấu hình: ${e.message}`, 'error');
+    }
+  };
 
   // Parse variables from composeText, anything inside { }
   const parsedVariables = useMemo(() => {
@@ -925,6 +1052,146 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
   };
 
+  // Play using Zalo AI
+  const speakZalo = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (zaloUsedToday + charCount > providerSettings.zaloDailyLimit) {
+      if (providerSettings.autoFallback) {
+        showToast('Zalo AI đã vượt quá hạn mức Quota trong ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của Zalo AI.', 'error');
+        return;
+      }
+    }
+
+    if (!providerSettings.zaloApiKey) {
+      if (providerSettings.autoFallback) {
+        showToast('Chưa cấu hình API Key cho Zalo AI. Tự động dùng Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vui lòng nhập API Key cho Zalo AI trong Cấu hình.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    showToast('Đang gửi văn bản tới Zalo AI...', 'info');
+
+    try {
+      const params = new URLSearchParams();
+      params.append('input', textToSpeak);
+      params.append('speaker_id', providerSettings.zaloVoiceId);
+      params.append('speed', String(providerSettings.zaloSpeed));
+
+      const response = await fetch(providerSettings.zaloEndpoint, {
+        method: 'POST',
+        headers: {
+          'apikey': providerSettings.zaloApiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params
+      });
+
+      if (!response.ok) {
+        throw new Error(`Zalo AI trả về lỗi: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.error_code !== 0) {
+        throw new Error(result.error_message || 'Lỗi xử lý Zalo AI');
+      }
+
+      const audioUrl = result.data?.url;
+      if (!audioUrl) {
+        throw new Error('Không nhận được audio URL từ Zalo AI');
+      }
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+
+      audio.onplay = () => {
+        setPlaybackState('playing');
+      };
+      audio.onended = () => {
+        setPlaybackState('idle');
+        addQuotaUsage('zalo', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Zalo AI');
+        showToast('Lỗi phát âm thanh từ Zalo AI.', 'error');
+      };
+
+      audio.play();
+
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      showToast(`Zalo AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      speakBrowser(textToSpeak);
+    }
+  };
+
+  // Play using Google Translate TTS
+  const speakGoogle = (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (googleUsedToday + charCount > providerSettings.googleDailyLimit) {
+      if (providerSettings.autoFallback) {
+        showToast('Google TTS đã vượt quá hạn mức Quota trong ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của Google TTS.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    showToast('Đang gửi văn bản tới Google TTS...', 'info');
+
+    try {
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=${encodeURIComponent(textToSpeak)}`;
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+
+      audio.onplay = () => {
+        setPlaybackState('playing');
+      };
+      audio.onended = () => {
+        setPlaybackState('idle');
+        addQuotaUsage('google', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Google TTS');
+        showToast('Lỗi phát âm thanh từ Google TTS.', 'error');
+      };
+
+      audio.play();
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      showToast(`Google TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      speakBrowser(textToSpeak);
+    }
+  };
+
   const handleSpeak = async () => {
     if (!interpolatedText.trim()) {
       showToast('Vui lòng soạn câu nói trước khi nghe thử.', 'error');
@@ -940,6 +1207,10 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       await speakFpt(textToSpeak);
     } else if (provider === 'viettel') {
       await speakViettel(textToSpeak);
+    } else if (provider === 'zalo') {
+      await speakZalo(textToSpeak);
+    } else if (provider === 'google') {
+      speakGoogle(textToSpeak);
     } else if (provider === 'custom') {
       await speakCustom(textToSpeak);
     }
@@ -966,11 +1237,25 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       providerId: providerSettings.activeProvider,
       voiceId: providerSettings.activeProvider === 'browser' 
         ? (providerSettings.browserVoiceURI || 'Default vi-VN')
-        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptVoiceId : providerSettings.viettelVoiceId),
+        : providerSettings.activeProvider === 'fpt' 
+        ? providerSettings.fptVoiceId 
+        : providerSettings.activeProvider === 'viettel' 
+        ? providerSettings.viettelVoiceId
+        : providerSettings.activeProvider === 'zalo' 
+        ? providerSettings.zaloVoiceId 
+        : providerSettings.activeProvider === 'google' 
+        ? 'Google Voice' 
+        : 'Custom Voice',
       gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
       rate: providerSettings.activeProvider === 'browser' 
         ? providerSettings.rate 
-        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptSpeed : providerSettings.viettelSpeed),
+        : providerSettings.activeProvider === 'fpt' 
+        ? providerSettings.fptSpeed 
+        : providerSettings.activeProvider === 'viettel' 
+        ? providerSettings.viettelSpeed
+        : providerSettings.activeProvider === 'zalo' 
+        ? providerSettings.zaloSpeed
+        : 1.0,
       pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
       volume: providerSettings.volume,
       playedAt: new Date().toISOString(),
@@ -1004,12 +1289,24 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       providerId: providerSettings.activeProvider,
       voiceId: providerSettings.activeProvider === 'browser' 
         ? providerSettings.browserVoiceURI 
-        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptVoiceId : providerSettings.viettelVoiceId),
+        : providerSettings.activeProvider === 'fpt' 
+        ? providerSettings.fptVoiceId 
+        : providerSettings.activeProvider === 'viettel' 
+        ? providerSettings.viettelVoiceId
+        : providerSettings.activeProvider === 'zalo' 
+        ? providerSettings.zaloVoiceId 
+        : '',
       gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
       lang: 'vi-VN',
       rate: providerSettings.activeProvider === 'browser' 
         ? providerSettings.rate 
-        : (providerSettings.activeProvider === 'fpt' ? providerSettings.fptSpeed : providerSettings.viettelSpeed),
+        : providerSettings.activeProvider === 'fpt' 
+        ? providerSettings.fptSpeed 
+        : providerSettings.activeProvider === 'viettel' 
+        ? providerSettings.viettelSpeed
+        : providerSettings.activeProvider === 'zalo' 
+        ? providerSettings.zaloSpeed 
+        : 1.0,
       pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
       volume: providerSettings.volume,
       isFavorite: templates.find(t => t.id === id)?.isFavorite || false,
@@ -1063,16 +1360,20 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     setProviderSettings((prev: any) => {
       const isCloudFpt = tpl.providerId === 'fpt';
       const isCloudViettel = tpl.providerId === 'viettel';
+      const isCloudZalo = tpl.providerId === 'zalo';
+      const isCloudGoogle = tpl.providerId === 'google';
       return {
         ...prev,
         activeProvider: tpl.providerId || prev.activeProvider,
         volume: tpl.volume,
-        rate: !isCloudFpt && !isCloudViettel ? tpl.rate : prev.rate,
+        rate: !isCloudFpt && !isCloudViettel && !isCloudZalo && !isCloudGoogle ? tpl.rate : prev.rate,
         browserVoiceURI: tpl.providerId === 'browser' ? tpl.voiceId : prev.browserVoiceURI,
         fptVoiceId: isCloudFpt ? tpl.voiceId : prev.fptVoiceId,
         fptSpeed: isCloudFpt ? tpl.rate : prev.fptSpeed,
         viettelVoiceId: isCloudViettel ? tpl.voiceId : prev.viettelVoiceId,
-        viettelSpeed: isCloudViettel ? tpl.rate : prev.viettelSpeed
+        viettelSpeed: isCloudViettel ? tpl.rate : prev.viettelSpeed,
+        zaloVoiceId: isCloudZalo ? tpl.voiceId : prev.zaloVoiceId,
+        zaloSpeed: isCloudZalo ? tpl.rate : prev.zaloSpeed
       };
     });
 
@@ -1153,6 +1454,24 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         if (!remoteMatch || new Date(t.updatedAt).getTime() > new Date(remoteMatch.updatedAt).getTime()) {
           await saveTemplateToSpreadsheet(t);
         }
+      }
+
+      // 1.1 Fetch remote settings
+      try {
+        const settingsUrl = `${gasUrl}?action=get_tts_settings&ssId=${spreadsheetId}`;
+        const settingsRes = await fetch(settingsUrl);
+        const settingsResult = await settingsRes.json();
+        if (settingsResult.success && settingsResult.data) {
+          const cloudSettings = settingsResult.data;
+          setProviderSettings((prev: any) => ({
+            ...prev,
+            fptApiKey: cloudSettings.fptApiKey !== undefined ? cloudSettings.fptApiKey : prev.fptApiKey,
+            viettelToken: cloudSettings.viettelToken !== undefined ? cloudSettings.viettelToken : prev.viettelToken,
+            zaloApiKey: cloudSettings.zaloApiKey !== undefined ? cloudSettings.zaloApiKey : prev.zaloApiKey,
+          }));
+        }
+      } catch (err) {
+        console.warn("Failed to sync TTS settings:", err);
       }
 
       setTemplates(mergedList);
@@ -1268,28 +1587,49 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           value={
             providerSettings.activeProvider === 'browser' ? 'Browser Native' :
             providerSettings.activeProvider === 'fpt' ? 'FPT.AI Cloud' :
-            providerSettings.activeProvider === 'viettel' ? 'Viettel AI Cloud' : 'Custom Server'
+            providerSettings.activeProvider === 'viettel' ? 'Viettel AI Cloud' :
+            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Cloud' :
+            providerSettings.activeProvider === 'google' ? 'Google TTS Free' : 'Custom Server'
           } 
           subtext={
             providerSettings.activeProvider === 'browser' ? 'Giọng đọc trình duyệt miễn phí' :
             providerSettings.activeProvider === 'fpt' ? 'Đã kích hoạt FPT' :
-            providerSettings.activeProvider === 'viettel' ? 'Đã kích hoạt Viettel' : providerSettings.customEndpoint
+            providerSettings.activeProvider === 'viettel' ? 'Đã kích hoạt Viettel' :
+            providerSettings.activeProvider === 'zalo' ? 'Đã kích hoạt Zalo' :
+            providerSettings.activeProvider === 'google' ? 'Google Translate TTS' : providerSettings.customEndpoint
           }
           hasData={true} 
         />
         <StatCard 
           icon="📊" 
-          label="FPT.AI Quota ngày" 
-          value={`${fptUsedToday} / ${providerSettings.fptDailyLimit} kí tự`}
+          label={
+            providerSettings.activeProvider === 'browser' ? 'Browser Quota' :
+            providerSettings.activeProvider === 'fpt' ? 'FPT.AI Quota' :
+            providerSettings.activeProvider === 'viettel' ? 'Viettel AI Quota' :
+            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Quota' :
+            providerSettings.activeProvider === 'google' ? 'Google TTS Quota' : 'Custom Server'
+          } 
+          value={
+            providerSettings.activeProvider === 'browser' ? 'Không giới hạn' :
+            providerSettings.activeProvider === 'fpt' ? `${fptUsedToday} / ${providerSettings.fptDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'viettel' ? `${viettelUsedToday} / ${providerSettings.viettelDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'zalo' ? `${zaloUsedToday} / ${providerSettings.zaloDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'google' ? `${googleUsedToday} / ${providerSettings.googleDailyLimit} kí tự` : 'Không giới hạn'
+          }
           subtext="Số kí tự đã gửi hôm nay"
-          hasData={fptUsedToday > 0} 
+          hasData={
+            providerSettings.activeProvider === 'fpt' ? fptUsedToday > 0 :
+            providerSettings.activeProvider === 'viettel' ? viettelUsedToday > 0 :
+            providerSettings.activeProvider === 'zalo' ? zaloUsedToday > 0 :
+            providerSettings.activeProvider === 'google' ? googleUsedToday > 0 : false
+          } 
         />
         <StatCard 
           icon="📈" 
-          label="Viettel Quota ngày" 
-          value={`${viettelUsedToday} / ${providerSettings.viettelDailyLimit} kí tự`} 
-          subtext="Số kí tự đã gửi hôm nay"
-          hasData={viettelUsedToday > 0} 
+          label="Tổng phát hôm nay" 
+          value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday} kí tự`} 
+          subtext="Tổng lưu lượng các Cloud Provider"
+          hasData={(fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday) > 0} 
         />
         <StatCard 
           icon="📚" 
@@ -1670,10 +2010,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeTitle("Đặt bàn mới");
                     setComposeCategory("Đặt bàn");
                     setSelectedTemplateId(null);
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
-                    else speakCustom(normalizeTextForVietnameseTTS(text));
+                    const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
+                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
+                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
+                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
+                    else speakCustom(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -1689,10 +2032,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeTitle("Chuyển khoản mới");
                     setComposeCategory("Thu ngân");
                     setSelectedTemplateId(null);
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
-                    else speakCustom(normalizeTextForVietnameseTTS(text));
+                    const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
+                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
+                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
+                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
+                    else speakCustom(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -1708,10 +2054,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeTitle("Chốt chấm công");
                     setComposeCategory("Chấm công");
                     setSelectedTemplateId(null);
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
-                    else speakCustom(normalizeTextForVietnameseTTS(text));
+                    const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
+                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
+                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
+                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
+                    else speakCustom(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -1727,15 +2076,47 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeTitle("Duyệt chuyển lương");
                     setComposeCategory("Lương/Nhân sự");
                     setSelectedTemplateId(null);
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalizeTextForVietnameseTTS(text));
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalizeTextForVietnameseTTS(text));
-                    else speakCustom(normalizeTextForVietnameseTTS(text));
+                    const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
+                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
+                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
+                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
+                    else speakCustom(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
                   <strong style={{ fontSize: '0.85rem' }}>💵 Báo cáo xuất lương</strong>
                   <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Thông báo cho Kế toán trưởng duyệt lương</span>
+                </button>
+
+                <button 
+                  className="btn-outline" 
+                  onClick={() => {
+                    const plate = prompt("Nhập biển số xe cần dời:", variablesInputValues.bien_so_xe || "30F-123.45");
+                    if (plate === null) return;
+                    const cleanPlate = plate.trim() || "chưa rõ";
+                    setVariablesInputValues(prev => ({ ...prev, bien_so_xe: cleanPlate }));
+                    
+                    const textTpl = "Xin thông báo, Quý khách hàng có biển số xe {bien_so_xe}, vui lòng gặp bảo vệ để di chuyển xe đến vị trí khác. Xin cảm ơn quý khách!";
+                    setComposeText(textTpl);
+                    setComposeTitle("Dời xe");
+                    setComposeCategory("Thông báo nhanh");
+                    setSelectedTemplateId(null);
+
+                    const text = textTpl.replace("{bien_so_xe}", cleanPlate);
+                    const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
+                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
+                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
+                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
+                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
+                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
+                    else speakCustom(normalized);
+                  }}
+                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px', gridColumn: isMobileScreen ? 'auto' : 'span 2' }}
+                >
+                  <strong style={{ fontSize: '0.85rem' }}>🚗 Dời xe khẩn cấp</strong>
+                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Thông báo yêu cầu khách dời xe</span>
                 </button>
               </div>
             </div>
@@ -1768,6 +2149,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       <option value="browser">🌐 Browser Speech API (Miễn phí)</option>
                       <option value="fpt">⚡ FPT.AI Text to Speech (Cloud)</option>
                       <option value="viettel">🎖️ Viettel AI Text to Speech (Cloud)</option>
+                      <option value="zalo">💬 Zalo AI Text to Speech (Cloud)</option>
+                      <option value="google">🔍 Google TTS (Miễn phí, Không Key)</option>
                       <option value="custom">🛠️ Custom Endpoint Server (Tự host)</option>
                     </select>
                   </div>
@@ -1863,6 +2246,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           value={providerSettings.fptApiKey || ''}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptApiKey: e.target.value }))}
                         />
+                        <div style={{ marginTop: '4px', textAlign: 'right' }}>
+                          <a href="https://console.fpt.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
+                            🔗 Lấy API Key tại FPT.AI Console
+                          </a>
+                        </div>
                       </div>
 
                       <div className="form-group">
@@ -1964,6 +2352,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           value={providerSettings.viettelToken || ''}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelToken: e.target.value }))}
                         />
+                        <div style={{ marginTop: '4px', textAlign: 'right' }}>
+                          <a href="https://viettelai.vn" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
+                            🔗 Lấy Token tại Viettel AI Console
+                          </a>
+                        </div>
                       </div>
 
                       <div className="form-group">
@@ -2044,6 +2437,120 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     </>
                   )}
 
+                  {/* Zalo AI configurations */}
+                  {providerSettings.activeProvider === 'zalo' && (
+                    <>
+                      {/* Safety API Key warning banner */}
+                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
+                        <ShieldAlert size={16} style={{ flexShrink: 0 }} />
+                        <span>⚠️ API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Key size={12} />
+                          <span>Zalo AI API Key</span>
+                        </label>
+                        <input 
+                          type="password" 
+                          className="form-control" 
+                          placeholder="Nhập API Key Zalo AI"
+                          value={providerSettings.zaloApiKey || ''}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloApiKey: e.target.value }))}
+                        />
+                        <div style={{ marginTop: '4px', textAlign: 'right' }}>
+                          <a href="https://zalo.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
+                            🔗 Lấy API Key tại Zalo AI Console
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Chọn giọng (Zalo AI Voices)</label>
+                        <select 
+                          className="form-control"
+                          value={providerSettings.zaloVoiceId}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloVoiceId: e.target.value }))}
+                          style={{ background: '#0a101e', color: 'white' }}
+                        >
+                          {ZALO_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Speed Zalo AI Slider (0.8 to 1.2) */}
+                      <div className="form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className="form-label" style={{ margin: 0 }}>Tốc độ đọc: {providerSettings.zaloSpeed}x</label>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="0.8" 
+                          max="1.2" 
+                          step="0.05"
+                          value={providerSettings.zaloSpeed} 
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloSpeed: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Hạn mức (Kí tự)</label>
+                          <input 
+                            type="number" 
+                            className="form-control"
+                            value={providerSettings.zaloDailyLimit}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Zalo API Endpoint</label>
+                        <input 
+                          type="text" 
+                          className="form-control"
+                          value={providerSettings.zaloEndpoint}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloEndpoint: e.target.value }))}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => {
+                          setProviderSettings((prev: any) => ({ ...prev, zaloApiKey: '' }));
+                          showToast('Đã xóa Zalo API Key thành công!', 'info');
+                        }}
+                        style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
+                      >
+                        Xóa Zalo API Key
+                      </button>
+                    </>
+                  )}
+
+                  {/* Google TTS configurations */}
+                  {providerSettings.activeProvider === 'google' && (
+                    <>
+                      <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#34d399' }}>
+                        <Info size={16} style={{ flexShrink: 0 }} />
+                        <span>💡 Google TTS hoàn toàn miễn phí, sử dụng giọng nói tiếng Việt chuẩn mà không cần API Key hay cấu hình tài khoản.</span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Hạn mức hàng ngày (Kí tự)</label>
+                        <input 
+                          type="number" 
+                          className="form-control"
+                          value={providerSettings.googleDailyLimit}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                        />
+                      </div>
+                    </>
+                  )}
+
                   {/* Custom settings */}
                   {providerSettings.activeProvider === 'custom' && (
                     <div className="form-group">
@@ -2075,6 +2582,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     />
                   </div>
 
+                  {/* Save config button */}
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={handleSaveSettingsToCloud}
+                    style={{ height: '40px', fontSize: '0.85rem', width: '100%', marginTop: '0.5rem' }}
+                  >
+                    <Save size={16} />
+                    <span>Lưu & Đồng bộ cấu hình Cloud</span>
+                  </button>
+
                   {/* Clear all credentials */}
                   <button
                     type="button"
@@ -2083,7 +2601,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       setProviderSettings((prev: any) => ({
                         ...prev,
                         fptApiKey: '',
-                        viettelToken: ''
+                        viettelToken: '',
+                        zaloApiKey: ''
                       }));
                       showToast('Đã xóa toàn bộ API Key khỏi bộ nhớ trình duyệt!', 'info');
                     }}
