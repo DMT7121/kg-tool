@@ -655,7 +655,6 @@ function saveTtsSettingsRows(sheet, settingsList, ssId) {
 function test() {
   getOrCreateSheets("1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU");
 }
-
 /**
  * Lấy lịch sử chấm công từ sheet Bang_Cham_Cong_Log
  */
@@ -679,9 +678,188 @@ function fetchAttendanceLogs(ss, ssId) {
 }
 
 /**
+ * Chuyển đổi định dạng giờ "HH:mm:ss" hoặc "HH:mm" thành số giây trong ngày để so sánh chính xác
+ */
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr) return 0;
+  var parts = timeStr.toString().split(":");
+  var hrs = parseInt(parts[0], 10) || 0;
+  var mins = parseInt(parts[1], 10) || 0;
+  var secs = parseInt(parts[2], 10) || 0;
+  return hrs * 3600 + mins * 60 + secs;
+}
+
+/**
+ * Ghi nhận tất cả các lượt chấm công vào sheet Logs dạng thô (semicolon-separated)
+ */
+function writeToRawLogs(ss, employeeName, dateString, timeString) {
+  var sheet = ss.getSheetByName("Logs");
+  if (!sheet) {
+    sheet = ss.insertSheet("Logs");
+    sheet.appendRow(['Tên nhân viên', 'Ngày', 'Lịch sử chấm công']);
+    sheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#eef4ff');
+  }
+
+  var lastRow = sheet.getLastRow();
+/**
+ * Xử lý sự kiện chấm công thông minh trong Bang_Cham_Cong_Log (In-Memory)
+ */
+function processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStringObj, gioString, isBulk) {
+  var tSeconds = parseTimeToSeconds(gioString);
+  var lastShift = null;
+
+  // Tìm ca cuối cùng của nhân viên trong ngày từ existingRecords
+  for (var i = existingRecords.length - 1; i >= 0; i--) {
+    var rowName = existingRecords[i][0];
+    var rowDate = existingRecords[i][1];
+    if (rowName === employeeName && rowDate === dateStringObj) {
+      lastShift = {
+        arrayIndex: i,
+        checkIn: existingRecords[i][2],
+        checkOut: existingRecords[i][3],
+        notes: existingRecords[i][4]
+      };
+      break;
+    }
+  }
+
+  if (lastShift) {
+    if (!lastShift.checkOut || lastShift.checkOut === "") {
+      // Đã có giờ vào, chưa có giờ ra
+      var inSeconds = parseTimeToSeconds(lastShift.checkIn);
+      var diff = tSeconds - inSeconds;
+      if (diff <= 600) {
+        // Chấm công liên tiếp trong vòng 10 phút kể từ giờ vào -> bỏ qua
+        return { status: "ignored", message: "Bỏ qua chấm công liên tiếp dưới 10 phút cho " + employeeName + " lúc " + gioString };
+      } else {
+        // Cập nhật giờ ra cho ca hiện tại
+        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Ra", existingRecords);
+        
+        // Cập nhật local array cho caller
+        existingRecords[lastShift.arrayIndex][3] = gioString;
+        existingRecords[lastShift.arrayIndex][4] = "Chấm công vào ca / Chấm công ra ca";
+
+        if (!isBulk) {
+          sendTelegram("🔴 <b>[KING'S GRILL - HIKVISION RA CA]</b>\n" +
+                       "Nhân viên: <b>" + employeeName + "</b>\n" +
+                       "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+          sendGoogleChat("🔴 *[KING'S GRILL - HIKVISION RA CA]*\n" +
+                         "Nhân viên: *" + employeeName + "*\n" +
+                         "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
+        }
+
+        if (canSend && !isBulk) {
+          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
+        }
+
+        return { 
+          status: "success", 
+          type: "out", 
+          message: "Ghi nhận Ra Ca thành công lúc " + gioString,
+          modifiedArrayIndex: lastShift.arrayIndex,
+          canSendEmail: canSend
+        };
+      }
+    } else {
+      // Đã có cả giờ vào và giờ ra của ca gần nhất
+      var outSeconds = parseTimeToSeconds(lastShift.checkOut);
+      var diff = tSeconds - outSeconds;
+      if (diff < 900) {
+        // Bắt buộc ca mới sau ca cũ ít nhất 15 phút -> bỏ qua
+        return { status: "ignored", message: "Bỏ qua chấm công mới dưới 15 phút sau giờ ra cũ cho " + employeeName + " lúc " + gioString };
+      } else {
+        // Tạo ca mới
+        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", existingRecords);
+        
+        var newRow = [employeeName, dateStringObj, gioString, "", "Chấm công vào ca"];
+        existingRecords.push(newRow);
+
+        if (!isBulk) {
+          sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
+                       "Nhân viên: <b>" + employeeName + "</b>\n" +
+                       "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+          sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
+                         "Nhân viên: *" + employeeName + "*\n" +
+                         "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
+        }
+
+        if (canSend && !isBulk) {
+          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+        }
+
+        return { 
+          status: "success", 
+          type: "in", 
+          message: "Ghi nhận Vào Ca mới thành công lúc " + gioString,
+          newRow: newRow,
+          canSendEmail: canSend
+        };
+      }
+    }
+  } else {
+    // Chưa có ca nào trong ngày
+    var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", existingRecords);
+    
+    var newRow = [employeeName, dateStringObj, gioString, "", "Chấm công vào ca"];
+    existingRecords.push(newRow);
+
+    if (!isBulk) {
+      sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
+                   "Nhân viên: <b>" + employeeName + "</b>\n" +
+                   "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+      sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
+                   "Nhân viên: *" + employeeName + "*\n" +
+                   "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
+    }
+
+    if (canSend && !isBulk) {
+      sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
+    }
+
+    return { 
+      status: "success", 
+      type: "in", 
+      message: "Ghi nhận Vào Ca thành công lúc " + gioString,
+      newRow: newRow,
+      canSendEmail: canSend
+    };
+  }
+}
+
+/**
+ * Ghi nhận thô vào cache Logs trong bộ nhớ
+ */
+function processRawLogInMemory(existingLogs, employeeName, dateString, timeString, modifiedLogIndices) {
+  var matchIndex = -1;
+  for (var i = existingLogs.length - 1; i >= 0; i--) {
+    if (existingLogs[i][0].toString() === employeeName && existingLogs[i][1].toString() === dateString) {
+      matchIndex = i;
+      break;
+    }
+  }
+  
+  if (matchIndex !== -1) {
+    var existingTimes = existingLogs[matchIndex][2] ? existingLogs[matchIndex][2].toString() : "";
+    var newTimes = existingTimes ? existingTimes + "; " + timeString : timeString;
+    existingLogs[matchIndex][2] = newTimes;
+    modifiedLogIndices[matchIndex] = true;
+  } else {
+    var newRow = [employeeName, dateString, timeString];
+    existingLogs.push(newRow);
+  }
+}
+
+/**
  * Xử lý đồng bộ chấm công từ máy chấm công Hikvision (qua Cloudflare Worker)
  */
 function externalHikvisionSync(data, ss) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (e) {
+    return { success: false, status: "error", message: "Hệ thống đang bận xử lý yêu cầu khác, vui lòng thử lại sau." };
+  }
+
   try {
     var payload = data.payload || {};
     if (payload.secret_key !== "KINGS_GRILL_HIKVISION_SECRET_2026") {
@@ -703,8 +881,12 @@ function externalHikvisionSync(data, ss) {
     }
 
     var dateStringObj = Utilities.formatDate(now, "GMT+7", "dd/MM/yyyy");
-    var gioString = Utilities.formatDate(now, "GMT+7", "HH:mm");
+    var gioString = Utilities.formatDate(now, "GMT+7", "HH:mm:ss");
 
+    // 1. Ghi nhận thô vào sheet Logs
+    writeToRawLogs(ss, employeeName, dateStringObj, gioString);
+
+    // 2. Ghi nhận thông minh vào Bang_Cham_Cong_Log
     var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
     if (!sheet) {
       sheet = ss.insertSheet("Bang_Cham_Cong_Log");
@@ -713,65 +895,29 @@ function externalHikvisionSync(data, ss) {
     }
 
     var lastRow = sheet.getLastRow();
-    var matchRowIndex = -1;
+    var existingRecords = [];
     if (lastRow > 1) {
-      var values = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
-      for (var i = values.length - 1; i >= 0; i--) {
-        if (values[i][0] === employeeName && values[i][1] === dateStringObj && values[i][2] !== "" && (!values[i][3] || values[i][3] === "")) {
-          matchRowIndex = i + 2;
-          break;
-        }
+      existingRecords = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+    }
+
+    var result = processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStringObj, gioString, false);
+
+    // Write back changes to Bang_Cham_Cong_Log
+    if (result.status === "success") {
+      if (result.newRow) {
+        sheet.appendRow(result.newRow);
+      } else if (result.modifiedArrayIndex !== undefined) {
+        var rowIndex = result.modifiedArrayIndex + 2;
+        sheet.getRange(rowIndex, 4).setValue(gioString);
+        sheet.getRange(rowIndex, 5).setValue("Chấm công vào ca / Chấm công ra ca");
       }
     }
 
-    if (matchRowIndex !== -1) {
-      // --- XỬ LÝ RA CA (OUT) ---
-      var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Ra", sheet);
-
-      sheet.getRange(matchRowIndex, 4).setValue(gioString);
-      sheet.getRange(matchRowIndex, 5).setValue("Đồng bộ máy chấm công (Ra)");
-
-      // Gửi thông báo Telegram
-      sendTelegram("🔴 <b>[KING'S GRILL - HIKVISION RA CA]</b>\n" +
-                   "Nhân viên: <b>" + employeeName + "</b>\n" +
-                   "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
-
-      // Gửi thông báo Google Chat
-      sendGoogleChat("🔴 *[KING'S GRILL - HIKVISION RA CA]*\n" +
-                     "Nhân viên: *" + employeeName + "*\n" +
-                     "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
-
-      // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
-      if (canSend) {
-        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
-      }
-
-      return { success: true, status: "success", message: "Ghi nhận Ra Ca (Hikvision) thành công lúc " + gioString };
-    } else {
-      // --- XỬ LÝ VÀO CA (IN) ---
-      var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", sheet);
-
-      sheet.appendRow([employeeName, dateStringObj, gioString, "", "Đồng bộ máy chấm công (Vào)"]);
-
-      // Gửi thông báo Telegram
-      sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
-                   "Nhân viên: <b>" + employeeName + "</b>\n" +
-                   "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
-
-      // Gửi thông báo Google Chat
-      sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
-                     "Nhân viên: *" + employeeName + "*\n" +
-                     "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
-
-      // Gửi email thông báo cho nhân viên nếu thỏa mãn điều kiện giãn cách
-      if (canSend) {
-        sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
-      }
-
-      return { success: true, status: "success", message: "Ghi nhận Vào Ca (Hikvision) thành công lúc " + gioString };
-    }
+    return { success: true, status: result.status, message: result.message };
   } catch (err) {
     return { success: false, status: "error", message: "Lỗi đồng bộ: " + err.message };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -779,6 +925,13 @@ function externalHikvisionSync(data, ss) {
  * Xử lý đồng bộ hàng loạt (bulk sync) từ máy chấm công khi khôi phục kết nối
  */
 function externalHikvisionBulkSync(data, ss) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (e) {
+    return { success: false, status: "error", message: "Hệ thống đang bận xử lý yêu cầu khác, vui lòng thử lại sau." };
+  }
+
   try {
     var payload = data.payload || {};
     if (payload.secret_key !== "KINGS_GRILL_HIKVISION_SECRET_2026") {
@@ -790,6 +943,7 @@ function externalHikvisionBulkSync(data, ss) {
       return { success: true, status: "success", message: "Không có sự kiện nào cần đồng bộ.", importedCount: 0 };
     }
 
+    // 1. Đọc dữ liệu Bang_Cham_Cong_Log
     var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
     if (!sheet) {
       sheet = ss.insertSheet("Bang_Cham_Cong_Log");
@@ -797,19 +951,34 @@ function externalHikvisionBulkSync(data, ss) {
       sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
     }
 
-    var importedCount = 0;
     var lastRow = sheet.getLastRow();
-    
-    // Đọc toàn bộ dữ liệu hiện tại để tránh trùng lặp
     var existingRecords = [];
     if (lastRow > 1) {
-      existingRecords = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+      existingRecords = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    }
+
+    // 2. Đọc dữ liệu Logs
+    var logsSheet = ss.getSheetByName("Logs");
+    if (!logsSheet) {
+      logsSheet = ss.insertSheet("Logs");
+      logsSheet.appendRow(['Tên nhân viên', 'Ngày', 'Lịch sử chấm công']);
+      logsSheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#eef4ff');
+    }
+    
+    var logsLastRow = logsSheet.getLastRow();
+    var existingLogs = [];
+    if (logsLastRow > 1) {
+      existingLogs = logsSheet.getRange(2, 1, logsLastRow - 1, 3).getValues();
     }
 
     // Tiền xử lý sự kiện: sắp xếp theo thời gian tăng dần
     events.sort(function(a, b) {
       return new Date(a.time).getTime() - new Date(b.time).getTime();
     });
+
+    var modifiedLogIndices = {};
+    var importedCount = 0;
+    var bulkDetails = [];
 
     for (var idx = 0; idx < events.length; idx++) {
       var event = events[idx];
@@ -820,79 +989,15 @@ function externalHikvisionBulkSync(data, ss) {
       if (isNaN(eventTime.getTime())) continue;
 
       var dateStringObj = Utilities.formatDate(eventTime, "GMT+7", "dd/MM/yyyy");
-      var gioString = Utilities.formatDate(eventTime, "GMT+7", "HH:mm");
-      var noteString = "đồng bộ bổ sung từ máy chấm công, chấm công không đồng bộ kịp thời do lỗi mạng";
+      var gioString = Utilities.formatDate(eventTime, "GMT+7", "HH:mm:ss");
 
-      // Kiểm tra trùng lặp
-      var isDuplicate = false;
-      var matchRowIndex = -1;
+      // A. Ghi nhận thô vào cache Logs
+      processRawLogInMemory(existingLogs, employeeName, dateStringObj, gioString, modifiedLogIndices);
 
-      // Tìm bản ghi phù hợp để điền giờ ra hoặc kiểm tra trùng lặp giờ vào
-      for (var i = existingRecords.length - 1; i >= 0; i--) {
-        var rowName = existingRecords[i][0];
-        var rowDate = existingRecords[i][1];
-        var rowIn = existingRecords[i][2];
-        var rowOut = existingRecords[i][3];
-
-        if (rowName === employeeName && rowDate === dateStringObj) {
-          if (rowIn === gioString || rowOut === gioString) {
-            isDuplicate = true;
-            break;
-          }
-          
-          if (rowIn !== "" && rowOut === "") {
-            var inTimeParts = rowIn.split(":");
-            var inMinutes = parseInt(inTimeParts[0], 10) * 60 + parseInt(inTimeParts[1], 10);
-            var outTimeParts = gioString.split(":");
-            var outMinutes = parseInt(outTimeParts[0], 10) * 60 + parseInt(outTimeParts[1], 10);
-            
-            if (outMinutes > inMinutes) {
-              matchRowIndex = i + 2;
-              break;
-            }
-          }
-        }
-      }
-
-      if (isDuplicate) {
-        continue;
-      }
-
-      if (matchRowIndex !== -1) {
-        // Gửi email thông báo cho nhân viên khi ra ca bù
-        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Ra", sheet);
-
-        sheet.getRange(matchRowIndex, 4).setValue(gioString);
-        sheet.getRange(matchRowIndex, 5).setValue(noteString);
-        existingRecords[matchRowIndex - 2][3] = gioString;
-        existingRecords[matchRowIndex - 2][4] = noteString;
+      // B. Ghi nhận thông minh vào cache Bang_Cham_Cong_Log
+      var result = processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStringObj, gioString, true);
+      if (result.status === "success") {
         importedCount++;
-
-        // Gửi thông báo Google Chat
-        sendGoogleChat("🔴 *[ĐỒNG BỘ BÙ - RA CA]*\n" +
-                       "Nhân viên: *" + employeeName + "*\n" +
-                       "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
-
-        if (canSend) {
-          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Ra", ss);
-        }
-      } else {
-        // Gửi email thông báo cho nhân viên khi vào ca bù
-        var canSend = shouldSendEmail(employeeName, dateStringObj, gioString, "Vào", sheet);
-
-        var newRow = [employeeName, dateStringObj, gioString, "", noteString];
-        sheet.appendRow(newRow);
-        existingRecords.push(newRow);
-        importedCount++;
-
-        // Gửi thông báo Google Chat
-        sendGoogleChat("🟢 *[ĐỒNG BỘ BÙ - VÀO CA]*\n" +
-                       "Nhân viên: *" + employeeName + "*\n" +
-                       "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
-
-        if (canSend) {
-          sendAttendanceEmail(employeeName, dateStringObj, gioString, "Vào", ss);
-        }
       }
     }
 
@@ -1213,22 +1318,20 @@ function initSystemSheets(ss, brevoKey, brevoSender) {
 /**
  * Xác định xem có nên gửi email cho lượt chấm công này hay không (giãn cách tối thiểu 30 phút giữa các lần gửi cùng loại trong ngày)
  */
-function shouldSendEmail(employeeName, dateString, timeString, type, sheet) {
+function shouldSendEmail(employeeName, dateString, timeString, type, existingRecords) {
   try {
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) return true; // Bảng rỗng, cho phép gửi
+    if (!existingRecords || existingRecords.length === 0) return true; // Bảng rỗng, cho phép gửi
     
-    var values = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
     var isCheckIn = type === "Vào";
     var colIndex = isCheckIn ? 2 : 3; // Cột Giờ vào (chỉ số 2) hoặc Giờ ra (chỉ số 3)
     
     var newTimeMinutes = parseTimeToMinutes(timeString);
     var lastEventMinutes = -1;
     
-    for (var i = 0; i < values.length; i++) {
-      var rowName = values[i][0];
-      var rowDate = values[i][1];
-      var rowTime = values[i][colIndex];
+    for (var i = 0; i < existingRecords.length; i++) {
+      var rowName = existingRecords[i][0];
+      var rowDate = existingRecords[i][1];
+      var rowTime = existingRecords[i][colIndex];
       
       if (rowName === employeeName && rowDate === dateString && rowTime && rowTime.trim() !== "") {
         var minutes = parseTimeToMinutes(rowTime);

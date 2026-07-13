@@ -137,7 +137,7 @@ export default {
       // 3. CHUYỂN TIẾP LÊN GOOGLE APPS SCRIPT
       const gasPayload = {
         action: "hikvision_sync",
-        spreadsheetId: "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
+        spreadsheetId: env.SPREADSHEET_ID || "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
         payload: {
           secret_key: WEBHOOK_SECRET,
           ma_nv: empId,
@@ -327,7 +327,7 @@ async function handleOfflineSync(data, env) {
     // Chuyển tiếp lên Google Apps Script Web App
     const gasPayload = {
       action: "hikvision_bulk_sync",
-      spreadsheetId: "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
+      spreadsheetId: env.SPREADSHEET_ID || "1jd3ANq8kFEaheluau15Akk_qIHO-qojN7XI0256hZPU",
       payload: {
         secret_key: WEBHOOK_SECRET,
         events: eventsToSync

@@ -202,10 +202,13 @@ function parseValToDate(dateVal: any, timeVal?: any): Date | null {
               return new Date(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDate(), timeVal.getHours(), timeVal.getMinutes(), timeVal.getSeconds());
           }
           const timeStr = String(timeVal).trim();
-          const [hours, minutes] = timeStr.split(':').map(Number);
+          const parts = timeStr.split(':').map(Number);
+          const hours = parts[0];
+          const minutes = parts[1];
+          const seconds = parts[2] || 0;
           if (!isNaN(hours) && !isNaN(minutes)) {
              const result = new Date(dateVal);
-             result.setHours(hours, minutes, 0, 0);
+             result.setHours(hours, minutes, seconds, 0);
              return result;
           }
       }
@@ -251,9 +254,12 @@ function parseValToDate(dateVal: any, timeVal?: any): Date | null {
           tStr = String(timeVal).trim();
       }
       
-      const [h, min] = tStr.split(':').map(Number);
+      const parts = tStr.split(':').map(Number);
+      const h = parts[0];
+      const min = parts[1];
+      const sec = parts[2] || 0;
       if (!isNaN(h) && !isNaN(min)) {
-          result.setHours(h, min, 0, 0);
+          result.setHours(h, min, sec, 0);
       }
   }
 
@@ -293,7 +299,13 @@ export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
       }
     } else {
       checkIn = groupRecords[0].timestamp;
-      checkOut = groupRecords[groupRecords.length - 1].timestamp;
+      const potentialCheckOut = groupRecords[groupRecords.length - 1].timestamp;
+      // If check-out is within 10 minutes (600,000 ms) of check-in, treat it as a duplicate check-in (not a valid check-out)
+      if (potentialCheckOut.getTime() - checkIn.getTime() > 10 * 60 * 1000) {
+        checkOut = potentialCheckOut;
+      } else {
+        checkOut = null;
+      }
     }
 
     let overtime = false;
@@ -413,8 +425,8 @@ export async function exportToExcel(records: ProcessedRecord[]): Promise<Blob> {
         const row = worksheet.addRow({
             name: r.employeeName,
             date: format(new Date(r.logicalDate), 'dd/MM/yyyy'),
-            checkin: r.checkIn ? format(r.checkIn, 'HH:mm') : '',
-            checkout: r.checkOut ? format(r.checkOut, 'HH:mm') : '',
+            checkin: r.checkIn ? format(r.checkIn, 'HH:mm:ss') : '',
+            checkout: r.checkOut ? format(r.checkOut, 'HH:mm:ss') : '',
             note: noteStr
         });
 
@@ -426,3 +438,44 @@ export async function exportToExcel(records: ProcessedRecord[]): Promise<Blob> {
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
+
+export async function exportAttendanceTemplate(): Promise<Blob> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Mau_Cham_Cong_Tho');
+
+  // Add Header
+  worksheet.columns = [
+    { header: 'Tên nhân viên', key: 'name', width: 25 },
+    { header: 'Ngày', key: 'date', width: 15 },
+    { header: 'Giờ', key: 'time', width: 15 }
+  ];
+
+  // Style Header
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF1E3A8A' } // Dark blue
+  };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Sample data
+  const sampleData = [
+    { name: 'Nguyễn Văn A', date: '01/07/2026', time: '08:00' },
+    { name: 'Nguyễn Văn A', date: '01/07/2026', time: '17:30' },
+    { name: 'Trần Thị B', date: '01/07/2026', time: '14:00' },
+    { name: 'Trần Thị B', date: '02/07/2026', time: '02:30' }, // night shift out example
+    { name: 'Lê Văn C', date: '02/07/2026', time: '08:15' }
+  ];
+
+  sampleData.forEach(item => {
+    const row = worksheet.addRow(item);
+    row.alignment = { vertical: 'middle', horizontal: 'center' };
+    row.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+

@@ -17,7 +17,7 @@ import {
   Cpu
 } from 'lucide-react';
 import './App.css';
-import { parseFile, processRecords, exportToExcel, type ProcessedRecord, type TimeRecord } from './processor';
+import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, type ProcessedRecord, type TimeRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
 import TransferFileTool from './components/TransferFileTool';
 import TTSPage from './components/TTSPage';
@@ -371,7 +371,8 @@ function App() {
           if (timeParts.length >= 2) {
             const h = parseInt(timeParts[0], 10);
             const min = parseInt(timeParts[1], 10);
-            const inDate = new Date(y, m, d, h, min, 0, 0);
+            const sec = timeParts.length >= 3 ? parseInt(timeParts[2], 10) : 0;
+            const inDate = new Date(y, m, d, h, min, sec, 0);
             records.push({ name: log.name, timestamp: inDate });
           }
         }
@@ -381,7 +382,8 @@ function App() {
           if (timeParts.length >= 2) {
             const h = parseInt(timeParts[0], 10);
             const min = parseInt(timeParts[1], 10);
-            let outDate = new Date(y, m, d, h, min, 0, 0);
+            const sec = timeParts.length >= 3 ? parseInt(timeParts[2], 10) : 0;
+            let outDate = new Date(y, m, d, h, min, sec, 0);
             if (h < 6) {
               outDate = new Date(outDate.getTime() + 86400000);
             }
@@ -426,6 +428,25 @@ function App() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Đã tải file kết quả về máy!', 'success');
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      showToast('Đang tạo file mẫu chấm công...', 'info');
+      const blob = await exportAttendanceTemplate();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Mau_Cham_Cong_Tho.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Đã tải file mẫu chấm công về máy!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Không thể tạo file mẫu: ' + err.message, 'error');
+    }
   };
 
   const handleSyncAttendance = async () => {
@@ -939,6 +960,27 @@ function App() {
                   <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--muted)', fontSize: '0.9rem' }}>
                     Chọn tải tệp thô từ máy tính hoặc tải dữ liệu đồng bộ trực tuyến từ Google Sheets
                   </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'center', margin: '0 0 0.75rem', zIndex: 10 }}>
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--blue)',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      📥 Tải file excel mẫu (.xlsx)
+                    </button>
+                  </div>
                   
                   <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: '100%', margin: '0.5rem 0 1.25rem', zIndex: 10 }}>
                     <label className="primary" style={{ padding: '10px 20px', cursor: 'pointer', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
