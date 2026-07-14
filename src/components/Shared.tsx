@@ -149,7 +149,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({ message, onRetry, style 
       <AlertCircle size={32} />
       <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{message}</span>
       {onRetry && (
-        <button className="primary" onClick={onRetry} style={{ background: 'rgba(255, 92, 122, 0.1)', border: '1px solid var(--red)', color: 'white', height: '38px', padding: '0 1.25rem', boxShadow: 'none' }}>
+        <button className="btn-danger small-btn" onClick={onRetry} style={{ minWidth: '100px' }}>
           Thử lại
         </button>
       )}

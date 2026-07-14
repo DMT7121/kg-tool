@@ -691,6 +691,73 @@
   transform: none;
 }
 
+/* Unified Button Styling for Modules */
+.btn-outline, .btn-danger, .btn-ghost {
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.btn-outline {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(99, 132, 206, 0.3);
+  color: var(--text);
+}
+.btn-outline:hover {
+  background: rgba(99, 132, 206, 0.15);
+  border-color: rgba(99, 132, 206, 0.65);
+  color: white;
+  transform: translateY(-1px);
+}
+.btn-outline:disabled, .btn-danger:disabled, .btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff5c7a, #dc2626);
+  border: 0;
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 0 20px rgba(255, 92, 122, 0.3);
+}
+.btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 28px rgba(255, 92, 122, 0.5);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  border-color: rgba(99, 132, 206, 0.1);
+}
+
+.small-btn {
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+}
+
+
 /* QR Code Display area */
 .qrbox {
   min-height: 560px;

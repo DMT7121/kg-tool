@@ -1086,8 +1086,8 @@ function App() {
                       </button>
 
                       <button 
-                        className="primary" 
-                        style={{ height: '48px', padding: '0 2rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }}
+                        className="btn-outline" 
+                        style={{ height: '48px', padding: '0 2rem' }}
                         onClick={handleSyncAttendance}
                         disabled={isSyncingAttendance || attendanceSyncSuccess}
                       >
@@ -1643,7 +1643,7 @@ function App() {
 
                     <div className="form-grid">
                       <button className="primary" style={{ height: '48px' }} onClick={handleDownloadQR}>Tải ảnh QR</button>
-                      <button className="primary" style={{ height: '48px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={handleCopyQRLink}>Sao chép link</button>
+                      <button className="btn-outline" style={{ height: '48px' }} onClick={handleCopyQRLink}>Sao chép link</button>
                     </div>
                   </div>
                 ) : (
@@ -1763,8 +1763,8 @@ function App() {
                     </button>
                     <button 
                       type="button" 
-                      className="primary" 
-                      style={{ width: '180px', height: '48px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', boxShadow: 'none' }}
+                      className="btn-outline" 
+                      style={{ width: '180px', height: '48px' }}
                       onClick={testConnection}
                       disabled={connectionStatus === 'testing'}
                     >

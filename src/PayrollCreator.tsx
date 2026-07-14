@@ -3034,11 +3034,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       <UploadCloud size={14} />
                       Nhập file CSV
                     </button>
-                    <button type="button" className="primary" onClick={triggerExcelSelect} style={{ height: '44px', fontSize: '13px', background: 'var(--primary)', boxShadow: 'none' }}>
+                    <button type="button" className="primary" onClick={triggerExcelSelect} style={{ height: '44px', fontSize: '13px' }}>
                       <UploadCloud size={14} />
                       Nhập file Excel
                     </button>
-                    <button type="button" className="primary" onClick={loadSampleData} style={{ height: '44px', fontSize: '13px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>Tải dữ liệu mẫu</button>
+                    <button type="button" className="btn-outline" onClick={loadSampleData} style={{ height: '44px', fontSize: '13px' }}>Tải dữ liệu mẫu</button>
                   </div>
                   <div className="bulk-import-row">
                     <button type="button" className="btn-outline" onClick={clearAllForms} style={{ flexGrow: 1, padding: '8px', fontSize: '13px' }}>Xóa form dữ liệu</button>
@@ -3055,7 +3055,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       <Plus size={14} />
                       Thêm nhân viên
                     </button>
-                    <button type="button" className="primary" onClick={() => {
+                    <button type="button" className="btn-outline" onClick={() => {
                       const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
                       if (text) {
                         const lines = text.split('\n');
@@ -3077,7 +3077,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           showToast(`Đã dán thành công ${newEmps.length} nhân viên!`, 'success');
                         }
                       }
-                    }} style={{ height: '40px', fontSize: '13px', background: 'rgba(20,40,90,.9)', boxShadow: 'none' }}>
+                    }} style={{ height: '40px', fontSize: '13px' }}>
                       Dán dữ liệu
                     </button>
                   </div>
