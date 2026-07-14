@@ -56,6 +56,46 @@ interface SavedPayrollMonth {
   operator: string;
 }
 
+interface CustomPrintPreset {
+  id: string;
+  name: string;
+  selectedFont: string;
+  fontSizeTitle: number;
+  fontSizeContent: number;
+  fontSizeTable: number;
+  titleWeight: string;
+  visibility: {
+    showLogo: boolean;
+    showUnitInfo: boolean;
+    showTitle: boolean;
+    showMetaInfo: boolean;
+    showEmpName: boolean;
+    showEmpRole: boolean;
+    showEmpDept: boolean;
+    showEmpBank: boolean;
+    showBaseSalary: boolean;
+    showTime: boolean;
+    showAdvance: boolean;
+    showDeductions: boolean;
+    showSignatures: boolean;
+    showNotes: boolean;
+  };
+  currencySymbol: 'đ' | 'VNĐ' | 'none';
+  currencySeparator: '.' | ',';
+  roundMode: 'none' | 'hundred' | 'thousand';
+  activeTemplate: 'standard' | 'k80' | 'modern';
+  paperSize: 'a4' | 'k80';
+  thermalOptions: {
+    splitEachSlip: boolean;
+    compactCut: boolean;
+    bottomFeedMm: number;
+    hideSignature: boolean;
+    hideEmptyNotes: boolean;
+    hideEmptyRows: boolean;
+    showCutLine: boolean;
+  };
+}
+
 interface PayrollCreatorProps {
   gasUrl: string;
   spreadsheetId: string;
@@ -280,6 +320,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   useEffect(() => {
     localStorage.setItem('kg_tool_thermal_options', JSON.stringify(thermalOptions));
   }, [thermalOptions]);
+
+  const [customPresets, setCustomPresets] = useState<CustomPrintPreset[]>(() => {
+    const saved = localStorage.getItem('kg_tool_custom_print_presets');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const [containerWidth, setContainerWidth] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -1286,6 +1331,62 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       setFontSizeContent(10);
       setFontSizeTable(10);
       setTitleWeight('700');
+    }
+  };
+
+  const saveCurrentAsPreset = () => {
+    const name = window.prompt('Nhập tên mẫu cấu hình in ấn:');
+    if (!name || !name.trim()) return;
+
+    const newPreset: CustomPrintPreset = {
+      id: Date.now().toString(),
+      name: name.trim(),
+      selectedFont,
+      fontSizeTitle,
+      fontSizeContent,
+      fontSizeTable,
+      titleWeight,
+      visibility,
+      currencySymbol,
+      currencySeparator,
+      roundMode,
+      activeTemplate,
+      paperSize,
+      thermalOptions
+    };
+
+    const updated = [...customPresets, newPreset];
+    setCustomPresets(updated);
+    localStorage.setItem('kg_tool_custom_print_presets', JSON.stringify(updated));
+    showToast(`Đã lưu mẫu cấu hình "${name.trim()}" thành công!`, 'success');
+  };
+
+  const applyCustomPreset = (preset: CustomPrintPreset) => {
+    setSelectedFont(preset.selectedFont);
+    setFontSizeTitle(preset.fontSizeTitle);
+    setFontSizeContent(preset.fontSizeContent);
+    setFontSizeTable(preset.fontSizeTable);
+    setTitleWeight(preset.titleWeight);
+    setVisibility(preset.visibility);
+    setCurrencySymbol(preset.currencySymbol);
+    setCurrencySeparator(preset.currencySeparator);
+    setRoundMode(preset.roundMode);
+    setActiveTemplate(preset.activeTemplate);
+    setPaperSize(preset.paperSize);
+    if (preset.thermalOptions) {
+      setThermalOptions(preset.thermalOptions);
+    }
+    showToast(`Đã áp dụng mẫu cấu hình "${preset.name}"!`, 'success');
+  };
+
+  const deleteCustomPreset = (id: string) => {
+    const preset = customPresets.find(p => p.id === id);
+    if (!preset) return;
+    if (window.confirm(`Bạn có chắc chắn muốn xóa mẫu cấu hình "${preset.name}"?`)) {
+      const updated = customPresets.filter(p => p.id !== id);
+      setCustomPresets(updated);
+      localStorage.setItem('kg_tool_custom_print_presets', JSON.stringify(updated));
+      showToast(`Đã xóa mẫu cấu hình "${preset.name}"!`, 'info');
     }
   };
 
@@ -3322,6 +3423,48 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             {/* Group 3: Customize, Typography, and Print configurations */}
             {(!isMobileScreen || mobileActiveTab === 'settings' || mobileActiveTab === 'export') && renderAccordionSection('customize_and_print', 'Tùy chỉnh & Bố cục In ấn', '🎨', (
               <>
+                <div className="sub-section">
+                  <div className="sub-section-header">📋 Mẫu cấu hình in ấn của tôi</div>
+                  <div className="custom-presets-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                    {customPresets.map(preset => (
+                      <div key={preset.id} className="preset-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', padding: '6px 10px' }}>
+                        <span 
+                          style={{ cursor: 'pointer', flexGrow: 1, fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}
+                          onClick={() => applyCustomPreset(preset)}
+                          title="Click để áp dụng mẫu"
+                        >
+                          📄 {preset.name}
+                        </span>
+                        <button 
+                          type="button" 
+                          className="btn-danger small-btn" 
+                          style={{ padding: '2px 8px', fontSize: '11px', background: 'rgba(220, 38, 38, 0.2)', border: '1px solid rgba(220, 38, 38, 0.4)', color: '#f87171' }} 
+                          onClick={(e) => { e.stopPropagation(); deleteCustomPreset(preset.id); }}
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    ))}
+                    {customPresets.length === 0 && (
+                      <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', padding: '6px' }}>
+                        Chưa lưu mẫu cấu hình nào.
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    type="button" 
+                    className="primary" 
+                    onClick={saveCurrentAsPreset} 
+                    style={{ width: '100%', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <Save size={14} />
+                    Lưu cấu hình hiện tại thành mẫu
+                  </button>
+                </div>
+
+                <div className="sub-section-divider"></div>
+
                 <div className="sub-section">
                   <div className="sub-section-header">👁️ Tùy chọn hiển thị phiếu</div>
                   <div className="form-group" style={{ marginBottom: '8px' }}>
