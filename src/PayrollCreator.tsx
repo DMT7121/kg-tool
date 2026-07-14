@@ -79,6 +79,55 @@ const AVAILABLE_FONTS = [
 // Format Utilities
 const escapeHtml = (s: string) => String(s ?? '').replace(/[&<>"]/g, c => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c] || ''));
 const onlyNumber = (v: any) => Number(String(v ?? '').replace(/\./g, '').replace(/[^0-9-]/g, '')) || 0;
+
+interface MoneyInputProps {
+  value: number;
+  onChange: (val: number) => void;
+  className?: string;
+  placeholder?: string;
+  formatMoney: (n: number) => string;
+}
+
+const MoneyInput: React.FC<MoneyInputProps> = ({ value, onChange, className, placeholder, formatMoney }) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const [localValue, setLocalValue] = useState('');
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(formatMoney(value));
+    }
+  }, [value, isFocused, formatMoney]);
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    setLocalValue(value === 0 ? '' : String(value));
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    const parsed = onlyNumber(localValue);
+    onChange(parsed);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const cleanVal = val.replace(/[^0-9]/g, '');
+    setLocalValue(cleanVal);
+  };
+
+  return (
+    <input
+      type="text"
+      className={className}
+      placeholder={placeholder}
+      value={localValue}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onChange={handleChange}
+    />
+  );
+};
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 function monthLabel(value: string) {
@@ -2958,20 +3007,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     
                     <div className="form-group">
                       <label className="form-label">Khấu trừ tạm ứng chung (đ)</label>
-                      <input 
-                        type="text" 
+                      <MoneyInput 
                         className="form-control" 
-                        value={formatMoney(advance)} 
-                        onFocus={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          e.target.value = val === 0 ? '' : String(val);
-                        }}
-                        onBlur={(e) => {
-                          const val = onlyNumber(e.target.value);
-                          setAdvance(val);
-                          e.target.value = formatMoney(val);
-                        }}
-                        onChange={() => {}}
+                        value={advance} 
+                        onChange={(val) => setAdvance(val)}
+                        formatMoney={formatMoney}
                       />
                     </div>
                   </div>
@@ -3100,20 +3140,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                             <div className="grid3" style={{ marginBottom: '8px' }}>
                               <div className="form-group">
                                 <label className="form-label" style={{ fontSize: '11px' }}>Mức lương</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  value={formatMoney(emp.salary)} 
-                                  onFocus={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    e.target.value = val === 0 ? '' : String(val);
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    updateEmployeeSalary(emp.id, String(val));
-                                    e.target.value = formatMoney(val);
-                                  }}
-                                  onChange={() => {}}
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.salary}
+                                  onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
+                                  formatMoney={formatMoney}
                                 />
                               </div>
                               <div className="form-group">
@@ -3154,38 +3185,20 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                               </div>
                               <div className="form-group">
                                 <label className="form-label" style={{ fontSize: '11px' }}>Tiền cơm (+)</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  value={formatMoney(emp.lunchPay !== undefined ? emp.lunchPay : (emp.workedDays !== undefined ? emp.workedDays : emp.days) * 20000)} 
-                                  onFocus={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    e.target.value = val === 0 ? '' : String(val);
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    updateEmployeeRestaurantField(emp.id, 'lunchPay', val);
-                                    e.target.value = formatMoney(val);
-                                  }}
-                                  onChange={() => {}}
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.lunchPay !== undefined ? emp.lunchPay : (emp.workedDays !== undefined ? emp.workedDays : emp.days) * 20000}
+                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'lunchPay', val)}
+                                  formatMoney={formatMoney}
                                 />
                               </div>
                               <div className="form-group">
                                 <label className="form-label" style={{ fontSize: '11px' }}>Thưởng (+)</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  value={formatMoney(emp.bonus || 0)} 
-                                  onFocus={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    e.target.value = val === 0 ? '' : String(val);
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    updateEmployeeRestaurantField(emp.id, 'bonus', val);
-                                    e.target.value = formatMoney(val);
-                                  }}
-                                  onChange={() => {}}
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.bonus || 0}
+                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'bonus', val)}
+                                  formatMoney={formatMoney}
                                 />
                               </div>
                             </div>
@@ -3193,38 +3206,20 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                             <div className="grid3" style={{ marginBottom: '8px' }}>
                               <div className="form-group">
                                 <label className="form-label" style={{ fontSize: '11px' }}>Tăng ca (+)</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  value={formatMoney(emp.overtimePay || 0)} 
-                                  onFocus={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    e.target.value = val === 0 ? '' : String(val);
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    updateEmployeeRestaurantField(emp.id, 'overtimePay', val);
-                                    e.target.value = formatMoney(val);
-                                  }}
-                                  onChange={() => {}}
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.overtimePay || 0}
+                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'overtimePay', val)}
+                                  formatMoney={formatMoney}
                                 />
                               </div>
                               <div className="form-group">
                                 <label className="form-label" style={{ fontSize: '11px' }}>Đổ bể (-)</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  value={formatMoney(emp.deduction || 0)} 
-                                  onFocus={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    e.target.value = val === 0 ? '' : String(val);
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = onlyNumber(e.target.value);
-                                    updateEmployeeRestaurantField(emp.id, 'deduction', val);
-                                    e.target.value = formatMoney(val);
-                                  }}
-                                  onChange={() => {}}
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.deduction || 0}
+                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'deduction', val)}
+                                  formatMoney={formatMoney}
                                 />
                               </div>
                               <div className="form-group">
@@ -3266,21 +3261,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
                             <div className="form-group">
                               <label className="form-label" style={{ fontSize: '11px' }}>{isHourly ? 'Lương giờ' : 'Lương CB'}</label>
-                              <input 
-                                type="text" 
-                                className="form-control input-compact" 
-                                value={formatMoney(emp.salary)} 
-                                onFocus={(e) => {
-                                  const val = onlyNumber(e.target.value);
-                                  e.target.value = val === 0 ? '' : String(val);
-                                }}
-                                onBlur={(e) => {
-                                  const val = onlyNumber(e.target.value);
-                                  updateEmployeeSalary(emp.id, String(val));
-                                  e.target.value = formatMoney(val);
-                                }}
-                                onChange={() => {}}
-                              />
+                               <MoneyInput
+                                 className="form-control input-compact"
+                                 value={emp.salary}
+                                 onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
+                                 formatMoney={formatMoney}
+                               />
                             </div>
                           </div>
                         )}
@@ -3319,20 +3305,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           </div>
                           <div className="form-group">
                             <label className="form-label" style={{ fontSize: '10px' }}>Số tiền (đ)</label>
-                            <input 
-                              type="text" 
-                              className="form-control input-compact" 
-                              value={formatMoney(d.amount)} 
-                              onFocus={(e) => {
-                                const val = onlyNumber(e.target.value);
-                                e.target.value = val === 0 ? '' : String(val);
-                              }}
-                              onBlur={(e) => {
-                                const val = onlyNumber(e.target.value);
-                                updateDeduction(d.id, 'amount', val);
-                                e.target.value = formatMoney(val);
-                              }}
-                              onChange={() => {}}
+                            <MoneyInput
+                              className="form-control input-compact"
+                              value={d.amount}
+                              onChange={(val) => updateDeduction(d.id, 'amount', val)}
+                              formatMoney={formatMoney}
                             />
                           </div>
                         </div>
