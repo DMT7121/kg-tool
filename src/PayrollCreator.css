@@ -1261,4 +1261,31 @@
   animation: fadeIn 0.15s ease-out;
 }
 
+/* Consolidated Accordion styling additions */
+.payroll-creator .sub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.payroll-creator .sub-section-header {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
+}
+
+.payroll-creator .sub-section-divider {
+  height: 1px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.06), transparent);
+  margin: 1.25rem 0 0.85rem 0;
+}
+
 
