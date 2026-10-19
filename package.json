@@ -1,11 +1,12 @@
 {
   "name": "kg_tool",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:extension": "npm run build && powershell -NoProfile -Command \"if (Test-Path dist/KG-Studio-Extension-v2.5.0.zip) { Remove-Item dist/KG-Studio-Extension-v2.5.0.zip }; Compress-Archive -Path dist/* -DestinationPath public/KG-Studio-Extension-v2.5.0.zip -Force; Copy-Item public/KG-Studio-Extension-v2.5.0.zip dist/KG-Studio-Extension-v2.5.0.zip -Force\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },

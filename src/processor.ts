@@ -266,12 +266,75 @@ function parseValToDate(dateVal: any, timeVal?: any): Date | null {
   return result;
 }
 
+export interface AttendancePayrollSummary {
+  name: string;
+  workedDays: number;
+  totalHours: number;
+  range: string;
+  month: string;
+}
+
+export function summarizeAttendanceForPayroll(records: ProcessedRecord[]): AttendancePayrollSummary[] {
+  if (!records || records.length === 0) return [];
+  const byEmp = new Map<string, ProcessedRecord[]>();
+  let sampleMonth = '';
+
+  records.forEach(r => {
+    if (!sampleMonth && r.logicalDate && r.logicalDate.length >= 7) {
+      sampleMonth = r.logicalDate.slice(0, 7);
+    }
+    if (!byEmp.has(r.employeeName)) {
+      byEmp.set(r.employeeName, []);
+    }
+    byEmp.get(r.employeeName)!.push(r);
+  });
+
+  const summaries: AttendancePayrollSummary[] = [];
+  byEmp.forEach((empRecords, name) => {
+    let workedDays = 0;
+    let totalMs = 0;
+    let minLogical = '';
+    let maxLogical = '';
+
+    empRecords.forEach(r => {
+      if (!minLogical || r.logicalDate < minLogical) minLogical = r.logicalDate;
+      if (!maxLogical || r.logicalDate > maxLogical) maxLogical = r.logicalDate;
+
+      if (r.checkIn || r.checkOut) {
+        workedDays += 1;
+      }
+      if (r.checkIn && r.checkOut) {
+        const diff = r.checkOut.getTime() - r.checkIn.getTime();
+        if (diff > 0) totalMs += diff;
+      }
+    });
+
+    const formatShort = (dStr: string) => {
+      const parts = dStr.split('-');
+      return parts.length === 3 ? `${parts[2]}/${parts[1]}` : dStr;
+    };
+
+    const totalHours = Math.round((totalMs / (1000 * 60 * 60)) * 10) / 10;
+    const range = minLogical && maxLogical ? `${formatShort(minLogical)} - ${formatShort(maxLogical)}` : '';
+
+    summaries.push({
+      name,
+      workedDays,
+      totalHours,
+      range,
+      month: sampleMonth
+    });
+  });
+
+  return summaries;
+}
+
 export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
   const grouped = new Map<string, TimeRecord[]>();
 
   records.forEach(r => {
     const logicalDate = getLogicalDate(r.timestamp);
-    const key = `${r.name}_${logicalDate}`;
+    const key = `${r.name}\0${logicalDate}`;
     if (!grouped.has(key)) {
       grouped.set(key, []);
     }
@@ -281,7 +344,9 @@ export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
   const results: ProcessedRecord[] = [];
 
   grouped.forEach((groupRecords, key) => {
-    const [name, logicalDate] = key.split('_');
+    const sepIdx = key.lastIndexOf('\0');
+    const name = sepIdx >= 0 ? key.slice(0, sepIdx) : key;
+    const logicalDate = sepIdx >= 0 ? key.slice(sepIdx + 1) : '';
     
     groupRecords.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     
@@ -290,8 +355,6 @@ export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
     
     if (groupRecords.length === 1) {
       const t = groupRecords[0].timestamp;
-      // If only 1 record: before 06:00 is Out (actually logic date takes care of this, 
-      // wait! If it's before 06:00, its logical date shifted to yesterday, so it SHOULD be an Out for yesterday!)
       if (t.getHours() < 6) {
         checkOut = t;
       } else {
@@ -313,9 +376,6 @@ export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
       if (checkIn.getDate() !== checkOut.getDate()) {
         overtime = true;
       }
-    } else if (checkOut && groupRecords.length === 1 && checkOut.getHours() < 6) {
-        // If it's just check out at 1am, it technically belongs to yesterday's night shift. Overtime might be true.
-        // Actually, if checkIn is missing, we don't know, but let's say overtime=false unless we have both.
     }
 
     results.push({
@@ -327,48 +387,53 @@ export function processRecords(records: TimeRecord[]): ProcessedRecord[] {
     });
   });
 
-  // Now, calendar merging!
   return calendarMerge(results);
+}
+
+function parseLocalYMD(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+    return new Date(y, m - 1, d);
+  }
+  return new Date(ymd);
 }
 
 function calendarMerge(processed: ProcessedRecord[]): ProcessedRecord[] {
   if (processed.length === 0) return [];
   
-  // find min and max date across all records to know the month
-  let minDate = new Date(8640000000000000);
+  let minDate = parseLocalYMD(processed[0].logicalDate);
+  const lookup = new Map<string, ProcessedRecord>();
+
   processed.forEach(p => {
-      const d = new Date(p.logicalDate);
-      if (d < minDate) minDate = d;
+    const d = parseLocalYMD(p.logicalDate);
+    if (d < minDate) minDate = d;
+    lookup.set(`${p.employeeName}\0${p.logicalDate}`, p);
   });
   
-  // We use the month of the first logical date we find
-  const baseDate = new Date(processed[0].logicalDate);
-  const start = startOfMonth(baseDate);
-  const end = endOfMonth(baseDate);
+  const start = startOfMonth(minDate);
+  const end = endOfMonth(minDate);
   
-  const employees = Array.from(new Set(processed.map(p => p.employeeName))).sort();
+  const employees = Array.from(new Set(processed.map(p => p.employeeName))).sort((a, b) => a.localeCompare(b, 'vi'));
   
   const finalResults: ProcessedRecord[] = [];
   
   employees.forEach(emp => {
-      // For each day in month
-      for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
-          const lDateStr = format(d, 'yyyy-MM-dd');
-          
-          const existing = processed.find(p => p.employeeName === emp && p.logicalDate === lDateStr);
-          
-          if (existing) {
-              finalResults.push(existing);
-          } else {
-              finalResults.push({
-                  employeeName: emp,
-                  logicalDate: lDateStr,
-                  checkIn: null,
-                  checkOut: null,
-                  overtime: false
-              });
-          }
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+      const lDateStr = format(d, 'yyyy-MM-dd');
+      const existing = lookup.get(`${emp}\0${lDateStr}`);
+      
+      if (existing) {
+        finalResults.push(existing);
+      } else {
+        finalResults.push({
+          employeeName: emp,
+          logicalDate: lDateStr,
+          checkIn: null,
+          checkOut: null,
+          overtime: false
+        });
       }
+    }
   });
 
   return finalResults;

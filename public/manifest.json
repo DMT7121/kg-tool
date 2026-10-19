@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "KG Studio — Vận Hành F&B, Lương & VietQR",
+  "short_name": "KG Studio",
+  "version": "2.5.0",
+  "description": "Bộ công cụ vận hành F&B & FinTech: Chấm công Hikvision, Tính lương K80/A4, Lập lệnh chuyển khoản MyVIB/VCB, POS VietQR & Phát thanh AI.",
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_title": "Mở KG Studio (Quick Companion)",
+    "default_popup": "index.html?mode=extension&view=popup",
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "index.html?mode=extension&view=sidepanel"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "clipboardWrite"
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+K"
+      },
+      "description": "Mở nhanh popup KG Studio"
+    },
+    "open_side_panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Mở thanh bên KG Studio Side Panel"
+    }
+  }
+}

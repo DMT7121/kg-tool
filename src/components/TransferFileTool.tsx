@@ -20,7 +20,7 @@ import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
 import { VIB_BANKS } from '../constants/vibBanks';
 import { VCB_BANKS } from '../constants/vcbBanks';
-import { StatCard, GuidePanel, EmptyState } from './Shared';
+import { StatCard, GuidePanel, EmptyState, PageHeader } from './Shared';
 
 export interface TransferEmployee {
   id: string;
@@ -386,11 +386,11 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     return result;
   };
 
-  // 1. LOAD FROM PAYROLL
+  // 1. LOAD FROM PAYROLL (Accent-insensitive & preserves existing account numbers)
   const handleLoadFromPayroll = () => {
     const rawPayroll = localStorage.getItem('kg_tool_payroll_state');
     if (!rawPayroll) {
-      showToast('Không tìm thấy dữ liệu Phiếu Lương nháp nào trong localStorage.', 'error');
+      showToast('Không tìm thấy dữ liệu Phiếu Lương nháp nào trong hệ thống.', 'error');
       return;
     }
 
@@ -404,20 +404,26 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         return;
       }
 
-      // Fetch saved accounts database to map bank accounts by name match
       const rawAccounts = localStorage.getItem('kg_tool_saved_accounts');
       const savedAccountsList = rawAccounts ? JSON.parse(rawAccounts) : [];
 
-      const newEntries: TransferEmployee[] = payrollEmployees.map((pe: any) => {
-        const matchName = pe.name.toUpperCase().trim().replace(/\s+/g, ' ');
-        const accountMatch = savedAccountsList.find((acc: any) => 
-          acc.accountHolder.toUpperCase().trim().replace(/\s+/g, ' ') === matchName
-        );
+      const cleanMatchKey = (str: string) =>
+        normalizeVietnameseName(String(str || '').replace(/\(.*?\)/g, ''));
 
-        let bankCodeName = '';
-        let accountNo = '';
+      const newEntries: TransferEmployee[] = payrollEmployees.map((pe: any, idx: number) => {
+        const cleanPeName = cleanMatchKey(pe.name);
+        const accountMatch = savedAccountsList.find((acc: any) => {
+          const holderKey = cleanMatchKey(acc.accountHolder || '');
+          const labelKey = cleanMatchKey(acc.label || '');
+          return (holderKey && holderKey === cleanPeName) || (labelKey && labelKey.includes(cleanPeName));
+        });
+
+        const existingEmp = employees.find(e => cleanMatchKey(e.name) === cleanPeName);
+
+        let bankCodeName = existingEmp?.bankCodeName || '';
+        let accountNo = existingEmp?.accountNo || '';
         if (accountMatch) {
-          accountNo = accountMatch.accountNo || '';
+          accountNo = accountMatch.accountNo || accountNo;
           bankCodeName = bankTemplate === 'vib' 
             ? resolveVibBankName(accountMatch.bankName || accountMatch.bankCode || '')
             : resolveVcbBankName(accountMatch.bankName || accountMatch.bankCode || '');
@@ -428,7 +434,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         const finalMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
 
         return {
-          id: 'payroll-' + pe.id + '-' + Date.now(),
+          id: 'payroll-' + (pe.id || idx) + '-' + Date.now(),
           name: pe.name.trim().replace(/\s+/g, ' '),
           accountNo: accountNo,
           bankCodeName: bankCodeName,
@@ -443,12 +449,49 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       const validated = revalidateAll(newEntries, bankTemplate);
       setEmployees(validated);
-      showToast(`Đã nạp thành công ${validated.length} nhân viên từ Bảng Lương!`, 'success');
+      showToast(`Đã đồng bộ ${validated.length} nhân viên từ Bảng Lương sang Lệnh Chuyển Khoản!`, 'success');
     } catch (e) {
       console.error(e);
       showToast('Lỗi phân tích dữ liệu Bảng Lương.', 'error');
     }
   };
+
+  // Inline table cell update helper (zero-modal fast editing)
+  const handleInlineFieldChange = (id: string, field: 'accountNo' | 'amount' | 'memo', rawValue: string) => {
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id !== id) return emp;
+      const updated: TransferEmployee = {
+        ...emp,
+        [field]: field === 'amount'
+          ? Math.round(Number(rawValue.replace(/\D/g, '')) || 0)
+          : field === 'accountNo'
+          ? rawValue.replace(/\s+/g, '')
+          : rawValue
+      };
+      const validation = validateRecord(updated, bankTemplate);
+      return {
+        ...updated,
+        isValid: validation.isValid,
+        errors: validation.errors
+      };
+    }));
+  };
+
+  // Listen for cross-module pipeline triggers (from PayrollCreator & CommandPalette)
+  useEffect(() => {
+    if (localStorage.getItem('kg_tool_pending_payroll_transfer') === '1') {
+      localStorage.removeItem('kg_tool_pending_payroll_transfer');
+      handleLoadFromPayroll();
+    }
+    const onImportEvent = () => handleLoadFromPayroll();
+    const onNormalizeEvent = () => handleNormalizeAllNames();
+    window.addEventListener('kg-import-payroll-to-transfer', onImportEvent);
+    window.addEventListener('kg-normalize-transfer-names', onNormalizeEvent);
+    return () => {
+      window.removeEventListener('kg-import-payroll-to-transfer', onImportEvent);
+      window.removeEventListener('kg-normalize-transfer-names', onNormalizeEvent);
+    };
+  }, [bankTemplate, employees.length]);
 
   // 2. PARSE EXCEL/CSV IMPORT
   const handleTriggerFileInput = () => {
@@ -933,63 +976,118 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     setBankSearchQuery('');
   };
 
+  // Normalize all names to uppercase non-accented
+  const handleNormalizeAllNames = () => {
+    if (employees.length === 0) {
+      showToast('Chưa có nhân viên nào trong danh sách để chuẩn hóa.', 'info');
+      return;
+    }
+    const updated = employees.map(emp => {
+      const normalizedName = normalizeVietnameseName(emp.name);
+      const updatedEmp = { ...emp, name: normalizedName };
+      const validation = validateRecord(updatedEmp);
+      return {
+        ...updatedEmp,
+        isValid: validation.isValid,
+        errors: validation.errors
+      };
+    });
+    setEmployees(updated);
+    showToast(`Đã tự động chuẩn hóa ${updated.length} tên nhân viên sang IN HOA KHÔNG DẤU!`, 'success');
+  };
+
   return (
     <div className="transfer-file-tool">
       
       {/* HEADER SECTION */}
-      <div className="head" style={{ marginBottom: '1.5rem' }}>
-        <div className="title">
-          <h1>Tạo File Chuyển Tiền <span className="blue-dot"></span></h1>
-          <p>Tạo file chuyển tiền hàng loạt theo đúng khuôn mẫu của các ngân hàng thương mại để upload trực tiếp.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+      <PageHeader
+        icon={<FileSpreadsheet size={26} />}
+        title="Tạo File Chuyển Tiền Hàng Loạt"
+        subtitle="Tạo file chuyển tiền hàng loạt theo đúng khuôn mẫu chuẩn của các ngân hàng (MyVIB, Vietcombank)"
+        badgeText="Chuyển khoản"
+        badgeVariant="info"
+        actions={
           <button 
             className="primary" 
             onClick={handleExportClick}
             disabled={employees.length === 0 || stats.invalidCount > 0 || isExporting}
+            style={{ height: '40px', padding: '0 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {isExporting ? <RefreshCw className="spinner" size={18} /> : <Download size={18} />}
+            {isExporting ? <RefreshCw className="spinner" size={16} /> : <Download size={16} />}
             <span>Tải File Chuyển Tiền</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* BANK TEMPLATE SELECTOR TABS */}
-      <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
           <button 
             type="button" 
             onClick={() => setBankTemplate('vib')}
             style={{ 
-              flexGrow: 1, 
-              padding: '12px', 
-              borderRadius: '8px', 
-              background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '14px 18px', 
+              borderRadius: '10px', 
+              background: bankTemplate === 'vib' 
+                ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(3, 105, 161, 0.35))' 
+                : 'rgba(255,255,255,0.02)',
+              border: bankTemplate === 'vib' ? '1.5px solid #0284c7' : '1px solid rgba(255,255,255,0.07)',
               color: 'white',
-              fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s ease',
+              textAlign: 'left',
+              boxShadow: bankTemplate === 'vib' ? '0 4px 16px rgba(2, 132, 199, 0.2)' : 'none'
             }}
           >
-            🏦 Mẫu MyVIB 2.0
+            <div style={{ fontSize: '24px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 132, 199, 0.2)', borderRadius: '8px' }}>
+              🏦
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px' }}>Mẫu MyVIB 2.0 (iVIB)</span>
+                {bankTemplate === 'vib' && <span className="badge badge-info" style={{ fontSize: '10px', padding: '2px 6px' }}>Đang chọn</span>}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+                Chuẩn hóa STK text, chi lương lô VIB Doanh Nghiệp
+              </div>
+            </div>
           </button>
+
           <button 
             type="button" 
             onClick={() => setBankTemplate('vcb')}
             style={{ 
-              flexGrow: 1, 
-              padding: '12px', 
-              borderRadius: '8px', 
-              background: bankTemplate === 'vcb' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '14px 18px', 
+              borderRadius: '10px', 
+              background: bankTemplate === 'vcb' 
+                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35))' 
+                : 'rgba(255,255,255,0.02)',
+              border: bankTemplate === 'vcb' ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.07)',
               color: 'white',
-              fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s ease',
+              textAlign: 'left',
+              boxShadow: bankTemplate === 'vcb' ? '0 4px 16px rgba(16, 185, 129, 0.2)' : 'none'
             }}
           >
-            💚 Mẫu Vietcombank (A222)
+            <div style={{ fontSize: '24px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.2)', borderRadius: '8px' }}>
+              💚
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px' }}>Mẫu Vietcombank (A222)</span>
+                {bankTemplate === 'vcb' && <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 6px' }}>Đang chọn</span>}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+                Bắt buộc IN HOA KHÔNG DẤU, mã liên ngân hàng VCB
+              </div>
+            </div>
           </button>
         </div>
       </div>
@@ -1059,51 +1157,125 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       {/* OPERATIONS & ACTION BUTTONS PANEL */}
       <div className="card panel" style={{ marginBottom: '1.5rem', background: 'var(--panel-bg)' }}>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem', margin: '0 0 1rem 0' }}>
-          <span>🛠️ Công cụ xử lý dữ liệu nhanh</span>
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '8px' }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.05rem', margin: 0 }}>
+            <span>🛠️ Thao Tác Xử Lý Dữ Liệu</span>
+            <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>
+              ({employees.length} nhân viên)
+            </span>
+          </h2>
+          {employees.length > 0 && (
+            <button 
+              type="button"
+              className="btn-ghost" 
+              onClick={handleClearAll}
+              style={{ color: '#f87171', fontSize: '12px', padding: '4px 10px', height: '28px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              title="Xóa toàn bộ danh sách để nạp lại"
+            >
+              <Trash2 size={14} />
+              <span>Xóa tất cả</span>
+            </button>
+          )}
+        </div>
         
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <button className="primary" onClick={handleLoadFromPayroll} style={{ background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'linear-gradient(135deg, #10b981, #059669)' }}>
-              <Sparkles size={18} />
-              <span>Lấy từ Phiếu Lương</span>
-            </button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
+          {/* Nhóm 1: Nạp nguồn */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>BƯỚC 1: NẠP DỮ LIỆU ĐẦU VÀO</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button 
+                type="button"
+                className="primary" 
+                onClick={handleLoadFromPayroll} 
+                style={{ 
+                  flex: '1 1 auto',
+                  minWidth: '150px',
+                  background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'linear-gradient(135deg, #10b981, #059669)',
+                  height: '38px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Sparkles size={16} />
+                <span>Lấy từ Phiếu Lương</span>
+              </button>
 
-            <button className="btn-outline" onClick={handleTriggerFileInput} disabled={isImporting}>
-              {isImporting ? <RefreshCw className="spinner" size={18} /> : <Upload size={18} />}
-              <span>Import Excel/CSV</span>
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              accept=".xlsx,.csv" 
-              onChange={handleImportFileChange}
-            />
+              <button 
+                type="button"
+                className="btn-outline" 
+                onClick={handleTriggerFileInput} 
+                disabled={isImporting}
+                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isImporting ? <RefreshCw className="spinner" size={15} /> : <Upload size={15} />}
+                <span>Import Excel/CSV</span>
+              </button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                accept=".xlsx,.csv" 
+                onChange={handleImportFileChange}
+              />
 
-            <button className="btn-outline" onClick={() => setShowBulkModal(true)}>
-              <ClipboardCheck size={18} />
-              <span>Dán dữ liệu hàng loạt</span>
-            </button>
-
-            <button className="btn-outline" onClick={handleAddManualRow}>
-              <Plus size={18} />
-              <span>Thêm nhân viên</span>
-            </button>
+              <button 
+                type="button"
+                className="btn-outline" 
+                onClick={() => setShowBulkModal(true)}
+                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <ClipboardCheck size={15} />
+                <span>Dán dữ liệu</span>
+              </button>
+            </div>
           </div>
 
-          <div>
-            {employees.length > 0 && (
+          {/* Nhóm 2: Tinh chỉnh & Chuẩn hóa */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>BƯỚC 2: CHUẨN HÓA & TINH CHỈNH</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               <button 
+                type="button"
                 className="btn-outline" 
-                onClick={handleClearAll}
-                style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)' }}
+                onClick={handleNormalizeAllNames}
+                disabled={employees.length === 0}
+                title="Chuẩn hóa toàn bộ họ tên thụ hưởng sang IN HOA KHÔNG DẤU (Khuyến nghị cho cổng Vietcombank & VIB)"
+                style={{ 
+                  flex: '1 1 auto',
+                  height: '38px', 
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  borderColor: 'rgba(234, 179, 8, 0.4)', 
+                  background: 'rgba(234, 179, 8, 0.08)',
+                  color: '#fef08a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
               >
-                <Trash2 size={18} />
-                <span>Xóa dữ liệu</span>
+                <Sparkles size={15} style={{ color: 'var(--gold)' }} />
+                <span>Chuẩn hóa Tên (IN HOA)</span>
               </button>
-            )}
+
+              <button 
+                type="button"
+                className="btn-outline" 
+                onClick={handleAddManualRow}
+                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={15} />
+                <span>Thêm nhân viên</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1433,16 +1605,52 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                         </td>
                       )}
 
-                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>
-                        {emp.accountNo || <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Trống</span>}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="text"
+                          value={emp.accountNo}
+                          placeholder="Nhập số TK..."
+                          onChange={e => handleInlineFieldChange(emp.id, 'accountNo', e.target.value)}
+                          style={{
+                            height: '32px',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            borderColor: !emp.accountNo ? 'rgba(239, 68, 68, 0.45)' : 'var(--border)',
+                            minWidth: '135px'
+                          }}
+                        />
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--cyan)' }}>
-                        {emp.amount.toLocaleString('vi-VN')} đ
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                        <input
+                          type="text"
+                          value={emp.amount ? emp.amount.toLocaleString('vi-VN') : ''}
+                          placeholder="0"
+                          onChange={e => handleInlineFieldChange(emp.id, 'amount', e.target.value)}
+                          style={{
+                            height: '32px',
+                            textAlign: 'right',
+                            fontWeight: 700,
+                            color: 'var(--primary)',
+                            fontSize: '0.84rem',
+                            minWidth: '115px'
+                          }}
+                        />
                       </td>
 
-                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: 'var(--muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {emp.memo}
+                      <td style={{ padding: '8px 12px' }}>
+                        <input
+                          type="text"
+                          value={emp.memo}
+                          onChange={e => handleInlineFieldChange(emp.id, 'memo', e.target.value)}
+                          style={{
+                            height: '32px',
+                            fontSize: '0.8rem',
+                            color: 'var(--text)',
+                            minWidth: '170px'
+                          }}
+                        />
                       </td>
 
                       {bankTemplate === 'vcb' && (

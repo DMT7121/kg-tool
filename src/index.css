@@ -1,51 +1,559 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+:root,
+[data-theme="dark"] {
+  /* Core Studio Surfaces — Warm Carbon & Emerald/Amber Studio */
+  --bg: #0c0d10;
+  --bg-dark: #0c0d10;
+  --bg-elevated: #12141a;
+  --panel: #161922;
+  --panel-bg: #161922;
+  --card-bg: #161922;
+  --card-bg-hover: #1c202b;
+  --surface-subtle: #1f2430;
+  --surface-input: #101218;
+  --line: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(16, 185, 129, 0.38);
 
-:root {
-  --bg: #050b1e;
-  --panel: rgba(11, 22, 51, 0.8);
-  --panel-2: rgba(15, 30, 66, 0.8);
-  --line: #24406f;
-  --text: #f7fbff;
-  --muted: #9eb3d7;
-  --blue: #1677ff;
-  --cyan: #22d3ee;
-  --violet: #7c3cff;
-  --green: #30e797;
-  --orange: #f7a032;
-  --red: #ff5c7a;
-  --shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
-  --radius: 24px;
-  
-  /* Fallbacks for existing code compatibility */
-  --bg-gradient-start: #061125;
-  --bg-gradient-end: #030817;
-  --glass-bg: rgba(11, 22, 51, 0.8);
-  --glass-border: rgba(99, 132, 206, 0.22);
-  --primary-color: #1677ff;
-  --primary-hover: #0060df;
-  --success-color: #30e797;
-  --text-main: #f7fbff;
-  --text-muted: #9eb3d7;
+  /* Typography Ink */
+  --text: #f3f4f6;
+  --text-main: #f3f4f6;
+  --muted: #9ca3af;
+  --text-muted: #9ca3af;
+
+  /* Brand & Semantic Accents — Emerald & Terracotta Amber (Zero Generic Neon Blue) */
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --primary-glow: rgba(16, 185, 129, 0.24);
+  --blue: #10b981;
+  --cyan: #f59e0b;
+  --cyan-glow: rgba(245, 158, 11, 0.25);
+  --accent: #f59e0b;
+  --gold: #fbbf24;
+  --green: #22c55e;
+  --success: #22c55e;
+  --red: #ef4444;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+
+  /* Elevation & Geometry */
+  --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 45px -15px rgba(0, 0, 0, 0.7);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 18px;
+  --font-sans: 'Plus Jakarta Sans', 'Be Vietnam Pro', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Be Vietnam Pro', monospace;
+}
+
+[data-theme="light"] {
+  /* Crisp Daylight Alabaster & Forest Emerald Studio */
+  --bg: #f5f4f0;
+  --bg-dark: #f5f4f0;
+  --bg-elevated: #ffffff;
+  --panel: #ffffff;
+  --panel-bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-bg-hover: #f8f7f4;
+  --surface-subtle: #eceae4;
+  --surface-input: #ffffff;
+  --line: rgba(17, 24, 39, 0.09);
+  --border: rgba(17, 24, 39, 0.09);
+  --glass-border: rgba(17, 24, 39, 0.09);
+  --border-strong: rgba(5, 150, 105, 0.45);
+
+  /* Typography Ink */
+  --text: #111827;
+  --text-main: #111827;
+  --muted: #6b7280;
+  --text-muted: #6b7280;
+
+  /* Brand & Semantic Accents */
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-glow: rgba(5, 150, 105, 0.16);
+  --blue: #059669;
+  --cyan: #d97706;
+  --cyan-glow: rgba(217, 119, 6, 0.18);
+  --accent: #d97706;
+  --gold: #b45309;
+  --green: #16a34a;
+  --success: #16a34a;
+  --red: #dc2626;
+  --danger: #dc2626;
+  --warning: #d97706;
+
+  --shadow: 0 4px 20px -4px rgba(17, 24, 39, 0.07), 0 1px 3px rgba(17, 24, 39, 0.05);
+  --shadow-lg: 0 16px 36px -8px rgba(17, 24, 39, 0.12);
 }
 
 * {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
-html, body, #root {
-  width: 100%;
-  max-width: 100vw;
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
   overflow-x: hidden;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body {
-  font-family: 'Be Vietnam Pro', system-ui, -apple-system, Segoe UI, sans-serif;
-  background:
-    radial-gradient(circle at 70% 20%, rgba(25,103,255,.22), transparent 32%),
-    radial-gradient(circle at 25% 80%, rgba(124,60,255,.18), transparent 36%),
-    linear-gradient(135deg, #061125 0%, #071633 42%, #030817 100%);
-  color: var(--text);
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(16, 185, 129, 0.06), transparent 36%),
+    radial-gradient(circle at 88% 0%, rgba(245, 158, 11, 0.05), transparent 32%);
+}
+
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(5, 150, 105, 0.05), transparent 36%),
+    radial-gradient(circle at 88% 0%, rgba(217, 119, 6, 0.04), transparent 32%);
+}
+
+#root {
+  width: 100%;
   min-height: 100vh;
+}
+
+/* Tabular Numerals for Financial, Attendance & Time Columns */
+.tabular-nums,
+input[type="number"],
+.stat-value,
+.kpis strong,
+.metric-box strong,
+td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.25);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/*Unified Form Controls (38px Height) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+select,
+.form-control {
+  width: 100%;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-input);
+  color: var(--text);
+  padding: 0 12px;
+  outline: none;
+  font: inherit;
+  font-size: 0.84rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+textarea,
+textarea.form-control {
+  width: 100%;
+  min-height: 82px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-input);
+  color: var(--text);
+  padding: 10px 12px;
+  outline: none;
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus:not([type="checkbox"]):not([type="radio"]),
+select:focus,
+textarea:focus,
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+select option {
+  background-color: var(--panel);
+  color: var(--text);
+}
+
+/* Unified Button Hierarchy */
+button {
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text);
+  background: var(--surface-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+  user-select: none;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Primary Action Button — Emerald Studio */
+button.primary,
+.btn-primary,
+.action-btn {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 14px -2px var(--primary-glow);
+  font-weight: 700;
+}
+
+button.primary:hover:not(:disabled),
+.btn-primary:hover:not(:disabled),
+.action-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 20px -2px var(--primary-glow);
+}
+
+/* Secondary / Outline Button */
+button.secondary,
+.btn-secondary,
+.btn-outline {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.secondary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled),
+.btn-outline:hover:not(:disabled) {
+  background: var(--card-bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Ghost Button */
+button.ghost,
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+button.ghost:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+/* Danger Button */
+button.danger,
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+button.danger:hover:not(:disabled),
+.btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  color: #ffffff !important;
+}
+
+.small-btn {
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 0.75rem !important;
+  border-radius: 7px !important;
+}
+
+/* Unified Segmented Control */
+.segmented-control {
+  display: inline-flex;
+  background: var(--surface-subtle);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  gap: 3px;
+}
+
+.segmented-item {
+  height: 32px !important;
+  padding: 0 13px !important;
+  border-radius: 7px !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: var(--muted) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.segmented-item:hover:not(.active) {
+  color: var(--text) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  transform: none !important;
+}
+
+.segmented-item.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px var(--primary-glow) !important;
+}
+
+/* Unified Card / Panel Architecture */
+.card,
+.panel,
+.glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.card:hover,
+.panel:hover,
+.glass-card:hover {
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+/* Unified Guide Panel */
+.guide-panel-wrapper {
+  margin-bottom: 1.1rem;
+  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  overflow: hidden;
+}
+
+.guide-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text) !important;
+  font-weight: 600 !important;
+  font-size: 0.82rem !important;
+  height: auto !important;
+}
+
+.guide-panel-header:hover {
+  background: var(--card-bg-hover) !important;
+  transform: none !important;
+}
+
+.guide-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.guide-icon-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.guide-title-text {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.guide-toggle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  color: var(--primary);
+  background: rgba(16, 185, 129, 0.1);
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.guide-panel-body {
+  padding: 1rem 1.15rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface-subtle);
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.guide-purpose {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(16, 185, 129, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid var(--primary);
+  margin-bottom: 0.85rem;
+  line-height: 1.5;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.guide-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.guide-steps-list,
+.guide-Sub-list {
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* Unified Empty State */
+.unified-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  background: var(--surface-subtle);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  gap: 0.65rem;
+}
+
+.empty-state-icon {
+  font-size: 2.2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.empty-state-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.empty-state-desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+/* Unified StatCard */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.stat-card.has-data {
+  border-color: rgba(16, 185, 129, 0.24) !important;
+}
+
+.stat-card.is-empty {
+  opacity: 0.75;
+}
+
+/* Light Mode Adaptive Overrides for Legacy Inline Styles */
+[data-theme="light"] .card,
+[data-theme="light"] .panel,
+[data-theme="light"] .glass-card {
+  background: #ffffff !important;
+  border-color: rgba(17, 24, 39, 0.09) !important;
+  box-shadow: 0 2px 10px rgba(17, 24, 39, 0.04) !important;
+}
+
+[data-theme="light"] .sidebar,
+[data-theme="light"] .topbar {
+  background: #ffffff !important;
+  border-color: rgba(17, 24, 39, 0.09) !important;
+}
+
+[data-theme="light"] .payroll-creator .config-pane .glass-card > div {
+  background: #f8f7f4 !important;
+  border-color: rgba(17, 24, 39, 0.08) !important;
+}
+
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea,
+[data-theme="light"] .form-control {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: rgba(17, 24, 39, 0.15) !important;
 }

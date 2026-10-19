@@ -1,1291 +1,522 @@
-/* Scoped stylesheet for the Employee Payroll Tool component in kg-tool */
+/* ==========================================================================
+   KG STUDIO — PAYROLL CREATOR & K80/A4 SLIP ENGINE STYLES
+   ========================================================================== */
 
 .payroll-creator {
-  --blue: #1677ff;
-  --light-blue: rgba(22, 119, 255, 0.1);
-  --red: #ff5c7a;
-  --slate: #9eb3d7;
-  
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
   width: 100%;
-}
-
-.payroll-layout {
-  display: grid;
-  grid-template-columns: 450px 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-/* LEFT COLUMN - CONFIG PANE */
-.config-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
-  padding-right: 0.25rem;
-}
-
-/* Scrollbar customization for config column */
-.config-pane::-webkit-scrollbar {
-  width: 6px;
-}
-.config-pane::-webkit-scrollbar-track {
-  background: transparent;
-}
-.config-pane::-webkit-scrollbar-thumb {
-  background: rgba(99, 132, 206, 0.22);
-  border-radius: 3px;
-}
-
-.glass-card {
-  border: 1px solid rgba(77, 134, 224, 0.32);
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(12, 29, 65, 0.72), rgba(8, 19, 44, 0.68));
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.card-heading-title {
-  font-family: inherit;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.payroll-layout {
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
+  gap: 1.15rem;
+  align-items: start;
+  position: relative;
 }
 
-.form-group {
+.payroll-layout.left-panel-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.payroll-creator.mode-compact .payroll-layout:not(.left-panel-collapsed) {
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+
+.payroll-creator.mode-narrow .payroll-layout,
+.payroll-creator.mode-mobile .payroll-layout {
+  grid-template-columns: 1fr;
+}
+
+.payroll-creator.mode-narrow .config-pane {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  bottom: 0;
+  width: 380px;
+  max-width: 92vw;
+  z-index: 1200;
+  background: var(--bg-elevated);
+  padding: 1rem;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1190;
+}
+
+.config-pane {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 1rem;
+  min-width: 0;
 }
 
-.form-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #b6c7e8;
-}
-
-.form-control {
-  width: 100%;
-  border: 1px solid rgba(91, 134, 211, 0.3);
-  background: rgba(5, 17, 42, 0.75);
-  color: white;
-  border-radius: 10px;
-  padding: 0.6rem 0.8rem;
-  font-size: 0.85rem;
-  outline: none;
-  transition: all 0.2s;
-}
-
-.form-control:focus {
-  border-color: var(--cyan);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
 }
 
 .grid2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
 .grid3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
 }
 
-/* Bulk actions row */
-.bulk-import-row {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+.input-compact {
+  height: 32px !important;
+  padding: 0 9px !important;
+  font-size: 0.78rem !important;
 }
 
-/* Dynamic Rows */
-.employee-input-row, .deduction-input-row {
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 12px;
-  padding: 1rem;
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.select-compact {
+  height: 32px !important;
+  padding: 0 8px !important;
+  font-size: 0.76rem !important;
 }
 
-.employee-row-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 700;
-  font-size: 0.8rem;
-  color: var(--cyan);
-}
-
-.employees-list-container, .deductions-list-container {
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 0.25rem;
-}
-
-.employees-list-container::-webkit-scrollbar,
-.deductions-list-container::-webkit-scrollbar {
-  width: 4px;
-}
-.employees-list-container::-webkit-scrollbar-thumb,
-.deductions-list-container::-webkit-scrollbar-thumb {
-  background: rgba(99, 132, 206, 0.22);
-  border-radius: 2px;
-}
-
-/* Collapsible Section styles */
-.collapsible-section .section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-}
-
-.collapsible-section .section-header::after {
-  content: '▼';
-  font-size: 0.7rem;
-  color: var(--muted);
-  transition: transform 0.2s;
-}
-
-.collapsible-section .section-header.collapsed::after {
-  transform: rotate(-90deg);
-}
-
-.collapsible-section .section-header.collapsed + .section-content {
-  display: none;
-}
-
-/* Sync History Box */
-.sync-box {
-  background: linear-gradient(135deg, rgba(22, 119, 255, 0.03), rgba(22, 119, 255, 0.08));
-}
-
-.history-list-header {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: white;
-  margin-top: 0.75rem;
-}
-
-.history-items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.history-item-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0.75rem;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 8px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: white;
-}
-
-.history-item-row:hover {
-  background-color: rgba(22, 119, 255, 0.12);
-  border-color: var(--blue);
-}
-
-.history-meta {
-  display: flex;
-  flex-direction: column;
-}
-
-.history-meta .h-month {
-  font-weight: 700;
-  color: var(--cyan);
-}
-
-.history-meta .h-info {
-  font-size: 0.65rem;
-  color: var(--muted);
-  margin-top: 0.15rem;
-}
-
-/* RIGHT COLUMN - PREVIEW PANE */
-.preview-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  border: 1px solid rgba(77, 134, 224, 0.32);
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(12, 29, 65, 0.72), rgba(8, 19, 44, 0.68));
-  padding: 1.5rem;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-  min-height: calc(100vh - 180px);
-}
-
-.preview-header-panel {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  border-bottom: 1px solid rgba(99, 132, 206, 0.22);
-  padding-bottom: 1rem;
-}
-
-.preview-views-toggle, .preview-templates-toggle {
-  display: flex;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 10px;
-  padding: 0.25rem;
-  gap: 0.25rem;
-}
-
-.view-toggle-btn, .template-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.5rem 0.8rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.view-toggle-btn.active, .template-toggle-btn.active {
-  background-color: var(--blue);
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(22, 119, 255, 0.3);
-}
-
-/* Quick Metrics Bar */
+/* Metrics Strip in Preview */
 .metrics-strip-pnl {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
 }
 
 .metric-box {
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .metric-box span {
-  display: block;
-  font-size: 0.65rem;
-  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 .metric-box strong {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 800;
-  color: white;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-box strong.red {
   color: var(--red);
 }
 
-/* Previews Scroll Container */
+/* Preview Canvas Viewport */
 .preview-scroll-container {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-height: calc(100vh - 350px);
-  overflow-y: auto;
-  padding-right: 0.5rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  overflow: auto;
+  max-height: calc(100vh - 220px);
+  min-height: 520px;
 }
 
-.preview-scroll-container::-webkit-scrollbar {
-  width: 6px;
+.payroll-creator.fullscreen-preview-active .preview-pane {
+  position: fixed;
+  inset: 12px;
+  z-index: 2500;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: var(--shadow-lg);
 }
-.preview-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(99, 132, 206, 0.22);
-  border-radius: 3px;
+
+.payroll-creator.fullscreen-preview-active .preview-scroll-container {
+  max-height: calc(100vh - 160px);
+  flex: 1;
 }
 
 .preview-receipt-card {
-  background-color: rgba(255, 255, 255, 0.01);
-  border: 1px solid rgba(99, 132, 206, 0.22);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
 .receipt-card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(99, 132, 206, 0.22);
+  justify-content: space-between;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 
-.receipt-card-header span {
+.warning-pill-indicator {
+  font-size: 0.72rem;
   font-weight: 700;
-  font-size: 0.85rem;
-  color: white;
-}
-
-.receipt-card-actions {
-  display: flex;
-  gap: 0.5rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .receipt-svg-holder {
-  background-color: #ffffff;
-  padding: 2rem;
+  background: #ffffff;
+  width: 100%;
   display: flex;
   justify-content: center;
-  align-items: center;
 }
 
 .receipt-svg-holder svg {
   width: 100%;
   height: auto;
-  max-width: 700px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  display: block;
 }
 
-.empty-preview-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 5rem 2rem;
-  color: var(--muted);
-  text-align: center;
-  font-size: 0.9rem;
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-  color: var(--blue);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ========================================================
-   RESPONSIVE DESIGN (MOBILE & TABLET VIEWPORTS)
-   ======================================================== */
-@media (max-width: 980px) {
-  .payroll-layout {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-  
-  .config-pane {
-    max-height: none;
-  }
-  
-  .preview-pane {
-    min-height: auto;
-  }
-  
-  .preview-scroll-container {
-    max-height: none;
-  }
-  
-  .metrics-strip-pnl {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-/* ========================================================
-   PRINT STYLES FOR PAYROLL SYSTEM
-   ======================================================== */
-@media print {
-  .sidebar,
-  .sidebar-overlay,
-  .sidebar-toggle,
-  .toast-container,
-  .view-header,
-  .config-pane,
-  .preview-header-panel,
-  .metrics-strip-pnl,
-  .receipt-card-header,
-  .empty-preview-state {
-    display: none !important;
-  }
-  
-  .main-content {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    background: #ffffff !important;
-  }
-
-  .payroll-creator, .payroll-layout, .preview-pane, .preview-scroll-container {
-    display: block !important;
-    width: 100% !important;
-    max-height: none !important;
-    overflow: visible !important;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .preview-receipt-card {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    page-break-after: always !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  
-  .receipt-svg-holder {
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-  
-  .receipt-svg-holder svg {
-    box-shadow: none !important;
-    width: 100% !important;
-    height: auto !important;
-    max-width: 100% !important;
-  }
-}
-
-/* Specific K80 roll print adjustments */
-@media print {
-  body.print-k80-mode {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-  
-  body.print-k80-mode .print-only-container {
-    display: block !important;
-    position: relative !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 80mm !important;
-    max-width: 80mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  body.print-k80-mode .print-page {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    display: block !important;
-    margin: 0 0 6mm 0 !important;
-    padding: 0 !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    height: auto !important;
-    min-height: 0 !important;
-    background: #ffffff !important;
-  }
-
-  body.print-k80-mode.print-k80-no-split .print-page {
-    page-break-after: avoid !important;
-    break-after: avoid !important;
-  }
-
-  body.print-k80-mode .print-page:last-child {
-    page-break-after: avoid !important;
-    break-after: avoid !important;
-    margin-bottom: 0 !important;
-  }
-  
-  body.print-k80-mode .print-page svg {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    height: auto !important;
-    display: block !important;
-  }
-
-  body.print-k80-mode .receipt-svg-holder svg {
-    width: 80mm !important;
-    height: auto !important;
-  }
-}
-
-/* Collapsible layout controls */
-.payroll-layout.left-panel-collapsed {
-  grid-template-columns: 1fr;
-}
-.payroll-layout.left-panel-collapsed .config-pane {
-  display: none !important;
-}
-
-/* Fullscreen mode preview controls */
-.payroll-creator.fullscreen-preview-active {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 9999;
-  background: #050b1e;
-  padding: 1.5rem;
-  overflow: auto;
-}
-.payroll-creator.fullscreen-preview-active .head,
-.payroll-creator.fullscreen-preview-active .GuidePanel,
-.payroll-creator.fullscreen-preview-active .guide-panel-container {
-  display: none !important;
-}
-.payroll-creator.fullscreen-preview-active .payroll-layout {
-  height: 100%;
-  grid-template-columns: 1fr;
-}
-.payroll-creator.fullscreen-preview-active .config-pane {
-  display: none !important;
-}
-.payroll-creator.fullscreen-preview-active .preview-pane {
-  height: 100%;
-  min-height: 100%;
-}
-
-/* Preview Toolbar styling */
-.preview-toolbar-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 12px;
-  padding: 0.65rem 1rem;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.toolbar-left-group, .toolbar-right-group {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.zoom-controller-box {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--slate);
-}
-.select-compact {
-  height: 32px !important;
-  padding: 0 8px !important;
-  border-radius: 6px !important;
-  font-size: 0.8rem !important;
-}
-.preview-modes-toggle {
-  display: flex;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(99,132,206,0.22);
-  border-radius: 8px;
-  padding: 2px;
-}
-.mode-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.mode-toggle-btn.active {
-  background: var(--blue);
-  color: #fff;
-}
-.employee-navigator-widget {
-  display: flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  border-radius: 8px;
-  padding: 2px;
-}
-.action-buttons-box {
-  display: flex;
-  gap: 0.35rem;
-}
-
-/* Sheet Canvas Zoom styling */
-.sheet-canvas-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
+/* Thumbnail Grid Mode */
+.thumbnail-grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1rem;
   width: 100%;
-  transform-origin: top center;
-  transition: transform 0.2s ease-in-out;
 }
 
-/* Bottom horizontal navigator panel styling */
+.thumbnail-preview-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.thumbnail-preview-card:hover,
+.thumbnail-preview-card.active {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: 0 6px 20px var(--primary-glow);
+}
+
+.thumbnail-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.thumbnail-svg-render {
+  background: #ffffff;
+  max-height: 280px;
+  overflow: hidden;
+}
+
+.thumbnail-svg-render svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.thumbnail-warning-overlay {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(239, 68, 68, 0.92);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+/* Bottom Navigator Strip */
 .preview-bottom-navigator {
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  background: rgba(13, 34, 78, 0.35);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.85rem;
+  padding: 0.75rem 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
 }
+
 .navigator-filter-toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  justify-content: space-between;
   flex-wrap: wrap;
+  gap: 0.65rem;
 }
+
 .search-field-box {
   position: relative;
-  flex-grow: 1;
-  max-width: 320px;
+  min-width: 210px;
 }
-.search-field-box input {
-  height: 34px;
-  border-radius: 8px;
-  padding: 0 10px 0 32px;
-  font-size: 0.8rem;
-  width: 100%;
-}
-.search-icon {
+
+.search-field-box .search-icon {
   position: absolute;
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--muted);
 }
+
+.search-field-box input {
+  padding-left: 30px !important;
+  height: 32px !important;
+  font-size: 0.78rem !important;
+}
+
 .filter-buttons-box {
   display: flex;
+  align-items: center;
   gap: 0.35rem;
 }
+
 .filter-tag {
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
+  height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 0.73rem !important;
+  border-radius: 999px !important;
+  background: var(--surface-subtle) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
 }
+
 .filter-tag.active {
-  background: rgba(34, 211, 238, 0.15);
-  color: var(--cyan);
-  border-color: var(--cyan);
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: var(--primary) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
 }
+
 .navigator-horizontal-scroll {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.5rem;
   overflow-x: auto;
-  padding-bottom: 0.5rem;
+  padding-bottom: 4px;
 }
-.navigator-horizontal-scroll::-webkit-scrollbar {
-  height: 5px;
-}
-.navigator-horizontal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(99,132,206,0.25);
-  border-radius: 3px;
-}
+
 .navigator-item-card {
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
-  padding: 0.5rem 0.85rem;
+  min-width: 175px;
+  max-width: 220px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 9px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
   cursor: pointer;
-  transition: all 0.2s;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  min-width: 180px;
+  justify-content: space-between;
+  gap: 0.5rem;
   flex-shrink: 0;
+  transition: all 0.15s ease;
 }
+
 .navigator-item-card:hover {
-  background: rgba(22, 119, 255, 0.08);
-  border-color: var(--blue);
+  border-color: var(--primary);
 }
+
 .navigator-item-card.active {
-  border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.08);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.15);
+  background: rgba(16, 185, 129, 0.14);
+  border-color: var(--primary);
 }
+
 .navigator-item-card.warn {
-  border-color: var(--red);
+  border-color: rgba(245, 158, 11, 0.45);
 }
+
 .nav-item-meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  min-width: 0;
 }
+
 .nav-item-meta .name {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  color: white;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .nav-item-meta .sub {
-  font-size: 0.7rem;
+  font-size: 0.69rem;
   color: var(--muted);
-}
-.nav-item-warn-tag {
-  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Thumbnail layout view */
-.thumbnail-grid-layout {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.25rem;
-  width: 100%;
-  padding: 0.5rem;
-}
-.thumbnail-preview-card {
-  border: 1px solid rgba(99, 132, 206, 0.22);
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 12px;
-  padding: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.thumbnail-preview-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--blue);
-}
-.thumbnail-preview-card.active {
-  border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.04);
-}
-.thumbnail-card-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: white;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-.thumbnail-svg-render {
-  background: white;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.thumbnail-svg-render svg {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.thumbnail-warning-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(220, 38, 38, 0.85);
-  color: white;
-  font-size: 0.7rem;
-  text-align: center;
-  padding: 3px 0;
-  font-weight: bold;
-}
-
-/* Bulk progress modal overlay */
+/* Export Progress Overlay */
 .export-progress-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 11, 30, 0.85);
-  backdrop-filter: blur(8px);
-  z-index: 10000;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 4000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .export-progress-card {
-  background: linear-gradient(145deg, rgba(12, 29, 65, 0.95), rgba(8, 19, 44, 0.98));
-  border: 1px solid rgba(34, 211, 238, 0.4);
-  border-radius: 18px;
-  padding: 2rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 1.5rem 2rem;
+  min-width: 300px;
+  text-align: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1.25rem;
-  max-width: 380px;
-  width: 90%;
-  text-align: center;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  gap: 0.65rem;
+  box-shadow: var(--shadow-lg);
 }
+
 .progress-bar-container {
-  width: 100%;
   height: 8px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 4px;
+  background: var(--surface-subtle);
+  border-radius: 999px;
   overflow: hidden;
 }
+
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--blue));
-  border-radius: 4px;
+  background: var(--primary);
   transition: width 0.2s ease;
 }
 
-/* Presets checklist and visibility checkboxes */
+/* Checkbox & Preset Grids */
 .preset-toggle-container {
   display: flex;
-  gap: 4px;
   flex-wrap: wrap;
-  margin-top: 4px;
+  gap: 0.4rem;
 }
-.preset-toggle-container button {
-  padding: 4px 8px !important;
-  font-size: 0.7rem !important;
-  border-radius: 6px !important;
-}
+
 .checkbox-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
 }
+
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text);
   cursor: pointer;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 9px;
   font-size: 0.8rem;
-  color: #b6c7e8;
-}
-.checkbox-label input[type="checkbox"] {
-  accent-color: var(--cyan);
-}
-.warning-pill-indicator {
-  background: rgba(255, 92, 122, 0.15);
-  color: #ff5c7a;
-  border: 1px solid rgba(255, 92, 122, 0.3);
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 20px;
 }
 
-/* Validation scroll lists */
-.warnings-container-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.warnings-container-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.12);
-  border-radius: 2px;
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
 }
 
-/* Hidden elements for print Breaks */
+.sync-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.sync-dot.loading {
+  background: var(--accent);
+}
+
+.bulk-import-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ==========================================================================
+   PRINT ENGINE RULES (A4 / K80 THERMAL)
+   ========================================================================== */
 .print-only-container {
   display: none;
 }
+
 @media print {
-  /* Reset all shell containers to normal flow to allow page breaks */
-  html, body, #root, .dashboard-layout, .main-content, .screen, .payroll-creator {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
+  body * {
+    visibility: hidden;
   }
 
-  body * {
-    visibility: hidden !important;
+  .print-only-container,
+  .print-only-container * {
+    visibility: visible;
   }
-  .print-only-container, .print-only-container * {
-    visibility: visible !important;
-  }
+
   .print-only-container {
     display: block !important;
-    position: relative !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
   }
-  .print-page {
-    page-break-after: always !important;
-    break-after: always !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-  }
-}
 
-/* Responsive adjustments for Payroll Creator tab layout */
-.payroll-layout.layout-mobile {
-  grid-template-columns: 1fr !important;
+  .print-page {
+    page-break-after: always;
+    break-after: page;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  body.print-k80-mode .print-only-container {
+    width: 80mm !important;
+  }
+
+  body.print-k80-no-split .print-page {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
 }
 
 @media (max-width: 768px) {
-  .payroll-layout {
-    grid-template-columns: 1fr !important;
-    gap: 1rem !important;
+  .metrics-strip-pnl {
+    grid-template-columns: repeat(2, 1fr);
   }
-  
-  .payroll-tabs .tab-btn {
-    transition: all 0.2s ease;
-  }
-  
-  .payroll-tabs .tab-btn.active {
-    box-shadow: 0 0 12px rgba(22, 119, 255, 0.4);
-  }
-  
-  /* Make sheet preview fit the viewport on mobile */
-  .sheet-canvas-wrapper {
-    transform: none !important;
-    width: 100% !important;
-    overflow-x: hidden !important;
-    padding: 0 !important;
-  }
-  
-  .receipt-svg-holder svg {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-  }
-  
-  .preview-receipt-card {
-    padding: 0.5rem !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-  
-  .preview-toolbar-bar {
-    flex-direction: column !important;
-    gap: 10px !important;
-    align-items: stretch !important;
-    height: auto !important;
-    padding: 10px !important;
-  }
-  
-  .toolbar-left-group, .toolbar-right-group {
-    justify-content: space-between !important;
-    width: 100% !important;
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
-  
-  .action-buttons-box {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    width: 100% !important;
-    gap: 8px !important;
-  }
-  
-  .action-buttons-box button {
-    width: 100% !important;
-  }
-  
-  .employee-navigator-widget {
-    width: 100% !important;
-    justify-content: center !important;
-  }
-  
-  .preview-header-panel {
-    flex-direction: column !important;
-    gap: 8px !important;
-    align-items: stretch !important;
-  }
-  
-  .preview-views-toggle, .preview-templates-toggle {
-    display: flex !important;
-    width: 100% !important;
-  }
-  
-  .view-toggle-btn, .template-toggle-btn {
-    flex-grow: 1 !important;
-    text-align: center !important;
-    font-size: 11px !important;
-    padding: 8px 4px !important;
+  .grid3 {
+    grid-template-columns: 1fr;
   }
 }
-
-/* ========================================================
-   CONTAINER RESPONSIVE OVERRIDES
-   ======================================================== */
-
-/* General container overrides */
-.payroll-creator {
-  min-width: 0;
-  width: 100%;
-}
-
-.payroll-creator .head {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  width: 100%;
-}
-
-/* WIDE MODE (>= 1100px) */
-.payroll-creator.mode-wide .payroll-layout {
-  display: grid;
-  grid-template-columns: 400px 1fr;
-  gap: 1.5rem;
-}
-.payroll-creator.mode-wide .payroll-layout.left-panel-collapsed {
-  grid-template-columns: 1fr;
-}
-
-/* COMPACT MODE (800px - 1099px) */
-.payroll-creator.mode-compact .head {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-}
-.payroll-creator.mode-compact .kpis {
-  grid-template-columns: repeat(2, 1fr) !important;
-  min-width: 0 !important;
-  width: 100%;
-}
-.payroll-creator.mode-compact .payroll-layout {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 1.25rem;
-}
-.payroll-creator.mode-compact .payroll-layout.left-panel-collapsed {
-  grid-template-columns: 1fr;
-}
-.payroll-creator.mode-compact .navigator-horizontal-scroll {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
-  gap: 8px !important;
-  overflow-x: visible !important;
-  max-height: 180px !important;
-  overflow-y: auto !important;
-}
-
-/* NARROW MODE (600px - 799px) */
-.payroll-creator.mode-narrow .head {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-}
-.payroll-creator.mode-narrow .kpis {
-  grid-template-columns: repeat(2, 1fr) !important;
-  min-width: 0 !important;
-  width: 100%;
-}
-.payroll-creator.mode-narrow .payroll-layout {
-  display: block;
-  width: 100%;
-}
-.payroll-creator.mode-narrow .drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(5, 11, 30, 0.75);
-  backdrop-filter: blur(4px);
-  z-index: 2400;
-  animation: fadeIn 0.2s ease-out;
-}
-.payroll-creator.mode-narrow .config-pane {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 340px;
-  max-width: 90vw;
-  z-index: 2500;
-  background: linear-gradient(145deg, #09132c, #050b1a);
-  border-right: 1px solid rgba(77, 134, 224, 0.4);
-  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.6);
-  padding: 1.5rem;
-  overflow-y: auto;
-  max-height: 100vh;
-  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.payroll-creator.mode-narrow .navigator-horizontal-scroll {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 6px !important;
-  max-height: 200px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-.payroll-creator.mode-narrow .navigator-item-card {
-  width: 100% !important;
-  min-width: 0 !important;
-}
-
-/* MOBILE MODE (< 600px) */
-.payroll-creator.mode-mobile .head {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-}
-.payroll-creator.mode-mobile .kpis {
-  grid-template-columns: 1fr !important;
-  min-width: 0 !important;
-  width: 100%;
-}
-.payroll-creator.mode-mobile .payroll-layout {
-  display: block;
-  width: 100%;
-}
-.payroll-creator.mode-mobile .preview-toolbar-bar {
-  flex-direction: column !important;
-  gap: 10px !important;
-  align-items: stretch !important;
-}
-.payroll-creator.mode-mobile .toolbar-left-group, 
-.payroll-creator.mode-mobile .toolbar-right-group {
-  justify-content: space-between !important;
-  width: 100% !important;
-  gap: 8px !important;
-}
-.payroll-creator.mode-mobile .action-buttons-box {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
-  width: 100% !important;
-  gap: 8px !important;
-}
-.payroll-creator.mode-mobile .action-buttons-box button {
-  width: 100% !important;
-}
-.payroll-creator.mode-mobile .preview-header-panel {
-  flex-direction: column !important;
-  gap: 8px !important;
-  align-items: stretch !important;
-}
-.payroll-creator.mode-mobile .preview-views-toggle, 
-.payroll-creator.mode-mobile .preview-templates-toggle {
-  display: flex !important;
-  width: 100% !important;
-}
-.payroll-creator.mode-mobile .view-toggle-btn, 
-.payroll-creator.mode-mobile .template-toggle-btn {
-  flex-grow: 1 !important;
-  text-align: center !important;
-  font-size: 11px !important;
-  padding: 8px 4px !important;
-}
-
-/* Local scrolling viewport limits to prevent horizontal page scrolling */
-.PayrollPreviewViewport {
-  overflow-x: auto !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-}
-
-/* Stretch SVG wrapper for fit zoom */
-.sheet-canvas-wrapper svg {
-  width: 100% !important;
-  height: auto !important;
-  max-width: 100% !important;
-}
-
-/* KPI Card Scaling to prevent cutting money */
-.payroll-creator .kpis {
-  min-width: 0 !important;
-  max-width: 100%;
-}
-.payroll-creator .kpi {
-  padding: 12px 14px !important;
-  gap: 10px !important;
-  min-width: 0 !important;
-  box-sizing: border-box;
-}
-.payroll-creator .kpi b {
-  font-size: clamp(1rem, 2.5vw, 1.25rem) !important;
-  word-break: break-all;
-}
-.payroll-creator .kpi span {
-  font-size: 11px !important;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideInLeft {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
-}
-
-/* Dropdown click outside backdrop & popover */
-.dropdown-click-outside-backdrop {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 999;
-}
-.toolbar-options-dropdown {
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-  animation: fadeIn 0.15s ease-out;
-}
-
-/* Consolidated Accordion styling additions */
-.payroll-creator .sub-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.payroll-creator .sub-section-header {
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--cyan);
-  margin-bottom: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
-  padding-bottom: 4px;
-}
-
-.payroll-creator .sub-section-divider {
-  height: 1px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.06), transparent);
-  margin: 1.25rem 0 0.85rem 0;
-}
-
-

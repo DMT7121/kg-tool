@@ -304,6 +304,40 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 9. GỬI EMAIL PHIẾU LƯƠNG NHÂN VIÊN
+    if (action === "send_payroll_emails") {
+      var emailList = data.emails || [];
+      if (!emailList.length) {
+        throw new Error("Thiếu danh sách email cần gửi.");
+      }
+      var count = 0;
+      var errors = [];
+      for (var i = 0; i < emailList.length; i++) {
+        var emailItem = emailList[i];
+        if (!emailItem.email || !emailItem.email.trim()) {
+          errors.push("Bỏ qua " + emailItem.name + ": Không có địa chỉ email.");
+          continue;
+        }
+        try {
+          MailApp.sendEmail({
+            to: emailItem.email.trim(),
+            subject: "[Kings Grill] Phiếu lương " + (emailItem.month || ""),
+            htmlBody: emailItem.contentHtml,
+            name: "Kings Grill Payroll"
+          });
+          count++;
+        } catch (e) {
+          errors.push("Lỗi gửi tới " + emailItem.name + " (" + emailItem.email + "): " + e.toString());
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ 
+        status: "success", 
+        success: true, 
+        sentCount: count, 
+        errors: errors 
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     throw new Error("Hành động POST không hợp lệ: " + action);
 
   } catch (err) {

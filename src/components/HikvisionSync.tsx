@@ -10,7 +10,7 @@ import {
   AlertCircle,
   Search
 } from 'lucide-react';
-import { StatCard, EmptyState, LoadingState, ErrorState, GuidePanel } from './Shared';
+import { StatCard, EmptyState, LoadingState, ErrorState, GuidePanel, PageHeader, Badge } from './Shared';
 
 interface AttendanceLog {
   name: string;
@@ -24,9 +24,10 @@ interface HikvisionSyncProps {
   gasUrl: string;
   spreadsheetId: string;
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  onNavigate?: (view: 'attendance' | 'payroll' | 'vietqr' | 'tts' | 'settings' | 'transfer' | 'hikvision') => void;
 }
 
-export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: HikvisionSyncProps) {
+export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavigate }: HikvisionSyncProps) {
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -196,12 +197,30 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
 
   return (
     <div className="screen active">
-      <div className="head">
-        <div className="title">
-          <h1>Đồng Bộ Máy Chấm Công (Hikvision) <span className="blue-dot"></span></h1>
-          <p>Nhận dữ liệu chấm công từ thiết bị Hikvision thông qua Cloudflare Worker, ghi tự động vào Google Sheets</p>
-        </div>
-        
+      <PageHeader
+        icon={<Cpu size={26} />}
+        title="Quản Lý Chấm Công & Thiết Bị"
+        subtitle="Nhận dữ liệu chấm công thời gian thực từ thiết bị Hikvision thông qua Cloudflare Worker"
+        badgeText="Hikvision Sync"
+        badgeVariant="danger"
+      />
+      <div className="hub-subtab-bar">
+        <button 
+          type="button" 
+          className="hub-subtab-btn"
+          onClick={() => onNavigate?.('attendance')}
+        >
+          📊 Xử lý Chấm Công & Phân Ca
+        </button>
+        <button 
+          type="button" 
+          className="hub-subtab-btn active"
+          onClick={() => onNavigate?.('hikvision')}
+        >
+          🔌 Máy Chấm Công Cloud (Hikvision)
+        </button>
+      </div>
+      <div className="head" style={{ marginBottom: '1.5rem' }}>
         <div className="kpis">
           <StatCard 
             icon={<Clock size={20} />} 
@@ -286,28 +305,28 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <code style={{ fontSize: '0.85rem', color: 'var(--cyan)', wordBreak: 'break-all' }}>{workerUrl}</code>
                   <button 
                     type="button" 
                     onClick={() => handleCopy(workerUrl, 'url')}
-                    style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: copiedUrl ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
-                    {copiedUrl ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
+                    {copiedUrl ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
                   </button>
                 </div>
               </div>
 
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <code style={{ fontSize: '0.85rem', color: 'var(--cyan)' }}>{secretKey}</code>
                   <button 
                     type="button" 
                     onClick={() => handleCopy(secretKey, 'secret')}
-                    style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: copiedSecret ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
-                    {copiedSecret ? <Check size={16} color="var(--green)" /> : <Copy size={16} />}
+                    {copiedSecret ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
                   </button>
                 </div>
               </div>
@@ -425,7 +444,10 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
         {/* RIGHT COLUMN: Logs list */}
         <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flexGrow: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>📋 Nhật ký chấm công online</h2>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <span>📋 Nhật ký chấm công online</span>
+              <span className="badge badge-info" style={{ fontSize: '11px', padding: '2px 8px' }}>{filteredLogs.length} dòng</span>
+            </h2>
             <button 
               className="btn-outline" 
               onClick={fetchLogs} 
@@ -460,31 +482,47 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast }: Hikv
               description={searchQuery ? "Không tìm thấy dữ liệu phù hợp với tìm kiếm của bạn." : "Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets."} 
             />
           ) : (
-            <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px' }}>
+              <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text)', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px' }}>Họ tên nhân viên</th>
-                    <th style={{ padding: '10px 12px' }}>Ngày</th>
-                    <th style={{ padding: '10px 12px' }}>Giờ vào</th>
-                    <th style={{ padding: '10px 12px' }}>Giờ ra</th>
-                    <th style={{ padding: '10px 12px' }}>Ghi chú</th>
+                  <tr style={{ background: '#091736', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 2 }}>
+                    <th style={{ padding: '10px 14px', width: '50px' }}>STT</th>
+                    <th style={{ padding: '10px 14px' }}>Họ tên nhân viên</th>
+                    <th style={{ padding: '10px 14px' }}>Ngày</th>
+                    <th style={{ padding: '10px 14px' }}>Giờ vào</th>
+                    <th style={{ padding: '10px 14px' }}>Giờ ra</th>
+                    <th style={{ padding: '10px 14px' }}>Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLogs.map((log, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 600, color: 'white' }}>{log.name}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--muted)' }}>{log.date}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        {log.checkIn ? <span style={{ color: 'var(--green)', background: 'rgba(48,231,151,0.08)', padding: '2px 8px', borderRadius: '4px', fontWeight: 500 }}>{log.checkIn}</span> : '—'}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        {log.checkOut ? <span style={{ color: 'var(--red)', background: 'rgba(255,92,122,0.08)', padding: '2px 8px', borderRadius: '4px', fontWeight: 500 }}>{log.checkOut}</span> : '—'}
-                      </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: '0.8rem' }}>{log.notes}</td>
-                    </tr>
-                  ))}
+                  {filteredLogs.map((log, idx) => {
+                    const cleanDate = log.date?.includes('T') ? log.date.split('T')[0] : (log.date || '—');
+                    const formatTime = (t: string) => {
+                      if (!t) return null;
+                      if (t.includes('T')) {
+                        const timePart = t.split('T')[1];
+                        return timePart ? timePart.replace(/\.000Z|Z/g, '').substring(0, 8) : t;
+                      }
+                      return t;
+                    };
+                    const cleanIn = formatTime(log.checkIn);
+                    const cleanOut = formatTime(log.checkOut);
+
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
+                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '11px' }}>#{idx + 1}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>{log.name}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontFamily: 'monospace', fontSize: '12px' }}>{cleanDate}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          {cleanIn ? <Badge variant="success" dot>{cleanIn}</Badge> : <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          {cleanOut ? <Badge variant="warning" dot>{cleanOut}</Badge> : <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '0.8rem' }}>{log.notes || '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

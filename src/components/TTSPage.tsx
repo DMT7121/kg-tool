@@ -17,7 +17,7 @@ import {
   Key,
   Info
 } from 'lucide-react';
-import { StatCard, EmptyState } from './Shared';
+import { StatCard, EmptyState, PageHeader } from './Shared';
 
 export interface TTSTemplate {
   id: string;
@@ -612,9 +612,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   // Sidebar search & category filter
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [suggestionCategory, setSuggestionCategory] = useState('all');
 
-  // Layout Mobile view tabs
-  const [mobileActiveTab, setMobileActiveTab] = useState<'compose' | 'templates' | 'settings' | 'history'>('compose');
+  // Main Subtabs Navigation
+  const [mainTab, setMainTab] = useState<'broadcast' | 'settings' | 'history'>('broadcast');
+  const [mobileBroadcastTab, setMobileBroadcastTab] = useState<'compose' | 'templates'>('compose');
 
   // Mobile layout state listener
   const [isMobileScreen, setIsMobileScreen] = useState(false);
@@ -625,6 +627,16 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     };
     handleResize();
     window.addEventListener('resize', handleResize);
+
+    // Support incoming text from Browser Extension context menu (?tab=tts&text=...)
+    const params = new URLSearchParams(window.location.search);
+    const extText = params.get('text');
+    if (extText && extText.trim()) {
+      setComposeText(extText.trim());
+      setSelectedTemplateId(null);
+      setComposeTitle('Phát nhanh từ Tiện ích mở rộng');
+    }
+
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -756,6 +768,12 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       return t.category === activeCategory && matchSearch;
     });
   }, [templates, activeCategory, searchQuery]);
+ 
+  // Filter default suggestions by category
+  const filteredSuggestions = useMemo(() => {
+    if (suggestionCategory === 'all') return DEFAULT_SUGGESTIONS;
+    return DEFAULT_SUGGESTIONS.filter(s => s.category.toLowerCase().includes(suggestionCategory.toLowerCase()));
+  }, [suggestionCategory]);
 
   // Play browser speech synthesis
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -1377,7 +1395,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       };
     });
 
-    setMobileActiveTab('compose');
+    setMobileBroadcastTab('compose');
   };
 
   // Ghim yêu thích
@@ -1562,22 +1580,24 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     <div className="tts-page">
       
       {/* PAGE HEADER */}
-      <div className="head" style={{ marginBottom: '1.5rem' }}>
-        <div className="title">
-          <h1>Đọc Văn Bản TTS <span className="blue-dot"></span></h1>
-          <p>Tạo và phát giọng đọc tự động từ mẫu câu nghiệp vụ nhà hàng hoặc văn bản tùy chỉnh.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+      <PageHeader
+        icon={<Volume2 size={26} />}
+        title="Chuyển Văn Bản Thành Giọng Nói (TTS)"
+        subtitle="Tạo và phát giọng đọc tự động từ mẫu câu nghiệp vụ nhà hàng Kings Grill hoặc văn bản tùy chỉnh"
+        badgeText="Web Speech AI"
+        badgeVariant="success"
+        actions={
           <button 
             className="btn-outline" 
             onClick={handleSpreadsheetSync}
             disabled={syncStatus === 'syncing'}
+            style={{ height: '40px', padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {syncStatus === 'syncing' ? <RefreshCw className="spinner" size={18} /> : <Database size={18} />}
+            {syncStatus === 'syncing' ? <RefreshCw className="spinner" size={16} /> : <Database size={16} />}
             <span>Đồng bộ Spreadsheet</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* OVERVIEW KPIS */}
       <div className="kpis" style={{ marginBottom: '1.5rem' }}>
@@ -1640,70 +1660,70 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         />
       </div>
 
-      {/* MOBILE TAB BAR */}
-      {isMobileScreen && (
-        <div className="card panel" style={{ marginBottom: '1rem', padding: '6px', background: 'rgba(255,255,255,0.02)' }}>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button 
-              type="button" 
-              onClick={() => setMobileActiveTab('compose')}
-              style={{ 
-                flex: 1, padding: '8px', borderRadius: '6px', fontSize: '0.8rem',
-                background: mobileActiveTab === 'compose' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-                border: 'none', color: 'white', fontWeight: 600
-              }}
-            >
-              ✍️ Soạn
-            </button>
-            <button 
-              type="button" 
-              onClick={() => setMobileActiveTab('templates')}
-              style={{ 
-                flex: 1, padding: '8px', borderRadius: '6px', fontSize: '0.8rem',
-                background: mobileActiveTab === 'templates' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-                border: 'none', color: 'white', fontWeight: 600
-              }}
-            >
-              📂 Thư viện
-            </button>
-            <button 
-              type="button" 
-              onClick={() => setMobileActiveTab('settings')}
-              style={{ 
-                flex: 1, padding: '8px', borderRadius: '6px', fontSize: '0.8rem',
-                background: mobileActiveTab === 'settings' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-                border: 'none', color: 'white', fontWeight: 600
-              }}
-            >
-              ⚙️ Cấu hình
-            </button>
-            <button 
-              type="button" 
-              onClick={() => setMobileActiveTab('history')}
-              style={{ 
-                flex: 1, padding: '8px', borderRadius: '6px', fontSize: '0.8rem',
-                background: mobileActiveTab === 'history' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-                border: 'none', color: 'white', fontWeight: 600
-              }}
-            >
-              ⏱️ Lịch sử
-            </button>
-          </div>
-        </div>
-      )}
+      {/* UNIVERSAL SUBTAB BAR */}
+      <div className="hub-subtab-bar" style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
+        <button 
+          type="button" 
+          className={`hub-subtab-btn ${mainTab === 'broadcast' ? 'active' : ''}`}
+          onClick={() => setMainTab('broadcast')}
+        >
+          <Volume2 size={16} />
+          <span>🎙️ Phát Thông Báo</span>
+        </button>
 
-      {/* DASHBOARD LAYOUT GRID */}
-      <div 
-        style={{ 
-          display: 'grid', 
-          gridTemplateColumns: isMobileScreen ? '1fr' : '300px 1fr 350px', 
-          gap: '1.25rem',
-          alignItems: 'start'
-        }}
-      >
-        
-        {/* COLUMN 1: TEMPLATE LIBRARY (Left in Desktop, Tab in Mobile) */}
-        {(!isMobileScreen || mobileActiveTab === 'templates') && (
+        <button 
+          type="button" 
+          className={`hub-subtab-btn ${mainTab === 'settings' ? 'active' : ''}`}
+          onClick={() => setMainTab('settings')}
+        >
+          <SlidersHorizontal size={16} />
+          <span>⚙️ Cấu Hình Giọng & Quota API</span>
+        </button>
+
+        <button 
+          type="button" 
+          className={`hub-subtab-btn ${mainTab === 'history' ? 'active' : ''}`}
+          onClick={() => setMainTab('history')}
+        >
+          <History size={16} />
+          <span>📜 Lịch Sử Phát ({history.length})</span>
+        </button>
+      </div>
+
+      {/* TAB 1: BROADCAST PLAYBACK (2-COLUMN BALANCED WORKFLOW) */}
+      {mainTab === 'broadcast' && (
+        <>
+          {isMobileScreen && (
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', padding: '4px', borderRadius: '8px' }}>
+              <button 
+                type="button" 
+                className={`hub-subtab-btn ${mobileBroadcastTab === 'compose' ? 'active' : ''}`}
+                onClick={() => setMobileBroadcastTab('compose')}
+                style={{ flex: 1, padding: '7px', fontSize: '0.8rem' }}
+              >
+                ✍️ Soạn câu
+              </button>
+              <button 
+                type="button" 
+                className={`hub-subtab-btn ${mobileBroadcastTab === 'templates' ? 'active' : ''}`}
+                onClick={() => setMobileBroadcastTab('templates')}
+                style={{ flex: 1, padding: '7px', fontSize: '0.8rem' }}
+              >
+                📂 Thư viện mẫu ({templates.length})
+              </button>
+            </div>
+          )}
+
+          <div 
+            style={{ 
+              display: 'grid', 
+              gridTemplateColumns: isMobileScreen ? '1fr' : '360px 1fr', 
+              gap: '1.25rem',
+              alignItems: 'start'
+            }}
+          >
+            {/* COLUMN 1: TEMPLATE LIBRARY */}
+            {(!isMobileScreen || mobileBroadcastTab === 'templates') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="card panel" style={{ background: 'var(--panel-bg)', height: isMobileScreen ? 'auto' : '650px', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
               <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1796,19 +1816,54 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
             {/* Suggestions Library */}
             <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
-              <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Sparkles size={14} style={{ color: 'var(--cyan)' }} />
-                <span>Gợi ý mẫu câu phát nhanh</span>
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <h3 style={{ fontSize: '0.95rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={14} style={{ color: 'var(--cyan)' }} />
+                  <span>Gợi ý mẫu câu phát nhanh</span>
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{filteredSuggestions.length} mẫu</span>
+              </div>
+
+              {/* Category Filter Chips */}
+              <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '8px' }}>
+                {[
+                  { id: 'all', label: 'Tất cả' },
+                  { id: 'Đặt bàn', label: '🍽️ Đặt bàn' },
+                  { id: 'Vận hành', label: '👨‍🍳 Bếp/Sảnh' },
+                  { id: 'Thu ngân', label: '💰 Thu ngân' },
+                  { id: 'Thông báo', label: '📢 Thông báo' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSuggestionCategory(cat.id)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      whiteSpace: 'nowrap',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: suggestionCategory === cat.id ? 'var(--cyan)' : 'rgba(255,255,255,0.06)',
+                      color: suggestionCategory === cat.id ? '#050c1e' : 'var(--text-muted)',
+                      fontWeight: suggestionCategory === cat.id ? 700 : 500,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {DEFAULT_SUGGESTIONS.map((sug, i) => (
+                {filteredSuggestions.map((sug, i) => (
                   <div 
                     key={i}
                     style={{ 
                       padding: '6px 8px', 
                       background: 'rgba(255,255,255,0.01)', 
                       border: '1px solid rgba(255,255,255,0.03)', 
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -1816,25 +1871,30 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     }}
                   >
                     <div style={{ overflow: 'hidden', paddingRight: '8px' }}>
-                      <strong>{sug.title}</strong>
+                      <strong style={{ fontSize: '0.82rem' }}>{sug.title}</strong>
                       <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sug.text}</span>
                     </div>
                     <button 
                       type="button" 
                       onClick={() => handleLoadSuggestion(sug)}
-                      style={{ background: 'var(--cyan-glow)', border: 'none', color: 'white', borderRadius: '4px', padding: '3px 6px', fontSize: '0.7rem', cursor: 'pointer' }}
+                      style={{ background: 'var(--cyan-glow)', border: 'none', color: 'white', borderRadius: '4px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
                     >
                       + Thêm
                     </button>
                   </div>
                 ))}
+                {filteredSuggestions.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--muted)', fontSize: '11px' }}>
+                    Không có gợi ý trong danh mục này.
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* COLUMN 2: TEXT COMPOSER & INTERPOLATOR (Middle in Desktop, Tab in Mobile) */}
-        {(!isMobileScreen || mobileActiveTab === 'compose') && (
+        {/* COLUMN 2: TEXT COMPOSER & INTERPOLATOR */}
+        {(!isMobileScreen || mobileBroadcastTab === 'compose') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
               <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0' }}>✍️ Soạn câu phát âm thanh</h2>
@@ -1874,14 +1934,20 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 {/* Textarea Composer */}
                 <div className="form-group">
                   <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Nội dung mẫu nói</span>
+                    <span>Nội dung mẫu nói <span style={{ color: 'var(--primary)', fontWeight: 500, fontSize: '0.72rem' }}>(Nhấn Ctrl + Enter để phát ngay)</span></span>
                     <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{composeText.length} ký tự</span>
                   </label>
                   <textarea 
                     className="form-control"
-                    placeholder="Nhập nội dung mẫu nói ở đây..."
+                    placeholder="Nhập nội dung mẫu nói ở đây... (Ctrl + Enter để phát loa ngay)"
                     value={composeText}
                     onChange={e => setComposeText(e.target.value)}
+                    onKeyDown={e => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSpeak();
+                      }
+                    }}
                     style={{ height: '140px', fontFamily: 'inherit', fontSize: '0.95rem', lineHeight: 1.5 }}
                   />
                   
@@ -2123,12 +2189,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           </div>
         )}
 
-        {/* COLUMN 3: AUDIO CONFIG & HISTORY (Right in Desktop, Tab in Mobile) */}
-        {(!isMobileScreen || mobileActiveTab === 'settings' || mobileActiveTab === 'history') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            
-            {/* AUDIO CONFIG SECTION */}
-            {(!isMobileScreen || mobileActiveTab === 'settings') && (
+          </div>
+        </>
+      )}
+
+      {/* TAB 2: AUDIO CONFIG & API QUOTA SETTINGS */}
+      {mainTab === 'settings' && (
+        <div style={{ maxWidth: '850px', margin: '0 auto' }}>
               <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
                 <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <SlidersHorizontal size={18} style={{ color: 'var(--cyan)' }} />
@@ -2614,69 +2681,97 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
                 </div>
               </div>
-            )}
+        </div>
+      )}
 
-            {/* HISTORY SECTION */}
-            {(!isMobileScreen || mobileActiveTab === 'history') && (
-              <div className="card panel" style={{ background: 'var(--panel-bg)', height: isMobileScreen ? 'auto' : '260px', display: 'flex', flexDirection: 'column' }}>
-                <h2 style={{ fontSize: '1rem', margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <History size={16} style={{ color: 'var(--cyan)' }} />
-                  <span>Lịch sử phát gần đây</span>
-                </h2>
+      {/* TAB 3: HISTORY DETAIL LOG */}
+      {mainTab === 'history' && (
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <div className="card panel" style={{ background: 'var(--panel-bg)', minHeight: '350px', maxHeight: '650px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <h2 style={{ fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <History size={16} style={{ color: 'var(--cyan)' }} />
+                <span>Nhật ký phát âm thanh gần đây</span>
+              </h2>
+              {history.length > 0 && (
+                <button 
+                  type="button" 
+                  className="btn-ghost" 
+                  onClick={() => {
+                    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử phát?')) {
+                      setHistory([]);
+                      showToast('Đã dọn dẹp toàn bộ lịch sử phát!', 'info');
+                    }
+                  }}
+                  style={{ fontSize: '11px', color: '#f87171', padding: '2px 8px', height: '24px' }}
+                >
+                  Xóa tất cả
+                </button>
+              )}
+            </div>
 
-                <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {history.map(item => (
-                    <div 
-                      key={item.id} 
-                      style={{ 
-                        padding: '6px 8px', 
-                        background: 'rgba(255,255,255,0.01)', 
-                        border: '1px solid rgba(255,255,255,0.03)', 
-                        borderRadius: '4px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '8px' }}>
-                        <span style={{ display: 'block', fontSize: '0.75rem', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                          {item.text}
-                        </span>
-                        <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--muted)' }}>
-                          {new Date(item.playedAt).toLocaleTimeString('vi-VN')} - {item.providerId.toUpperCase()}
-                        </span>
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setComposeText(item.text);
-                          setSelectedTemplateId(item.templateId || null);
-                          if (item.providerId === 'browser') speakBrowser(item.normalizedText);
-                          else if (item.providerId === 'fpt') speakFpt(item.normalizedText);
-                          else if (item.providerId === 'viettel') speakViettel(item.normalizedText);
-                          else speakCustom(item.normalizedText);
-                        }}
-                        style={{ 
-                          background: 'transparent', border: 'none', color: 'var(--cyan)', 
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' 
-                        }}
-                        title="Phát lại"
-                      >
-                        <Play size={10} fill="var(--cyan)" />
-                      </button>
-                    </div>
-                  ))}
-                  {history.length === 0 && (
-                    <span style={{ fontSize: '0.75rem', opacity: 0.5, textAlign: 'center', display: 'block', padding: '12px' }}>Chưa phát câu nào hôm nay.</span>
-                  )}
+            <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {history.map(item => (
+                <div 
+                  key={item.id} 
+                  style={{ 
+                    padding: '8px 12px', 
+                    background: 'rgba(255,255,255,0.015)', 
+                    border: '1px solid rgba(255,255,255,0.04)', 
+                    borderRadius: '6px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '12px' }}>
+                    <span style={{ display: 'block', fontSize: '0.85rem', color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {item.text}
+                    </span>
+                    <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginTop: '2px' }}>
+                      🕒 {new Date(item.playedAt).toLocaleString('vi-VN')} • <strong style={{ color: 'var(--cyan)' }}>{item.providerId.toUpperCase()}</strong>
+                    </span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setComposeText(item.text);
+                      setSelectedTemplateId(item.templateId || null);
+                      setMainTab('broadcast');
+                      if (item.providerId === 'browser') speakBrowser(item.normalizedText);
+                      else if (item.providerId === 'google') speakGoogle(item.normalizedText);
+                      else if (item.providerId === 'fpt') speakFpt(item.normalizedText);
+                      else if (item.providerId === 'viettel') speakViettel(item.normalizedText);
+                      else if (item.providerId === 'zalo') speakZalo(item.normalizedText);
+                      else speakCustom(item.normalizedText);
+                    }}
+                    className="primary"
+                    style={{ 
+                      height: '32px',
+                      padding: '0 10px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Phát lại và mở khung soạn thảo"
+                  >
+                    <Play size={12} fill="white" />
+                    <span>Phát lại</span>
+                  </button>
                 </div>
-              </div>
-            )}
-
+              ))}
+              {history.length === 0 && (
+                <EmptyState 
+                  icon={<History size={36} />}
+                  title="Chưa có lịch sử phát nào"
+                  description="Các câu phát qua loa sẽ được tự động ghi lại tại đây."
+                />
+              )}
+            </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
 
       {/* Guide Panel Instruction */}
       <div className="card panel" style={{ marginTop: '1.5rem', background: 'var(--panel-bg)' }}>

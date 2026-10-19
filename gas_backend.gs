@@ -304,6 +304,40 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 9. GỬI EMAIL PHIẾU LƯƠNG NHÂN VIÊN
+    if (action === "send_payroll_emails") {
+      var emailList = data.emails || [];
+      if (!emailList.length) {
+        throw new Error("Thiếu danh sách email cần gửi.");
+      }
+      var count = 0;
+      var errors = [];
+      for (var i = 0; i < emailList.length; i++) {
+        var emailItem = emailList[i];
+        if (!emailItem.email || !emailItem.email.trim()) {
+          errors.push("Bỏ qua " + emailItem.name + ": Không có địa chỉ email.");
+          continue;
+        }
+        try {
+          MailApp.sendEmail({
+            to: emailItem.email.trim(),
+            subject: "[Kings Grill] Phiếu lương " + (emailItem.month || ""),
+            htmlBody: emailItem.contentHtml,
+            name: "Kings Grill Payroll"
+          });
+          count++;
+        } catch (e) {
+          errors.push("Lỗi gửi tới " + emailItem.name + " (" + emailItem.email + "): " + e.toString());
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ 
+        status: "success", 
+        success: true, 
+        sentCount: count, 
+        errors: errors 
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     throw new Error("Hành động POST không hợp lệ: " + action);
 
   } catch (err) {
@@ -701,6 +735,28 @@ function writeToRawLogs(ss, employeeName, dateString, timeString) {
   }
 
   var lastRow = sheet.getLastRow();
+
+  // Tìm dòng đã có cho nhân viên này trong ngày
+  var matchRow = -1;
+  if (lastRow > 1) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+    for (var i = data.length - 1; i >= 0; i--) {
+      if (data[i][0].toString() === employeeName && data[i][1].toString() === dateString) {
+        matchRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  if (matchRow !== -1) {
+    var existingTimes = sheet.getRange(matchRow, 3).getValue().toString();
+    var newTimes = existingTimes ? existingTimes + "; " + timeString : timeString;
+    sheet.getRange(matchRow, 3).setValue(newTimes);
+  } else {
+    sheet.appendRow([employeeName, dateString, timeString]);
+  }
+}
+
 /**
  * Xử lý sự kiện chấm công thông minh trong Bang_Cham_Cong_Log (In-Memory)
  */
@@ -999,6 +1055,28 @@ function externalHikvisionBulkSync(data, ss) {
       if (result.status === "success") {
         importedCount++;
       }
+    }
+
+    // === WRITE-BACK: Ghi toàn bộ dữ liệu in-memory xuống spreadsheet ===
+
+    // 1. Ghi lại Bang_Cham_Cong_Log
+    if (existingRecords.length > 0) {
+      // Xóa dữ liệu cũ (giữ header dòng 1)
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, 5).clearContent();
+      }
+      // Ghi toàn bộ dữ liệu mới
+      sheet.getRange(2, 1, existingRecords.length, 5).setValues(existingRecords);
+    }
+
+    // 2. Ghi lại Logs
+    if (existingLogs.length > 0) {
+      // Xóa dữ liệu cũ (giữ header dòng 1)
+      if (logsLastRow > 1) {
+        logsSheet.getRange(2, 1, logsLastRow - 1, 3).clearContent();
+      }
+      // Ghi toàn bộ dữ liệu mới
+      logsSheet.getRange(2, 1, existingLogs.length, 3).setValues(existingLogs);
     }
 
     return { success: true, status: "success", message: "Đã đồng bộ bổ sung thành công " + importedCount + " lượt chấm công.", importedCount: importedCount };

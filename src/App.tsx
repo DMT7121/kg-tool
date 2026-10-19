@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import html2canvas from 'html2canvas';
 import { 
   CheckCircle, 
   FileText, 
@@ -14,15 +15,26 @@ import {
   Send,
   HelpCircle,
   Volume2,
-  Cpu
+  Search,
+  Copy,
+  Check,
+  Moon,
+  Sun,
+  Bell,
+  Puzzle,
+  Sparkles,
+  PanelRight
 } from 'lucide-react';
 import './App.css';
-import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, type ProcessedRecord, type TimeRecord } from './processor';
+import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, summarizeAttendanceForPayroll, type ProcessedRecord, type TimeRecord } from './processor';
 import PayrollCreator from './PayrollCreator';
 import TransferFileTool from './components/TransferFileTool';
 import TTSPage from './components/TTSPage';
 import HikvisionSync from './components/HikvisionSync';
-import { StatCard, EmptyState, GuidePanel } from './components/Shared';
+import { StatCard, EmptyState, GuidePanel, PageHeader, Badge } from './components/Shared';
+import { CommandPalette } from './components/CommandPalette';
+
+
 
 // Interface definitions
 interface Bank {
@@ -75,6 +87,66 @@ function App() {
     return localStorage.getItem('kg_tool_sidebar_collapsed') === 'true';
   });
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('kg_tool_theme');
+    return saved === 'light' ? 'light' : 'dark';
+  });
+  const [isExtensionMode, setIsExtensionMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'extension' || window.innerWidth <= 480;
+  });
+  const [showExtensionGuideModal, setShowExtensionGuideModal] = useState(false);
+
+  // Sync theme to document root
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('kg_tool_theme', theme);
+  }, [theme]);
+
+  // Sync extension compact mode class to body
+  useEffect(() => {
+    document.body.classList.toggle('is-extension-mode', isExtensionMode);
+  }, [isExtensionMode]);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      showToast(
+        next === 'light'
+          ? 'Đã chuyển sang chế độ Sáng (Daylight Alabaster)'
+          : 'Đã chuyển sang chế độ Tối (Warm Carbon Studio)',
+        'info'
+      );
+      return next;
+    });
+  };
+
+  // Global Shortcut listener for Command Palette (Ctrl+K / Cmd+K) & Module Switch (Alt+1..5)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === '1') { e.preventDefault(); setCurrentView('attendance'); }
+        else if (e.key === '2') { e.preventDefault(); setCurrentView('payroll'); }
+        else if (e.key === '3') { e.preventDefault(); setCurrentView('transfer'); }
+        else if (e.key === '4') { e.preventDefault(); setCurrentView('vietqr'); }
+        else if (e.key === '5') { e.preventDefault(); setCurrentView('tts'); }
+      }
+    };
+    const handleNavigateTab = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setCurrentView(detail);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('kg-navigate-tab', handleNavigateTab as EventListener);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('kg-navigate-tab', handleNavigateTab as EventListener);
+    };
+  }, []);
 
   // Resize listener for responsive App Shell
   useEffect(() => {
@@ -134,6 +206,16 @@ function App() {
   const [attendanceSyncSuccess, setAttendanceSyncSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Topbar interactive menu state
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Attendance search & filter for preview table
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+  const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'night' | 'complete' | 'incomplete'>('all');
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+
   // 2. VietQR & Personal Bank state
   const [banks, setBanks] = useState<Bank[]>(() => {
     const cached = localStorage.getItem('kg_tool_cached_banks');
@@ -166,6 +248,28 @@ function App() {
   const [isQrLoading, setIsQrLoading] = useState(false);
   const [isSavingAccount, setIsSavingAccount] = useState(false);
   const [showAddAccountForm, setShowAddAccountForm] = useState(false);
+
+  // Bill splitter states
+  const [vietQrViewMode, setVietQrViewMode] = useState<'single' | 'split'>('single');
+  const [splitTotalAmount, setSplitTotalAmount] = useState('1200000');
+  const [splitPeopleCount, setSplitPeopleCount] = useState(4);
+  const [splitMethod, setSplitMethod] = useState<'equal' | 'custom'>('equal');
+  const [splitGuests, setSplitGuests] = useState<any[]>([
+    { id: '1', name: 'Khách A', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH A' },
+    { id: '2', name: 'Khách B', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH B' },
+    { id: '3', name: 'Khách C', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH C' },
+    { id: '4', name: 'Khách D', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH D' },
+  ]);
+  const [selectedSplitGuestIndex, setSelectedSplitGuestIndex] = useState(0);
+
+  // Branded Receipt states
+  const [receiptTheme, setReceiptTheme] = useState<'blue' | 'green' | 'black' | 'gold'>('blue');
+  const [receiptThankYou, setReceiptThankYou] = useState('Kings Grill cảm ơn Quý khách!');
+  const [receiptShowLogo, setReceiptShowLogo] = useState(true);
+  const [receiptShowCashier, setReceiptShowCashier] = useState(true);
+  const [receiptShowDate, setReceiptShowDate] = useState(true);
+  const [receiptTableNo, setReceiptTableNo] = useState('Bàn 05');
+  const [receiptShowBranded, setReceiptShowBranded] = useState(true);
 
   // New account form temporary state
   const [newBank, setNewBank] = useState<Bank | null>(null);
@@ -207,23 +311,79 @@ function App() {
     }
   };
 
-  // Fetch VietQR Bank list on mount
+  // Fetch VietQR Bank list and handle Extension / Deep-link URL parameters on mount
   useEffect(() => {
     fetchBanksList(true);
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const amountParam = params.get('amount');
+    const descParam = params.get('desc');
+    const textParam = params.get('text');
+
+    if (tabParam === 'qr' || tabParam === 'vietqr' || amountParam) {
+      setCurrentView('vietqr');
+      if (amountParam) setAmount(amountParam.replace(/\D/g, ''));
+      if (descParam) setMemo(descParam);
+      // Pre-select first saved account if available
+      if (savedAccounts.length > 0 && !selectedBank) {
+        const firstAcc = savedAccounts[0];
+        const foundBank = banks.find(b => b.bin === firstAcc.bankId || b.code === firstAcc.bankCode) || FALLBACK_BANKS[0];
+        setSelectedBank(foundBank);
+        setAccountNo(firstAcc.accountNo);
+        setAccountHolder(firstAcc.accountHolder);
+        if (!descParam && firstAcc.defaultMemo) setMemo(firstAcc.defaultMemo);
+      }
+    } else if (tabParam === 'tts' || textParam) {
+      setCurrentView('tts');
+    } else if (tabParam === 'payroll') {
+      setCurrentView('payroll');
+    } else if (tabParam === 'transfer') {
+      setCurrentView('transfer');
+    } else if (tabParam === 'attendance') {
+      setCurrentView('attendance');
+    }
   }, []);
+
+  // Update split bill details
+  useEffect(() => {
+    if (splitMethod === 'equal') {
+      const cleanTotal = Number(splitTotalAmount.replace(/\D/g, '')) || 0;
+      const count = Number(splitPeopleCount) || 1;
+      const equalShare = Math.round(cleanTotal / count);
+      
+      const newGuests = Array.from({ length: count }, (_, i) => ({
+        id: String(i + 1),
+        name: `Khách ${String.fromCharCode(65 + i)}`,
+        amount: equalShare,
+        memo: `CK ${receiptTableNo || 'BAN 05'} PHAN ${i + 1}`
+      }));
+      setSplitGuests(newGuests);
+      setSelectedSplitGuestIndex(0);
+    }
+  }, [splitTotalAmount, splitPeopleCount, splitMethod, receiptTableNo]);
 
   // Update QR Code Image Link dynamically based on inputs
   useEffect(() => {
     if (selectedBank && accountNo && accountHolder) {
       setIsQrLoading(true);
-      const cleanAmount = amount.replace(/\D/g, '');
+      let cleanAmount = '';
+      let activeMemo = '';
+      
+      if (vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]) {
+        cleanAmount = String(splitGuests[selectedSplitGuestIndex].amount);
+        activeMemo = splitGuests[selectedSplitGuestIndex].memo || '';
+      } else {
+        cleanAmount = amount.replace(/\D/g, '');
+        activeMemo = memo;
+      }
+      
       const bankId = selectedBank.bin || selectedBank.code;
-      const url = `https://img.vietqr.io/image/${bankId}-${accountNo}-${selectedTemplate}.png?amount=${cleanAmount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountHolder.toUpperCase())}`;
+      const url = `https://img.vietqr.io/image/${bankId}-${accountNo}-${selectedTemplate}.png?amount=${cleanAmount}&addInfo=${encodeURIComponent(activeMemo)}&accountName=${encodeURIComponent(accountHolder.toUpperCase())}`;
       setQrUrl(url);
     } else {
       setQrUrl('');
     }
-  }, [selectedBank, accountNo, accountHolder, amount, memo, selectedTemplate]);
+  }, [selectedBank, accountNo, accountHolder, amount, memo, selectedTemplate, vietQrViewMode, splitGuests, selectedSplitGuestIndex]);
 
   // Toast System Helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -232,6 +392,154 @@ function App() {
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4500);
+  };
+
+  const getThemeGradient = () => {
+    switch (receiptTheme) {
+      case 'blue': return 'linear-gradient(180deg, #1e3a8a 0%, #0f172a 100%)';
+      case 'green': return 'linear-gradient(180deg, #064e3b 0%, #022c22 100%)';
+      case 'black': return 'linear-gradient(180deg, #374151 0%, #111827 100%)';
+      case 'gold': return 'linear-gradient(180deg, #78350f 0%, #1e1b4b 100%)';
+      default: return 'linear-gradient(180deg, #1e3a8a 0%, #0f172a 100%)';
+    }
+  };
+
+  const getThemeBorder = () => {
+    switch (receiptTheme) {
+      case 'blue': return 'rgba(59, 130, 246, 0.4)';
+      case 'green': return 'rgba(16, 185, 129, 0.4)';
+      case 'black': return 'rgba(156, 163, 175, 0.4)';
+      case 'gold': return 'rgba(245, 158, 11, 0.4)';
+      default: return 'rgba(59, 130, 246, 0.4)';
+    }
+  };
+
+  const handleDownloadReceipt = async () => {
+    const el = document.getElementById('branded-receipt-card');
+    if (!el) return;
+    try {
+      showToast('Đang tạo hình ảnh biên lai...', 'info');
+      const canvas = await html2canvas(el, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+        backgroundColor: null
+      });
+      const link = document.createElement('a');
+      link.download = `BienLai_KingsGrill_${vietQrViewMode === 'split' ? `Ban_${receiptTableNo}_Khach_${selectedSplitGuestIndex + 1}` : 'Don'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('Đã tải xuống hình ảnh biên lai thành công!', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast(`Lỗi khi tạo ảnh: ${e.message}`, 'error');
+    }
+  };
+
+  const handlePrintReceipt = () => {
+    const el = document.getElementById('branded-receipt-card');
+    if (!el) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const themeGradient = getThemeGradient();
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>In Biên lai Kings Grill</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 20px;
+              background-color: #f3f4f6;
+              font-family: system-ui, -apple-system, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+            }
+            .receipt-card {
+              width: 380px;
+              background: ${themeGradient};
+              color: white;
+              padding: 24px;
+              border-radius: 16px;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+              box-sizing: border-box;
+            }
+            .receipt-header {
+              text-align: center;
+              margin-bottom: 20px;
+            }
+            .receipt-header h1 {
+              font-size: 22px;
+              margin: 0;
+              letter-spacing: 0.5px;
+            }
+            .receipt-header p {
+              font-size: 11px;
+              margin: 4px 0 0 0;
+              opacity: 0.7;
+            }
+            .receipt-divider {
+              border-top: 1px dashed rgba(255,255,255,0.2);
+              margin: 16px 0;
+            }
+            .receipt-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 13px;
+              margin-bottom: 8px;
+            }
+            .receipt-row .label {
+              opacity: 0.6;
+            }
+            .receipt-row .value {
+              font-weight: 600;
+            }
+            .receipt-amount-row {
+              background: rgba(255,255,255,0.05);
+              padding: 10px;
+              border-radius: 8px;
+              margin-bottom: 12px;
+            }
+            .receipt-qr-wrapper {
+              display: flex;
+              justify-content: center;
+              margin: 20px 0;
+            }
+            .receipt-qr-img {
+              width: 200px;
+              height: 200px;
+              background: white;
+              padding: 8px;
+              border-radius: 12px;
+            }
+            .receipt-footer {
+              text-align: center;
+              font-size: 12px;
+              opacity: 0.8;
+              font-style: italic;
+            }
+            .receipt-controls-print {
+              display: none !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-card">
+            ${el.innerHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // Save changes to localStorage for persistent configuration
@@ -312,10 +620,11 @@ function App() {
     setIsProcessing(true);
     setErrorMsg(null);
     try {
-      await new Promise(r => setTimeout(r, 800));
       const records = await parseFile(file);
       const processed = processRecords(records);
       const blob = await exportToExcel(processed);
+      const summary = summarizeAttendanceForPayroll(processed);
+      localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
       setProcessedBlob(blob);
       setProcessedRecords(processed);
       setIsSuccess(true);
@@ -399,6 +708,8 @@ function App() {
       // Process records using existing engine
       const processed = processRecords(records);
       const blob = await exportToExcel(processed);
+      const summary = summarizeAttendanceForPayroll(processed);
+      localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
       
       setProcessedBlob(blob);
       setProcessedRecords(processed);
@@ -415,6 +726,17 @@ function App() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePipeAttendanceToPayroll = () => {
+    if (processedRecords.length > 0) {
+      const summary = summarizeAttendanceForPayroll(processedRecords);
+      localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
+    }
+    setCurrentView('payroll');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('kg-import-attendance-to-payroll'));
+    }, 120);
   };
 
   const handleDownload = () => {
@@ -508,8 +830,11 @@ function App() {
     setProcessedRecords([]);
     setErrorMsg(null);
     setAttendanceSyncSuccess(false);
+    setAttendanceSearch('');
+    setAttendanceFilter('all');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
 
   // Add personal bank account locally
   const handleAddAccount = (e: React.FormEvent) => {
@@ -766,6 +1091,110 @@ function App() {
   const totalTransactions = qrHistory.length;
   const totalAmountReceived = qrHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
 
+  const activeAmount = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].amount
+    : (amount ? Number(amount.replace(/\D/g, '')) : 0);
+    
+  const activeMemo = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].memo
+    : memo;
+
+  const activeGuestName = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].name
+    : '';
+
+  // Split bill disparity calculation & helpers
+  const splitTotalNum = Number(splitTotalAmount.replace(/\D/g, '')) || 0;
+  const splitCurrentSum = splitGuests.reduce((acc, g) => acc + (Number(g.amount) || 0), 0);
+  const splitDisparity = splitTotalNum - splitCurrentSum;
+
+  const handleAutoBalanceSplit = () => {
+    if (splitGuests.length === 0) return;
+    const lastIndex = splitGuests.length - 1;
+    const currentLastAmount = Number(splitGuests[lastIndex].amount) || 0;
+    const newLastAmount = Math.max(0, currentLastAmount + splitDisparity);
+    setSplitGuests(prev => prev.map((g, idx) => idx === lastIndex ? { ...g, amount: newLastAmount } : g));
+    showToast('Đã tự động bù số dư vào phần khách cuối!', 'success');
+  };
+
+  const handleAddSplitGuest = () => {
+    const nextIdx = splitGuests.length + 1;
+    const newGuest = {
+      id: String(Date.now()),
+      name: `Khách ${String.fromCharCode(64 + Math.min(nextIdx, 26))}`,
+      amount: 0,
+      memo: `CK ${receiptTableNo || 'BAN 05'} PHAN ${nextIdx}`
+    };
+    setSplitGuests(prev => [...prev, newGuest]);
+    setSplitPeopleCount(prev => prev + 1);
+  };
+
+  const handleRemoveSplitGuest = (idx: number) => {
+    if (splitGuests.length <= 1) return;
+    setSplitGuests(prev => prev.filter((_, i) => i !== idx));
+    setSplitPeopleCount(prev => Math.max(1, prev - 1));
+    if (selectedSplitGuestIndex >= splitGuests.length - 1) {
+      setSelectedSplitGuestIndex(Math.max(0, splitGuests.length - 2));
+    }
+  };
+
+  const addSampleKingsGrillAccount = () => {
+    const sampleBank = banks.find(b => b.code === 'VCB') || FALLBACK_BANKS[0];
+    const sampleAcc: SavedAccount = {
+      id: Date.now().toString(),
+      bankId: sampleBank.bin || sampleBank.code,
+      bankName: sampleBank.name,
+      bankCode: sampleBank.code,
+      accountNo: '1023456789',
+      accountHolder: 'KINGS GRILL RESTAURANT',
+      defaultMemo: 'THANH TOAN TIEC KINGS GRILL',
+      defaultAmount: '500000'
+    };
+    const updated = [...savedAccounts, sampleAcc];
+    setSavedAccounts(updated);
+    localStorage.setItem('kg_tool_saved_accounts', JSON.stringify(updated));
+    setSelectedBank(sampleBank);
+    setAccountNo(sampleAcc.accountNo);
+    setAccountHolder(sampleAcc.accountHolder);
+    setMemo(sampleAcc.defaultMemo);
+    setAmount(sampleAcc.defaultAmount);
+    showToast('Đã thêm tài khoản mẫu Kings Grill thành công!', 'success');
+  };
+
+  // Filtered attendance records for DataGrid table preview
+  const filteredAttendanceRecords = useMemo(() => {
+    let list = processedRecords;
+    if (attendanceFilter === 'night') {
+      list = list.filter(r => r.overtime);
+    } else if (attendanceFilter === 'complete') {
+      list = list.filter(r => r.checkIn && r.checkOut);
+    } else if (attendanceFilter === 'incomplete') {
+      list = list.filter(r => !r.checkIn || !r.checkOut);
+    }
+    if (attendanceSearch.trim()) {
+      const q = stripAccents(attendanceSearch.trim()).toLowerCase();
+      list = list.filter(r => stripAccents(r.employeeName).toLowerCase().includes(q));
+    }
+    return list;
+  }, [processedRecords, attendanceFilter, attendanceSearch]);
+
+  const formatTimeStr = (d: Date | null) => {
+    if (!d) return '—';
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  const formatDateStr = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
+
   return (
     <div className={`dashboard-layout ${isMobile ? 'layout-mobile' : ''} ${!isMobile && sidebarCollapsed ? 'layout-collapsed' : ''}`}>
       {/* Toast Notification badges */}
@@ -791,60 +1220,44 @@ function App() {
 
         <nav className="nav">
           <button 
-            className={`nav-item ${currentView === 'attendance' ? 'active' : ''}`}
+            className={`nav-item ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
             onClick={() => { setCurrentView('attendance'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Chấm Công" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Chấm Công & Thiết Bị" : undefined}
           >
             <span className="ico"><FileText size={20} /></span>
-            <span>Chấm Công</span>
+            <span>Chấm Công & Thiết Bị</span>
+          </button>
+          <button 
+            className={`nav-item ${currentView === 'payroll' || currentView === 'transfer' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('payroll'); setIsMobileDrawerOpen(false); }}
+            title={(!isMobile && sidebarCollapsed) ? "Lương & Chuyển Tiền" : undefined}
+          >
+            <span className="ico"><CreditCard size={20} /></span>
+            <span>Lương & Chuyển Tiền</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'vietqr' ? 'active' : ''}`}
             onClick={() => { setCurrentView('vietqr'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "VietQR & Tài khoản" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "VietQR & Thu Ngân" : undefined}
           >
             <span className="ico"><QrCode size={20} /></span>
-            <span>VietQR & Tài khoản</span>
-          </button>
-          <button 
-            className={`nav-item ${currentView === 'payroll' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('payroll'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Phiếu Lương" : undefined}
-          >
-            <span className="ico"><CreditCard size={20} /></span>
-            <span>Phiếu Lương</span>
-          </button>
-          <button 
-            className={`nav-item ${currentView === 'transfer' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('transfer'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Chuyển Tiền" : undefined}
-          >
-            <span className="ico"><Send size={20} /></span>
-            <span>Chuyển Tiền</span>
+            <span>VietQR & Thu Ngân</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'tts' ? 'active' : ''}`}
             onClick={() => { setCurrentView('tts'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Đọc TTS" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Đọc TTS AI" : undefined}
           >
             <span className="ico"><Volume2 size={20} /></span>
-            <span>Đọc TTS</span>
-          </button>
-          <button 
-            className={`nav-item ${currentView === 'hikvision' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('hikvision'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Máy Chấm Công" : undefined}
-          >
-            <span className="ico"><Cpu size={20} /></span>
-            <span>Máy Chấm Công</span>
+            <span>Đọc TTS AI</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => { setCurrentView('settings'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Cấu hình" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Cấu Hình System" : undefined}
           >
             <span className="ico"><Settings size={20} /></span>
-            <span>Cấu hình</span>
+            <span>Cấu Hình System</span>
           </button>
         </nav>
 
@@ -874,27 +1287,189 @@ function App() {
         
         {/* Top Header Bar */}
         <div className="topbar">
-          <button className="hamb" onClick={toggleSidebar}>☰</button>
-          <div className="user">
-            <div className="mini-btn">🔔<i className="dot"></i></div>
-            <div className="mini-btn">☾</div>
-            <div className="avatar">Q</div>
-            <div className="user-text">
-              <b>Quản trị viên</b>
-              <small>Quản lý nhà hàng</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button className="hamb" onClick={toggleSidebar}>☰</button>
+            <div 
+              className="topbar-command-trigger"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              title="Mở Command Hub (Ctrl+K)"
+            >
+              <Search size={14} style={{ color: 'var(--cyan)' }} />
+              <span className="command-trigger-text">Tìm kiếm & Thao tác nhanh...</span>
+              <kbd>Ctrl+K</kbd>
             </div>
-            <span style={{ cursor: 'pointer' }}>▼</span>
+          </div>
+          
+          <div className="user">
+            {/* Notification Button & Popover */}
+            <div className="topbar-action-item">
+              <div 
+                className="mini-btn" 
+                onClick={() => { setShowNotifications(prev => !prev); setShowUserMenu(false); }}
+                title="Thông báo hệ thống"
+              >
+                <Bell size={18} />
+                <i className="dot" style={{ background: connectionStatus === 'connected' ? '#30e797' : '#ff4f6d' }}></i>
+              </div>
+
+              {showNotifications && (
+                <>
+                  <div className="dropdown-click-outside-backdrop" onClick={() => setShowNotifications(false)} />
+                  <div className="topbar-popover">
+                    <div className="topbar-popover-header">
+                      <span className="topbar-popover-title">🔔 Trạng thái hệ thống</span>
+                      <button type="button" className="topbar-popover-close" onClick={() => setShowNotifications(false)}>✕</button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                        <span style={{ color: 'var(--muted)' }}>Google Cloud Sync:</span>
+                        <span className="pulse-indicator">
+                          <span className={`pulse-dot ${connectionStatus === 'connected' ? '' : connectionStatus === 'failed' ? 'danger' : 'warning'}`} />
+                          <span style={{ color: connectionStatus === 'connected' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                            {connectionStatus === 'connected' ? 'Đã kết nối' : connectionStatus === 'failed' ? 'Lỗi kết nối' : 'Chưa cấu hình'}
+                          </span>
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                        <span style={{ color: 'var(--muted)' }}>Ngân hàng VietQR:</span>
+                        <span style={{ color: banks.length > 0 ? 'var(--cyan)' : 'var(--muted)', fontWeight: 600 }}>
+                          {banks.length} ngân hàng sẵn sàng
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                        <span style={{ color: 'var(--muted)' }}>Mã QR hôm nay:</span>
+                        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{qrCreatedToday} giao dịch</span>
+                      </div>
+                    </div>
+                    <button 
+                      type="button" 
+                      className="primary" 
+                      style={{ height: '34px', fontSize: '12px', marginTop: '4px' }}
+                      onClick={() => { setCurrentView('settings'); setShowNotifications(false); }}
+                    >
+                      Kiểm tra cài đặt hệ thống →
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Extension Companion Mode Toggle */}
+            <div 
+              className="mini-btn" 
+              onClick={() => {
+                setIsExtensionMode(prev => {
+                  const next = !prev;
+                  showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
+                  return next;
+                });
+              }}
+              title={isExtensionMode ? "Thoát chế độ Extension nhỏ gọn" : "Chế độ Extension / Side Panel nhỏ gọn"}
+              style={isExtensionMode ? { borderColor: 'var(--blue)', color: 'var(--blue)', background: 'var(--accent-primary-subtle)' } : undefined}
+            >
+              <PanelRight size={17} />
+            </div>
+
+            {/* Browser Extension Install Guide Button */}
+            <div 
+              className="mini-btn" 
+              onClick={() => setShowExtensionGuideModal(true)}
+              title="Cài đặt Tiện ích mở rộng (Chrome / Edge Extension)"
+            >
+              <Puzzle size={17} />
+            </div>
+
+            {/* Theme Switcher Button */}
+            <div 
+              className="mini-btn" 
+              onClick={toggleTheme}
+              title={theme === 'dark' ? "Chuyển sang giao diện Sáng (Daylight Alabaster)" : "Chuyển sang giao diện Tối (Warm Carbon Studio)"}
+            >
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            </div>
+
+            {/* User Profile */}
+            <div className="topbar-action-item">
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                onClick={() => { setShowUserMenu(prev => !prev); setShowNotifications(false); }}
+              >
+                <div className="avatar">K</div>
+                <div className="user-text">
+                  <b>Quản trị viên</b>
+                  <small>Kings Grill F&B</small>
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--muted)' }}>▼</span>
+              </div>
+
+              {showUserMenu && (
+                <>
+                  <div className="dropdown-click-outside-backdrop" onClick={() => setShowUserMenu(false)} />
+                  <div className="topbar-popover" style={{ width: '240px' }}>
+                    <div className="topbar-popover-header">
+                      <span className="topbar-popover-title">👤 Tài khoản vận hành</span>
+                      <button type="button" className="topbar-popover-close" onClick={() => setShowUserMenu(false)}>✕</button>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.4 }}>
+                      <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 600 }}>Kings Grill Restaurant</p>
+                      <p style={{ margin: 0 }}>Quyền: Toàn quyền Quản trị & Kế toán</p>
+                    </div>
+                    <div style={{ borderTop: '1px solid var(--line)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <button 
+                        type="button" 
+                        className="btn-outline" 
+                        style={{ height: '34px', fontSize: '12px', justifyContent: 'flex-start' }}
+                        onClick={() => { setCurrentView('settings'); setShowUserMenu(false); }}
+                      >
+                        ⚙️ Cấu hình hệ thống
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-outline" 
+                        style={{ height: '34px', fontSize: '12px', justifyContent: 'flex-start' }}
+                        onClick={() => {
+                          showToast('Dữ liệu được lưu trong trình duyệt & Google Sheet của bạn.', 'info');
+                          setShowUserMenu(false);
+                        }}
+                      >
+                        🛡 Kiểm tra an toàn
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
+
 
         {/* VIEW 1: ATTENDANCE PROCESSOR */}
         {currentView === 'attendance' && (
           <div className="screen active">
-            <div className="head">
-              <div className="title">
-                <h1>Xử lý Chấm Công <span className="blue-dot"></span></h1>
-                <p>Tự động hóa chuẩn hóa dữ liệu chấm công nhà hàng, phân ca đêm và nội suy ngày giờ</p>
-              </div>
+            <PageHeader
+              icon={<FileText size={26} />}
+              title="Quản Lý Chấm Công & Thiết Bị"
+              subtitle="Tự động hóa chuẩn hóa dữ liệu chấm công nhà hàng, phân ca đêm và kết nối thiết bị Hikvision Cloud"
+              badgeText="Chấm Công Hub"
+              badgeVariant="info"
+            />
+            <div className="hub-subtab-bar">
+              <button 
+                type="button" 
+                className="hub-subtab-btn active"
+                onClick={() => setCurrentView('attendance')}
+              >
+                📊 Xử lý Chấm Công & Phân Ca
+              </button>
+              <button 
+                type="button" 
+                className="hub-subtab-btn"
+                onClick={() => setCurrentView('hikvision')}
+              >
+                🔌 Máy Chấm Công Cloud (Hikvision)
+              </button>
+            </div>
+            <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
                 <StatCard 
                   icon="👥" 
@@ -961,7 +1536,79 @@ function App() {
                     Chọn tải tệp thô từ máy tính hoặc tải dữ liệu đồng bộ trực tuyến từ Google Sheets
                   </p>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', margin: '0 0 0.75rem', zIndex: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', width: '100%', maxWidth: '640px', margin: '1rem auto 1.25rem', zIndex: 10 }}>
+                    {/* Option 1: Local file upload */}
+                    <label 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        gap: '8px', 
+                        padding: '18px 16px', 
+                        borderRadius: '12px', 
+                        border: '1.5px dashed rgba(59, 130, 246, 0.4)', 
+                        background: 'rgba(59, 130, 246, 0.05)', 
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'center'
+                      }}
+                      className="upload-source-card"
+                    >
+                      <span style={{ fontSize: '24px' }}>📂</span>
+                      <strong style={{ fontSize: '13.5px', color: '#fff' }}>Tải file từ máy tính</strong>
+                      <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Nhận file thô Excel (.xlsx, .xls) hoặc CSV</span>
+                      <span className="btn-outline" style={{ marginTop: '6px', fontSize: '12px', padding: '6px 14px', pointerEvents: 'none' }}>
+                        Chọn tệp...
+                      </span>
+                      <input 
+                        type="file" 
+                        style={{ display: 'none' }}
+                        ref={fileInputRef}
+                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                        onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
+                      />
+                    </label>
+
+                    {/* Option 2: Cloud Sync */}
+                    <div 
+                      onClick={!isProcessing ? handleFetchAndProcessFromSheet : undefined}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        gap: '8px', 
+                        padding: '18px 16px', 
+                        borderRadius: '12px', 
+                        border: '1.5px solid rgba(34, 211, 238, 0.3)', 
+                        background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.08), rgba(59, 130, 246, 0.08))', 
+                        cursor: isProcessing ? 'wait' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'center'
+                      }}
+                      className="upload-source-card"
+                    >
+                      <span style={{ fontSize: '24px' }}>⚡</span>
+                      <strong style={{ fontSize: '13.5px', color: '#fff' }}>Đồng bộ từ Google Sheet</strong>
+                      <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Lấy trực tiếp dữ liệu chấm công đám mây</span>
+                      <button 
+                        type="button" 
+                        className="primary" 
+                        disabled={isProcessing}
+                        style={{ marginTop: '6px', fontSize: '12px', height: '32px', padding: '0 14px', pointerEvents: 'none' }}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="loader" size={13} />
+                            Đang tải...
+                          </>
+                        ) : (
+                          '⚡ Nạp tự động'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center', flexWrap: 'wrap', zIndex: 10 }}>
                     <button
                       type="button"
                       onClick={handleDownloadTemplate}
@@ -980,52 +1627,9 @@ function App() {
                     >
                       📥 Tải file excel mẫu (.xlsx)
                     </button>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>•</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>🛡 Bảo mật cục bộ 100%</span>
                   </div>
-                  
-                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: '100%', margin: '0.5rem 0 1.25rem', zIndex: 10 }}>
-                    <label className="primary" style={{ padding: '10px 20px', cursor: 'pointer', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
-                      <span>Chọn tệp từ máy tính</span>
-                      <input 
-                        type="file" 
-                        style={{ display: 'none' }}
-                        ref={fileInputRef}
-                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                        onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
-                      />
-                    </label>
-                    <button 
-                      type="button" 
-                      className="primary" 
-                      onClick={handleFetchAndProcessFromSheet}
-                      disabled={isProcessing}
-                      style={{ 
-                        padding: '10px 20px', 
-                        borderRadius: '8px', 
-                        fontSize: '0.85rem', 
-                        background: 'linear-gradient(135deg, var(--cyan), var(--blue))',
-                        boxShadow: '0 0 16px rgba(34,211,238,.25)', 
-                        border: 'none', 
-                        color: 'white', 
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="loader" size={14} />
-                          Đang tải...
-                        </>
-                      ) : (
-                        <>
-                          <span>⚡️ Xử lý từ Google Sheet</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <p style={{ marginTop: '0.5rem' }}>Hỗ trợ định dạng file thô: .xlsx, .xls, .csv ⓘ</p>
-                  <p style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '8px' }}>🛡 Dữ liệu của bạn được bảo mật tuyệt đối và chỉ sử dụng để xử lý chấm công.</p>
                 </div>
                 {errorMsg && <p style={{ color: '#ff5c7a', marginTop: '1rem', fontWeight: 500, zIndex: 5 }}>{errorMsg}</p>}
               </div>
@@ -1072,42 +1676,204 @@ function App() {
                   <div style={{ display: 'flex', gap: '1.5rem', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--green)' }}>
                       <CheckCircle size={24} />
-                      <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Xử lý hoàn tất!</span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Xử lý hoàn tất ({processedRecords.length} dòng công)!</span>
                     </div>
                     
-                    <div className="actions-row">
-                      <button className="btn-outline" onClick={resetState}>
-                        Xử lý file khác
-                      </button>
-                      
-                      <button className="primary" style={{ height: '48px', padding: '0 2rem', background: 'linear-gradient(135deg, var(--green), #059669)', boxShadow: '0 0 24px rgba(48,231,151,.3)' }} onClick={handleDownload}>
-                        <Download size={20} />
-                        Tải File Kết Quả
+                    <div className="actions-row" style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
+                      {/* Primary Action */}
+                      <button 
+                        className="primary" 
+                        style={{ height: '46px', padding: '0 1.75rem', background: 'linear-gradient(135deg, var(--green), #059669)', boxShadow: '0 0 20px rgba(48,231,151,.25)', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px' }} 
+                        onClick={handleDownload}
+                      >
+                        <Download size={18} />
+                        <span>Tải File Kết Quả (.xlsx)</span>
                       </button>
 
+                      {/* 1-Click Pipeline: Attendance -> Payroll */}
                       <button 
                         className="btn-outline" 
-                        style={{ height: '48px', padding: '0 2rem' }}
+                        style={{ height: '46px', padding: '0 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', borderColor: 'rgba(245, 158, 11, 0.45)', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--orange)', fontWeight: 700 }}
+                        onClick={handlePipeAttendanceToPayroll}
+                        title="Đẩy thẳng số ngày công & tổng giờ làm của từng nhân viên sang Module Tính Lương"
+                      >
+                        <Sparkles size={16} />
+                        <span>⚡ Chuyển sang Tính Lương</span>
+                      </button>
+
+                      {/* Secondary Action */}
+                      <button 
+                        className="btn-outline" 
+                        style={{ height: '46px', padding: '0 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', borderColor: 'rgba(34, 211, 238, 0.4)', background: 'rgba(34, 211, 238, 0.05)' }}
                         onClick={handleSyncAttendance}
                         disabled={isSyncingAttendance || attendanceSyncSuccess}
                       >
                         {isSyncingAttendance ? (
                           <>
-                            <Loader2 className="loader" size={20} />
-                            Đang đồng bộ...
+                            <Loader2 className="loader" size={16} />
+                            <span>Đang lưu Cloud...</span>
                           </>
                         ) : attendanceSyncSuccess ? (
                           <>
-                            <CheckCircle size={20} color="var(--green)" />
-                            Đã Đồng Bộ Cloud
+                            <CheckCircle size={16} color="var(--green)" />
+                            <span style={{ color: 'var(--green)' }}>Đã Lưu Google Sheet</span>
                           </>
                         ) : (
                           <>
-                            <Send size={20} />
-                            Lưu Cloud (Google Sheet)
+                            <Send size={16} style={{ color: 'var(--cyan)' }} />
+                            <span>Lưu Cloud (Google Sheet)</span>
                           </>
                         )}
                       </button>
+
+                      {/* Ghost / Tertiary Action */}
+                      <button 
+                        className="btn-ghost" 
+                        onClick={resetState}
+                        style={{ height: '46px', padding: '0 1.25rem', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+                      >
+                        <span>🔄 Xử lý file khác</span>
+                      </button>
+                    </div>
+
+                    {/* INTERACTIVE DATAGRID PREVIEW TABLE */}
+                    <div className="datagrid-card" style={{ width: '100%', marginTop: '0.5rem' }}>
+                      <div className="datagrid-toolbar">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileText size={16} color="var(--cyan)" />
+                            Xem trước kết quả đã xử lý
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '10px' }}>
+                            {filteredAttendanceRecords.length} / {processedRecords.length} dòng
+                          </span>
+                        </div>
+
+                        {/* Search & Filter pills */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ position: 'relative', width: '220px' }}>
+                            <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                            <input 
+                              type="text" 
+                              placeholder="Tìm theo tên nhân viên..."
+                              value={attendanceSearch}
+                              onChange={(e) => setAttendanceSearch(e.target.value)}
+                              style={{ width: '100%', height: '32px', fontSize: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', padding: '0 28px 0 30px' }}
+                            />
+                            {attendanceSearch && (
+                              <button 
+                                type="button" 
+                                onClick={() => setAttendanceSearch('')}
+                                style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button 
+                              type="button" 
+                              className={`filter-tag ${attendanceFilter === 'all' ? 'active' : ''}`}
+                              onClick={() => setAttendanceFilter('all')}
+                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                            >
+                              Tất cả
+                            </button>
+                            <button 
+                              type="button" 
+                              className={`filter-tag ${attendanceFilter === 'night' ? 'active' : ''}`}
+                              onClick={() => setAttendanceFilter('night')}
+                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                            >
+                              🌙 Ca đêm ({nightCount})
+                            </button>
+                            <button 
+                              type="button" 
+                              className={`filter-tag ${attendanceFilter === 'complete' ? 'active' : ''}`}
+                              onClick={() => setAttendanceFilter('complete')}
+                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                            >
+                              ✅ Đủ giờ ({processedCount})
+                            </button>
+                            <button 
+                              type="button" 
+                              className={`filter-tag ${attendanceFilter === 'incomplete' ? 'active' : ''}`}
+                              onClick={() => setAttendanceFilter('incomplete')}
+                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                            >
+                              ⚠️ Thiếu giờ ({daysCount - processedCount})
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="datagrid-table-wrapper" style={{ maxHeight: '380px' }}>
+                        {filteredAttendanceRecords.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+                            Không tìm thấy dòng công nào khớp với bộ lọc tìm kiếm.
+                          </div>
+                        ) : (
+                          <table className="datagrid-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
+                                <th>Họ tên nhân viên</th>
+                                <th style={{ width: '110px' }}>Ngày công</th>
+                                <th style={{ width: '100px' }}>Giờ vào</th>
+                                <th style={{ width: '100px' }}>Giờ ra</th>
+                                <th style={{ width: '110px' }}>Phân ca</th>
+                                <th style={{ width: '110px' }}>Trạng thái</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredAttendanceRecords.map((r, idx) => {
+                                const isNight = r.overtime;
+                                const isComplete = r.checkIn && r.checkOut;
+                                return (
+                                  <tr key={`${r.employeeName}-${r.logicalDate}-${idx}`}>
+                                    <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>{idx + 1}</td>
+                                    <td style={{ fontWeight: 600, color: '#ffffff' }}>{r.employeeName}</td>
+                                    <td style={{ color: 'var(--muted)', fontSize: '12px' }}>{formatDateStr(r.logicalDate)}</td>
+                                    <td>
+                                      {r.checkIn ? (
+                                        <span style={{ color: 'var(--green)', background: 'rgba(48,231,151,0.08)', padding: '3px 8px', borderRadius: '6px', fontWeight: 600, fontSize: '12px' }}>
+                                          {formatTimeStr(r.checkIn)}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: 'var(--red)', opacity: 0.7 }}>—</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {r.checkOut ? (
+                                        <span style={{ color: 'var(--cyan)', background: 'rgba(34,211,238,0.08)', padding: '3px 8px', borderRadius: '6px', fontWeight: 600, fontSize: '12px' }}>
+                                          {formatTimeStr(r.checkOut)}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: 'var(--red)', opacity: 0.7 }}>—</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {isNight ? (
+                                        <Badge variant="purple">🌙 Ca đêm</Badge>
+                                      ) : (
+                                        <Badge variant="info">Ca ngày</Badge>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {isComplete ? (
+                                        <Badge variant="success">✅ Đủ giờ</Badge>
+                                      ) : (
+                                        <Badge variant="warning">⚠️ Thiếu giờ</Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1146,11 +1912,30 @@ function App() {
         {/* VIEW 2: VIETQR & BANK ACCOUNTS */}
         {currentView === 'vietqr' && (
           <div className="screen active">
-            <div className="head">
-              <div className="title">
-                <h1>Tạo mã QR thanh toán (VietQR) <span className="blue-dot"></span></h1>
-                <p>Nhập thông tin tài khoản và tạo mã QR chuẩn Napas 247 để nhận thanh toán nhanh chóng.</p>
-              </div>
+            <PageHeader
+              icon={<QrCode size={26} />}
+              title="VietQR & Quản Lý Thanh Toán"
+              subtitle="Tạo mã QR thanh toán động VietQR Napas247 & Công cụ chia tiền bàn tự động cho Kings Grill"
+              badgeText="Napas 247"
+              badgeVariant="success"
+            />
+            <div className="hub-subtab-bar" style={{ marginBottom: '1.5rem' }}>
+              <button 
+                type="button" 
+                className={`hub-subtab-btn ${vietQrViewMode === 'single' ? 'active' : ''}`}
+                onClick={() => setVietQrViewMode('single')}
+              >
+                ⚡ Tạo QR Thanh Toán Đơn
+              </button>
+              <button 
+                type="button" 
+                className={`hub-subtab-btn ${vietQrViewMode === 'split' ? 'active' : ''}`}
+                onClick={() => setVietQrViewMode('split')}
+              >
+                ✂ Tách & Chia Tiền Bàn (Split Bill)
+              </button>
+            </div>
+            <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
                 <StatCard 
                   icon="👤" 
@@ -1206,16 +1991,20 @@ function App() {
             <div className="two-col">
               {/* LEFT COLUMN: Input Forms and Saved Accounts */}
               <div className="card panel">
-                <h2>👥 Tài khoản của bạn</h2>
-                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quản lý và sử dụng tài khoản để tạo mã QR thanh toán nhanh.</p>
-                <button 
-                  className="primary" 
-                  style={{ width: '180px', height: '44px', float: 'right', marginTop: '-60px' }}
-                  onClick={() => setShowAddAccountForm(!showAddAccountForm)}
-                >
-                  <Plus size={16} />
-                  Thêm tài khoản
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                  <div>
+                    <h2 style={{ margin: 0 }}>👥 Tài khoản của bạn</h2>
+                    <p className="sub" style={{ margin: '4px 0 0' }}>Quản lý và sử dụng tài khoản để tạo mã QR thanh toán nhanh.</p>
+                  </div>
+                  <button 
+                    className="primary" 
+                    style={{ height: '40px', padding: '0 16px', flexShrink: 0 }}
+                    onClick={() => setShowAddAccountForm(!showAddAccountForm)}
+                  >
+                    <Plus size={16} />
+                    Thêm tài khoản
+                  </button>
+                </div>
 
                 {showAddAccountForm && (
                   <form onSubmit={handleAddAccount} className="card panel" style={{ border: '1px dashed rgba(34,211,238,0.5)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1284,13 +2073,6 @@ function App() {
                                     {isBanksLoading && (
                                       <div className="loading-dropdown-state">
                                         <span>Đang tải danh sách...</span>
-                                      </div>
-                                    )}
-                                    
-                                    {banksError && (
-                                      <div className="error-dropdown-state">
-                                        <span>Không thể tải danh sách.</span>
-                                        <button type="button" className="retry-btn" onClick={() => fetchBanksList(true)}>Thử lại</button>
                                       </div>
                                     )}
                                     
@@ -1409,18 +2191,36 @@ function App() {
                         className={`bank ${isCurrentActive ? 'active' : ''}`}
                         onClick={() => selectAccount(acc)}
                       >
-                        <b>{acc.bankCode}</b>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <b>{acc.bankCode}</b>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(acc.accountNo);
+                                setCopiedBankId(acc.id);
+                                setTimeout(() => setCopiedBankId(null), 1500);
+                                showToast(`Đã sao chép STK: ${acc.accountNo}`, 'success');
+                              }}
+                              title="Sao chép số tài khoản"
+                              style={{ background: 'transparent', border: 'none', color: copiedBankId === acc.id ? 'var(--green)' : 'var(--cyan)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}
+                            >
+                              {copiedBankId === acc.id ? <Check size={14} /> : <Copy size={14} />}
+                            </button>
+                            <button 
+                              className="delete-account-btn"
+                              onClick={(e) => handleDeleteAccount(acc.id, e)}
+                              title="Xóa tài khoản"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
                         <p>•••• {acc.accountNo.slice(-4) || acc.accountNo}</p>
                         <small>{acc.accountHolder}</small>
                         {idx === 0 && <span className="pill">Mặc định</span>}
-                        <button 
-                          className="delete-account-btn"
-                          onClick={(e) => handleDeleteAccount(acc.id, e)}
-                          title="Xóa tài khoản"
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 10 }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
                       </div>
                     );
                   })}
@@ -1428,13 +2228,15 @@ function App() {
                     <EmptyState 
                       icon="👤"
                       title="Chưa lưu tài khoản cá nhân"
-                      description="Hãy bấm nút 'Thêm tài khoản' phía trên để lưu thông tin thụ hưởng hay dùng của bạn."
+                      description="Lưu thông tin ngân hàng thụ hưởng hay dùng để tạo mã QR thanh toán nhanh chỉ với 1 click."
+                      actionLabel="💡 Thêm tài khoản mẫu Kings Grill"
+                      onAction={addSampleKingsGrillAccount}
                       style={{ gridColumn: 'span 2', padding: '2rem 1rem' }}
                     />
                   )}
                 </div>
 
-                <h2 style={{ marginTop: '2rem' }}>▣ Thông tin tạo mã QR</h2>
+                <h2 style={{ marginTop: '1.5rem' }}>▣ Thông tin tài khoản nhận</h2>
                 <div className="form-grid">
                   <div className="field full">
                     <label>Chọn ngân hàng thụ hưởng</label>
@@ -1572,80 +2374,456 @@ function App() {
                     />
                   </div>
 
-                  <div className="field">
-                    <label>Số tiền chuyển khoản (VND)</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ví dụ: 100.000"
-                      value={amount ? formatVND(amount) : ''}
-                      onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                    />
-                  </div>
+                  {vietQrViewMode === 'single' ? (
+                    <>
+                      <div className="field">
+                        <label>Số tiền chuyển khoản (VND)</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: 100.000"
+                          value={amount ? formatVND(amount) : ''}
+                          onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                        />
+                        <div className="amount-chips-row">
+                          {[50000, 100000, 200000, 500000, 1000000, 2000000].map(val => (
+                            <button 
+                              key={val}
+                              type="button" 
+                              className="amount-chip"
+                              onClick={() => {
+                                const current = amount ? Number(amount.replace(/\D/g, '')) : 0;
+                                setAmount(String(current + val));
+                              }}
+                            >
+                              +{val >= 1000000 ? `${val / 1000000}tr` : `${val / 1000}k`}
+                            </button>
+                          ))}
+                          <button 
+                            type="button" 
+                            className="amount-chip chip-clear"
+                            onClick={() => setAmount('')}
+                          >
+                            ✕ Xóa
+                          </button>
+                        </div>
+                      </div>
 
-                  <div className="field">
-                    <label>Nội dung chuyển khoản</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ví dụ: THANH TOAN HOA DON COM CHIEU"
-                      value={memo}
-                      onChange={(e) => setMemo(e.target.value)}
-                    />
-                  </div>
+                      <div className="field">
+                        <label>Nội dung chuyển khoản</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: THANH TOAN HOA DON COM CHIEU"
+                          value={memo}
+                          onChange={(e) => setMemo(e.target.value)}
+                        />
+                      </div>
 
-                  <button className="primary full" onClick={handleSaveToSpreadsheet} disabled={isSavingAccount}>
-                    {isSavingAccount ? (
-                      <>
-                        <Loader2 className="loader" size={18} />
-                        Đang tạo và lưu...
-                      </>
-                    ) : (
-                      <>
-                        <Send size={18} />
-                        ⚡ Tạo mã QR & Lưu Cloud
-                      </>
-                    )}
-                  </button>
+                      <button className="primary full" onClick={handleSaveToSpreadsheet} disabled={isSavingAccount}>
+                        {isSavingAccount ? (
+                          <>
+                            <Loader2 className="loader" size={18} />
+                            Đang tạo và lưu...
+                          </>
+                        ) : (
+                          <>
+                            <Send size={18} />
+                            ⚡ Tạo mã QR & Lưu Cloud
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="field">
+                        <label>Tổng số tiền cần chia (VND)</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: 1.200.000"
+                          value={splitTotalAmount ? formatVND(splitTotalAmount) : ''}
+                          onChange={(e) => setSplitTotalAmount(e.target.value.replace(/\D/g, ''))}
+                        />
+                        <div className="amount-chips-row">
+                          {[200000, 500000, 1000000, 2000000, 5000000].map(val => (
+                            <button 
+                              key={val}
+                              type="button" 
+                              className="amount-chip"
+                              onClick={() => setSplitTotalAmount(String(val))}
+                            >
+                              {val >= 1000000 ? `${val / 1000000}tr` : `${val / 1000}k`}
+                            </button>
+                          ))}
+                          <button 
+                            type="button" 
+                            className="amount-chip chip-clear"
+                            onClick={() => setSplitTotalAmount('')}
+                          >
+                            ✕ Xóa
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="field">
+                        <label>Số người chia</label>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="20"
+                          value={splitPeopleCount}
+                          onChange={(e) => setSplitPeopleCount(Math.max(1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+
+                      {splitDisparity !== 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'rgba(247, 160, 50, 0.12)', border: '1px solid rgba(247, 160, 50, 0.35)', margin: '4px 0 10px', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--orange)', fontWeight: 600 }}>
+                            ⚠️ Tổng chia ({formatVND(String(splitCurrentSum))} đ) lệch hóa đơn ({formatVND(String(splitTotalNum))} đ): {splitDisparity > 0 ? `Thiếu ${formatVND(String(splitDisparity))} đ` : `Dư ${formatVND(String(Math.abs(splitDisparity)))} đ`}
+                          </span>
+                          <button 
+                            type="button" 
+                            className="amount-chip"
+                            onClick={handleAutoBalanceSplit}
+                            style={{ borderColor: 'var(--orange)', color: '#ffffff', background: 'rgba(247, 160, 50, 0.35)' }}
+                          >
+                            ⚡ Bù vào khách cuối
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="field">
+                        <label>Mã bàn / Vị trí</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: Bàn 05"
+                          value={receiptTableNo}
+                          onChange={(e) => setReceiptTableNo(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Phương thức chia</label>
+                        <select 
+                          className="form-control"
+                          value={splitMethod}
+                          onChange={(e) => setSplitMethod(e.target.value as any)}
+                          style={{ height: '48px', borderRadius: '12px', background: 'rgba(5,17,42,.75)', border: '1px solid rgba(91,134,211,.3)', color: 'white', padding: '0 12px' }}
+                        >
+                          <option value="equal">Chia đều</option>
+                          <option value="custom">Tự điền (Custom)</option>
+                        </select>
+                      </div>
+
+                      <div className="field full" style={{ marginTop: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--cyan)' }}>
+                            📋 Danh sách phần chia ({splitGuests.length} khách) - Chọn để xem QR:
+                          </span>
+                          <button 
+                            type="button" 
+                            className="btn-outline" 
+                            onClick={handleAddSplitGuest}
+                            style={{ padding: '3px 10px', fontSize: '11px', borderRadius: '6px' }}
+                          >
+                            + Thêm khách
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto', paddingRight: '4px' }}>
+                          {splitGuests.map((guest, idx) => {
+                            const isSelected = selectedSplitGuestIndex === idx;
+                            return (
+                              <div 
+                                key={guest.id} 
+                                onClick={() => setSelectedSplitGuestIndex(idx)}
+                                style={{ 
+                                  display: 'flex', 
+                                  gap: '8px', 
+                                  alignItems: 'center', 
+                                  padding: '10px 12px', 
+                                  borderRadius: '10px', 
+                                  background: isSelected ? 'rgba(34, 211, 238, 0.08)' : 'rgba(255,255,255,0.01)', 
+                                  border: `1px solid ${isSelected ? 'var(--cyan)' : 'rgba(255,255,255,0.05)'}`,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: isSelected ? 'var(--cyan)' : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#000' : '#fff', fontSize: '11px', fontWeight: 'bold' }}>
+                                  {idx + 1}
+                                </div>
+                                <input 
+                                  type="text"
+                                  value={guest.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSplitGuests(prev => prev.map((g, i) => i === idx ? { ...g, name: val } : g));
+                                  }}
+                                  style={{ flexGrow: 1, minWidth: 0, background: 'transparent', border: 0, padding: 0, color: 'white', fontSize: '13px', fontWeight: 600 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <input 
+                                  type="text"
+                                  value={guest.amount ? formatVND(String(guest.amount)) : ''}
+                                  disabled={splitMethod === 'equal'}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value.replace(/\D/g, '')) || 0;
+                                    setSplitGuests(prev => prev.map((g, i) => i === idx ? { ...g, amount: val } : g));
+                                  }}
+                                  style={{ width: '110px', textAlign: 'right', background: 'transparent', border: 0, padding: 0, color: isSelected ? 'var(--green)' : 'white', fontSize: '13px', fontWeight: 700 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>đ</span>
+                                {splitGuests.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveSplitGuest(idx);
+                                    }}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 4px', fontSize: '11px' }}
+                                    title="Xóa phần này"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                 </div>
               </div>
 
               {/* RIGHT COLUMN: Live QR Code Preview and actions */}
-              <div className="card panel qrbox">
-                <h2>▦ Mã QR thanh toán</h2>
-                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quét mã QR bằng App Ngân hàng hoặc Ví điện tử để chuyển khoản.</p>
+              <div className="card panel qrbox" style={{ overflow: 'visible' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
+                  <h2 style={{ margin: 0 }}>▦ Mã QR thanh toán</h2>
+                  {qrUrl && (
+                    <div style={{ display: 'flex', gap: '2px', background: 'rgba(15, 23, 42, 0.4)', padding: '3px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => setReceiptShowBranded(false)}
+                        style={{ border: 0, background: !receiptShowBranded ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                      >
+                        Mẫu QR thường
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setReceiptShowBranded(true)}
+                        style={{ border: 0, background: receiptShowBranded ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                      >
+                        Biên lai Kings Grill
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quét mã QR bằng App Ngân hàng hoặc Ví điện tử để chuyển khoản nhanh.</p>
 
                 {qrUrl ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
-                    <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--glass-border)' }}>
-                      <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
-                      <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
-                      <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
-                      <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
-                    </div>
+                  !receiptShowBranded ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
+                      <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--glass-border)' }}>
+                        <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
+                        <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
+                        <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
+                        <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
+                      </div>
 
-                    <div className="qr-image-frame" style={{ width: '260px', height: '260px', borderRadius: '22px', background: 'white', padding: '10px', boxShadow: '0 0 45px rgba(69,115,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                      <img 
-                        src={qrUrl} 
-                        alt="VietQR Code" 
-                        className={`qr-img ${isQrLoading ? 'loading' : ''}`}
-                        onLoad={() => setIsQrLoading(false)}
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                      />
-                      {isQrLoading && <Loader2 className="loader qr-spinner" size={32} style={{ position: 'absolute', color: 'var(--blue)' }} />}
-                    </div>
+                      <div className="qr-image-frame" style={{ width: '260px', height: '260px', borderRadius: '22px', background: 'white', padding: '10px', boxShadow: '0 0 45px rgba(69,115,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                        <img 
+                          src={qrUrl} 
+                          alt="VietQR Code" 
+                          className={`qr-img ${isQrLoading ? 'loading' : ''}`}
+                          onLoad={() => setIsQrLoading(false)}
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                        />
+                        {isQrLoading && <Loader2 className="loader qr-spinner" size={32} style={{ position: 'absolute', color: 'var(--blue)' }} />}
+                      </div>
 
-                    <div className="qr-details" style={{ width: '100%', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' }}>
-                      <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Chủ TK:</span><span style={{ fontWeight: 600, color: 'white', textTransform: 'uppercase' }}>{accountHolder}</span></div>
-                      <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số TK:</span><span style={{ fontWeight: 600, color: 'white', fontFamily: 'monospace' }}>{accountNo}</span></div>
-                      <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Ngân hàng:</span><span style={{ fontWeight: 600, color: 'white' }}>{selectedBank?.shortName}</span></div>
-                      {amount && <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số tiền:</span><span style={{ fontWeight: 700, color: 'var(--green)' }}>{formatVND(amount)} đ</span></div>}
-                      {memo && <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Nội dung:</span><span style={{ fontWeight: 600, color: 'white' }}>{memo}</span></div>}
-                    </div>
+                      <div className="qr-details" style={{ width: '100%', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' }}>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Chủ TK:</span><span style={{ fontWeight: 600, color: 'white', textTransform: 'uppercase' }}>{accountHolder}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số TK:</span><span style={{ fontWeight: 600, color: 'white', fontFamily: 'monospace' }}>{accountNo}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Ngân hàng:</span><span style={{ fontWeight: 600, color: 'white' }}>{selectedBank?.shortName}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số tiền:</span><span style={{ fontWeight: 700, color: 'var(--green)' }}>{formatVND(String(activeAmount))} đ</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Nội dung:</span><span style={{ fontWeight: 600, color: 'white' }}>{activeMemo}</span></div>
+                      </div>
 
-                    <div className="form-grid">
-                      <button className="primary" style={{ height: '48px' }} onClick={handleDownloadQR}>Tải ảnh QR</button>
-                      <button className="btn-outline" style={{ height: '48px' }} onClick={handleCopyQRLink}>Sao chép link</button>
+                      <div className="form-grid" style={{ width: '100%' }}>
+                        <button className="primary" style={{ height: '48px' }} onClick={handleDownloadQR}>Tải ảnh QR</button>
+                        <button className="btn-outline" style={{ height: '48px' }} onClick={handleCopyQRLink}>Sao chép link</button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
+                      {/* Branded Receipt Element */}
+                      <div 
+                        id="branded-receipt-card"
+                        style={{ 
+                          width: '100%', 
+                          maxWidth: '360px', 
+                          background: getThemeGradient(), 
+                          color: 'white', 
+                          padding: '24px', 
+                          borderRadius: '20px', 
+                          border: `1px solid ${getThemeBorder()}`, 
+                          boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                          position: 'relative',
+                          boxSizing: 'border-box'
+                        }}
+                      >
+                        <div className="receipt-header" style={{ textAlign: 'center', marginBottom: '16px' }}>
+                          {receiptShowLogo && (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--cyan), var(--blue))', marginBottom: '8px', boxShadow: '0 4px 12px rgba(6,182,212,0.4)' }}>
+                              <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#000' }}>K</span>
+                            </div>
+                          )}
+                          <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0, letterSpacing: '0.5px', textTransform: 'uppercase' }}>KINGS GRILL</h1>
+                          <p style={{ fontSize: '10px', opacity: 0.7, margin: '2px 0 0 0', textTransform: 'uppercase', fontWeight: 600 }}>Biên lai thanh toán điện tử</p>
+                        </div>
+
+                        <div style={{ borderTop: '1px dashed rgba(255,255,255,0.15)', margin: '12px 0' }} />
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ opacity: 0.6 }}>Địa điểm:</span>
+                            <span style={{ fontWeight: 600 }}>{receiptTableNo || 'Bàn 05'}</span>
+                          </div>
+                          {receiptShowDate && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ opacity: 0.6 }}>Thời gian:</span>
+                              <span style={{ fontWeight: 600 }}>{new Date().toLocaleString('vi-VN')}</span>
+                            </div>
+                          )}
+                          {receiptShowCashier && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ opacity: 0.6 }}>Thu ngân:</span>
+                              <span style={{ fontWeight: 600 }}>Kế toán viên</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ opacity: 0.6 }}>Thụ hưởng:</span>
+                            <span style={{ fontWeight: 600, textTransform: 'uppercase' }}>{accountHolder}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ opacity: 0.6 }}>Tài khoản:</span>
+                            <span style={{ fontWeight: 600 }}>{selectedBank?.shortName} ({accountNo})</span>
+                          </div>
+                          
+                          {vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex] && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--cyan)' }}>
+                              <span style={{ fontWeight: 600 }}>Phần thanh toán:</span>
+                              <span style={{ fontWeight: 700 }}>{activeGuestName}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ borderTop: '1px dashed rgba(255,255,255,0.15)', margin: '12px 0' }} />
+
+                        <div style={{ background: 'rgba(255,255,255,0.04)', padding: '12px', borderRadius: '12px', textAlign: 'center', marginBottom: '14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: '11px', opacity: 0.6, display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>Số tiền thanh toán</span>
+                          <strong style={{ fontSize: '20px', color: 'var(--green)', fontWeight: 800 }}>
+                            {formatVND(String(activeAmount))} đ
+                          </strong>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+                          <div style={{ width: '180px', height: '180px', borderRadius: '12px', background: 'white', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+                            <img 
+                              src={qrUrl} 
+                              alt="VietQR Code" 
+                              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '12px', textAlign: 'center', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ opacity: 0.6, fontSize: '10px' }}>NỘI DUNG CHUYỂN KHOẢN MÃ HÓA</span>
+                          <strong style={{ fontFamily: 'monospace', fontSize: '11px', color: '#fff', wordBreak: 'break-all' }}>{activeMemo}</strong>
+                        </div>
+
+                        {receiptThankYou && (
+                          <>
+                            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.15)', margin: '12px 0' }} />
+                            <div style={{ textAlign: 'center', fontSize: '11px', opacity: 0.8, fontStyle: 'italic' }}>
+                              {receiptThankYou}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Customizer controls */}
+                      <div style={{ width: '100%', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', boxSizing: 'border-box' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan)', display: 'block', marginBottom: '12px' }}>
+                          🎨 Tùy chỉnh phong cách biên lai:
+                        </span>
+                        
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Tông màu nền:</span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {[
+                              { key: 'blue', color: '#3b82f6' },
+                              { key: 'green', color: '#10b981' },
+                              { key: 'black', color: '#4b5563' },
+                              { key: 'gold', color: '#d97706' }
+                            ].map((t) => (
+                              <button 
+                                key={t.key}
+                                type="button"
+                                onClick={() => setReceiptTheme(t.key as any)}
+                                style={{ 
+                                  width: '20px', 
+                                  height: '20px', 
+                                  borderRadius: '50%', 
+                                  border: receiptTheme === t.key ? '2px solid white' : '1px solid transparent',
+                                  background: t.color,
+                                  cursor: 'pointer',
+                                  padding: 0
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Lời chúc cuối biên lai</label>
+                            <input 
+                              type="text" 
+                              value={receiptThankYou} 
+                              onChange={(e) => setReceiptThankYou(e.target.value)} 
+                              style={{ width: '100%', height: '36px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', padding: '0 8px', color: '#fff', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--muted)', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={receiptShowLogo} onChange={(e) => setReceiptShowLogo(e.target.checked)} />
+                              Hiện Logo
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--muted)', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={receiptShowDate} onChange={(e) => setReceiptShowDate(e.target.checked)} />
+                              Hiện Giờ
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--muted)', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={receiptShowCashier} onChange={(e) => setReceiptShowCashier(e.target.checked)} />
+                              Hiện Thu ngân
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Download & print actions */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%' }}>
+                        <button className="primary" style={{ height: '44px', fontSize: '12px' }} onClick={handleDownloadReceipt}>
+                          <Download size={14} style={{ marginRight: '6px' }} />
+                          Tải Biên lai
+                        </button>
+                        <button className="btn-outline" style={{ height: '44px', fontSize: '12px', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }} onClick={handlePrintReceipt}>
+                          🖨️ In Biên lai
+                        </button>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <EmptyState 
                     icon="▦"
@@ -1662,6 +2840,24 @@ function App() {
         {/* VIEW 4: EMPLOYEE PAYROLL CREATOR */}
         {currentView === 'payroll' && (
           <div className="screen active">
+            <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
+              <button 
+                type="button" 
+                className="hub-subtab-btn active"
+                onClick={() => setCurrentView('payroll')}
+              >
+                <span>📑</span>
+                <span>Bảng Lương & Phiếu Lương</span>
+              </button>
+              <button 
+                type="button" 
+                className="hub-subtab-btn"
+                onClick={() => setCurrentView('transfer')}
+              >
+                <span>📤</span>
+                <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
+              </button>
+            </div>
             <PayrollCreator 
               gasUrl={gasUrl} 
               spreadsheetId={spreadsheetId} 
@@ -1674,6 +2870,24 @@ function App() {
         {/* VIEW 5: MYVIB TRANSFER FILE CREATOR */}
         {currentView === 'transfer' && (
           <div className="screen active">
+            <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
+              <button 
+                type="button" 
+                className="hub-subtab-btn"
+                onClick={() => setCurrentView('payroll')}
+              >
+                <span>📑</span>
+                <span>Bảng Lương & Phiếu Lương</span>
+              </button>
+              <button 
+                type="button" 
+                className="hub-subtab-btn active"
+                onClick={() => setCurrentView('transfer')}
+              >
+                <span>📤</span>
+                <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
+              </button>
+            </div>
             <TransferFileTool showToast={showToast} />
           </div>
         )}
@@ -1692,20 +2906,23 @@ function App() {
         {/* VIEW 3: SYSTEM CONFIG & SETTINGS */}
         {currentView === 'settings' && (
           <div className="screen active">
-            <div className="head">
-              <div className="title">
-                <h1>Cấu hình Hệ thống <span className="blue-dot"></span></h1>
-                <p>Thiết lập kết nối an toàn tới Google Sheets và Google Apps Script API</p>
-              </div>
-              <button 
-                className="primary" 
-                style={{ width: '180px', height: '44px' }}
-                disabled={!spreadsheetId || spreadsheetId.trim() === ''}
-                onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, '_blank')}
-              >
-                ⓘ Xem Google Sheet
-              </button>
-            </div>
+            <PageHeader
+              icon={<Settings size={26} />}
+              title="Cấu Hình Hệ Thống & Kết Nối API"
+              subtitle="Thiết lập kết nối an toàn tới Google Sheets, Google Apps Script API và quản lý tài khoản"
+              badgeText="Hệ thống"
+              badgeVariant="neutral"
+              actions={
+                <button 
+                  className="primary" 
+                  style={{ minWidth: '160px', height: '40px', fontSize: '13px' }}
+                  disabled={!spreadsheetId || spreadsheetId.trim() === ''}
+                  onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, '_blank')}
+                >
+                  ⓘ Xem Google Sheet
+                </button>
+              }
+            />
 
             {/* Instruction module */}
             <GuidePanel 
@@ -1777,19 +2994,26 @@ function App() {
 
               <div className="status-col">
                 <div className="card status">
-                  <h3>Trạng thái kết nối</h3>
-                  {connectionStatus === 'connected' && <b style={{ color: 'var(--green)' }}>Đã kết nối</b>}
-                  {connectionStatus === 'testing' && <b style={{ color: 'var(--cyan)' }}>Đang kết kiểm tra...</b>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>Trạng thái kết nối</h3>
+                    <span className={`pulse-dot ${connectionStatus === 'connected' ? '' : connectionStatus === 'failed' ? 'danger' : 'warning'}`} />
+                  </div>
+                  {connectionStatus === 'connected' && <b style={{ color: 'var(--green)' }}>Đã kết nối Google Sheet</b>}
+                  {connectionStatus === 'testing' && <b style={{ color: 'var(--cyan)' }}>Đang kiểm tra kết nối...</b>}
                   {connectionStatus === 'failed' && <b style={{ color: 'var(--red)' }}>Lỗi kết nối</b>}
                   {connectionStatus === 'not_configured' && <b style={{ color: 'var(--muted)' }}>Chưa cấu hình</b>}
-                  <p className="sub">Trạng thái xác thực Google Apps Script.</p>
+                  <p className="sub">Trạng thái xác thực Google Apps Script Web App API.</p>
                 </div>
                 <div className="card status">
-                  <h3>Sức khỏe đồng bộ</h3>
-                  <b>{connectionStatus === 'connected' ? '100%' : '0%'}</b>
-                  <p className="sub">{connectionStatus === 'connected' ? 'Hệ thống hoạt động ổn định' : 'Kiểm tra lại cấu hình kết nối'}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>Sức khỏe đồng bộ</h3>
+                    <span style={{ fontSize: '18px' }}>{connectionStatus === 'connected' ? '⚡' : '💤'}</span>
+                  </div>
+                  <b>{connectionStatus === 'connected' ? '100% Hoàn hảo' : '0% Chưa sẵn sàng'}</b>
+                  <p className="sub">{connectionStatus === 'connected' ? 'Hệ thống lưu trữ Cloud hoạt động thông suốt' : 'Kiểm tra lại cấu hình kết nối'}</p>
                 </div>
               </div>
+
             </div>
 
             <div className="card guide">
@@ -1835,9 +3059,224 @@ function App() {
             gasUrl={gasUrl} 
             spreadsheetId={spreadsheetId} 
             showToast={showToast} 
+            onNavigate={(v) => setCurrentView(v)}
           />
         )}
 
+        {/* Global Command Palette */}
+        <CommandPalette 
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigateTab={(tab) => setCurrentView(tab as any)}
+          onTriggerAction={(action) => {
+            if (action === 'open_payroll_config') {
+              setCurrentView('payroll');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('kg_open_payroll_config'));
+              }, 80);
+            } else if (action === 'pipe_attendance_payroll') {
+              handlePipeAttendanceToPayroll();
+            } else if (action === 'pipe_payroll_transfer') {
+              setCurrentView('transfer');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('kg-import-payroll-to-transfer'));
+              }, 120);
+            } else if (action === 'preset_k80') {
+              setCurrentView('payroll');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('kg-preset-k80'));
+              }, 100);
+            } else if (action === 'print_payroll') {
+              setCurrentView('payroll');
+              showToast('Đang mở lệnh in phiếu lương...', 'info');
+              setTimeout(() => window.print(), 300);
+            } else if (action === 'normalize_names') {
+              setCurrentView('transfer');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('kg-normalize-transfer-names'));
+              }, 120);
+            } else if (action === 'sync_cloud') {
+              if (currentView === 'attendance') {
+                handleFetchAndProcessFromSheet();
+              } else {
+                testConnection();
+              }
+            } else if (action === 'toggle_theme') {
+              toggleTheme();
+            } else if (action === 'toggle_extension_mode') {
+              setIsExtensionMode(prev => {
+                const next = !prev;
+                showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
+                return next;
+              });
+            } else if (action === 'open_extension_guide') {
+              setShowExtensionGuideModal(true);
+            }
+          }}
+        />
+
+        {/* Extension Compact Bottom Navigation Dock */}
+        {isExtensionMode && (
+          <nav className="extension-bottom-dock">
+            <button
+              type="button"
+              className={`extension-dock-btn ${currentView === 'vietqr' ? 'active' : ''}`}
+              onClick={() => setCurrentView('vietqr')}
+            >
+              <QrCode size={17} />
+              <span>VietQR</span>
+            </button>
+            <button
+              type="button"
+              className={`extension-dock-btn ${currentView === 'tts' ? 'active' : ''}`}
+              onClick={() => setCurrentView('tts')}
+            >
+              <Volume2 size={17} />
+              <span>TTS AI</span>
+            </button>
+            <button
+              type="button"
+              className={`extension-dock-btn ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
+              onClick={() => setCurrentView('attendance')}
+            >
+              <FileText size={17} />
+              <span>Chấm Công</span>
+            </button>
+            <button
+              type="button"
+              className={`extension-dock-btn ${currentView === 'payroll' ? 'active' : ''}`}
+              onClick={() => setCurrentView('payroll')}
+            >
+              <CreditCard size={17} />
+              <span>Phiếu Lương</span>
+            </button>
+            <button
+              type="button"
+              className={`extension-dock-btn ${currentView === 'transfer' ? 'active' : ''}`}
+              onClick={() => setCurrentView('transfer')}
+            >
+              <Send size={17} />
+              <span>Lệnh CK</span>
+            </button>
+          </nav>
+        )}
+
+        {/* Extension & PWA Installation Guide Modal */}
+        {showExtensionGuideModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9998,
+              background: 'rgba(0, 0, 0, 0.72)',
+              backdropFilter: 'blur(6px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+            onClick={() => setShowExtensionGuideModal(false)}
+          >
+            <div
+              className="card panel"
+              style={{
+                width: '100%',
+                maxWidth: '640px',
+                maxHeight: '88vh',
+                overflowY: 'auto',
+                padding: '24px',
+                border: '1px solid var(--border-strong)',
+                boxShadow: 'var(--shadow-lg)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'var(--accent-primary-subtle)', color: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Puzzle size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '17px' }}>Cài đặt Tiện ích mở rộng (Extension) & Webapp</h2>
+                    <p className="sub" style={{ margin: '2px 0 0', fontSize: '12px' }}>
+                      Hỗ trợ song song cả Webapp độc lập (PWA) và Chrome / Edge Extension (Manifest V3)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px' }}
+                  onClick={() => setShowExtensionGuideModal(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', lineHeight: 1.55 }}>
+                <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'var(--bg-elevated)', border: '1px solid var(--line)' }}>
+                  <strong style={{ color: 'var(--green)', display: 'block', marginBottom: '6px' }}>
+                    🧩 Cách 1: Cài đặt làm Chrome / Microsoft Edge Extension (Popup & Thanh bên Side Panel)
+                  </strong>
+                  <ol style={{ margin: 0, paddingLeft: '18px', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <li>Chạy lệnh <code>npm run build</code> để xuất gói đóng gói tại thư mục <code>dist/</code> (đã bao gồm <code>manifest.json</code> và <code>background.js</code> chuẩn Manifest V3).</li>
+                    <li>Mở trình duyệt Chrome (<code>chrome://extensions</code>) hoặc Edge (<code>edge://extensions</code>) và bật <b>Chế độ nhà phát triển (Developer mode)</b>.</li>
+                    <li>Nhấn <b>Tải tiện ích đã giải nén (Load unpacked)</b> và chọn thư mục <code>dist</code> của dự án.</li>
+                    <li>
+                      <b>Tính năng đặc quyền của Extension:</b>
+                      <ul style={{ marginTop: '4px', paddingLeft: '18px', color: 'var(--muted)' }}>
+                        <li>Mở nhanh cửa sổ thu ngân <b>Popup (420×640)</b> hoặc gắn cố định ở <b>Thanh bên (Side Panel)</b> khi đang mở trang quản lý POS / Ngân hàng.</li>
+                        <li><b>Menu chuột phải thông minh:</b> Bôi đen bất kỳ con số nào trên web → Chuột phải chọn <i>"⚡ Tạo mã VietQR với số tiền..."</i> hoặc bôi đen văn bản → <i>"🔊 Phát thanh AI (TTS)..."</i>.</li>
+                      </ul>
+                    </li>
+                  </ol>
+                </div>
+
+                <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'var(--bg-elevated)', border: '1px solid var(--line)' }}>
+                  <strong style={{ color: 'var(--orange)', display: 'block', marginBottom: '6px' }}>
+                    💻 Cách 2: Cài đặt làm Ứng dụng Máy tính / Điện thoại (Webapp PWA)
+                  </strong>
+                  <p style={{ margin: 0, color: 'var(--muted)' }}>
+                    Trên thanh địa chỉ trình duyệt Chrome / Edge, nhấn biểu tượng <b>Cài đặt ứng dụng (Install KG Studio)</b> để ghim trực tiếp lên Màn hình chính hoặc Thanh tác vụ Windows/macOS và chạy độc lập như phần mềm gốc.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', paddingTop: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <a
+                      href="/KG-Studio-Extension-v2.5.0.zip"
+                      download="KG-Studio-Extension-v2.5.0.zip"
+                      className="primary"
+                      style={{ height: '38px', padding: '0 14px', fontSize: '12.5px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Download size={15} />
+                      <span>Tải gói Extension (.zip)</span>
+                    </a>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ height: '38px', fontSize: '12.5px' }}
+                      onClick={() => {
+                        setIsExtensionMode(prev => !prev);
+                        setShowExtensionGuideModal(false);
+                      }}
+                    >
+                      <PanelRight size={15} />
+                      <span>{isExtensionMode ? 'Giao diện Webapp đầy đủ' : 'Dùng thử giao diện Extension'}</span>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ height: '38px', padding: '0 18px', fontSize: '12.5px' }}
+                    onClick={() => setShowExtensionGuideModal(false)}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

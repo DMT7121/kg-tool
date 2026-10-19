@@ -18,6 +18,7 @@ import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import './PayrollCreator.css';
 import { StatCard, EmptyState, GuidePanel } from './components/Shared';
+import { SlideOverDrawer } from './components/SlideOverDrawer';
 import ExcelJS from 'exceljs';
 
 const THEMES = {
@@ -290,9 +291,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   
   const [currentEmployeeIndex, setCurrentEmployeeIndex] = useState(0);
   const [previewMode, setPreviewMode] = useState<'single' | 'list' | 'thumbnail'>(() => (localStorage.getItem('kg_tool_preview_mode') as 'single' | 'list' | 'thumbnail') || 'single');
-  const [zoomLevel, setZoomLevel] = useState<string | number>(() => {
-    return window.innerWidth < 768 ? 'fit' : 100;
-  });
+  const [zoomLevel, setZoomLevel] = useState<string | number>('fit');
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -300,6 +299,17 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [navigatorFilter, setNavigatorFilter] = useState<'all' | 'valid' | 'invalid' | 'deduction' | 'advance'>('all');
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
+  const [configDrawerTab, setConfigDrawerTab] = useState<'salary' | 'print' | 'sync' | 'warnings'>('salary');
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [isDeductionsExpanded, setIsDeductionsExpanded] = useState(false);
+  const [isPresetsExpanded, setIsPresetsExpanded] = useState(false);
+
+  useEffect(() => {
+    const handleOpenConfig = () => setIsConfigDrawerOpen(true);
+    window.addEventListener('kg_open_payroll_config', handleOpenConfig);
+    return () => window.removeEventListener('kg_open_payroll_config', handleOpenConfig);
+  }, []);
   
   const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>('current');
   const [paperSize, setPaperSize] = useState<'a4' | 'k80'>('a4');
@@ -328,7 +338,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
   const [containerWidth, setContainerWidth] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [showToolbarOptions, setShowToolbarOptions] = useState(false);
 
   const containerResizeObserverRef = useRef<ResizeObserver | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -572,6 +581,113 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       return e;
     }));
   };
+
+  const importFromAttendanceSummary = useCallback(() => {
+    const raw = localStorage.getItem('kg_tool_attendance_summary');
+    if (!raw) {
+      showToast('Chưa có dữ liệu tổng hợp từ phân hệ Chấm công.', 'info');
+      return;
+    }
+    try {
+      const summaries = JSON.parse(raw) as Array<{
+        name: string;
+        workedDays: number;
+        totalHours: number;
+        range: string;
+        month: string;
+      }>;
+      if (!Array.isArray(summaries) || summaries.length === 0) return;
+
+      if (summaries[0]?.month) {
+        setPayMonth(summaries[0].month);
+      }
+
+      setEmployees(prev => {
+        const next: Employee[] = summaries.map((s, idx) => {
+          const existing = prev.find(
+            e => e.name.trim().toLowerCase() === s.name.trim().toLowerCase()
+          );
+          const baseSalary = existing?.salary || (salaryMode === 'hourly' ? 35000 : 6500000);
+          const daysVal = salaryMode === 'hourly' ? (s.totalHours || s.workedDays * 8) : s.workedDays;
+
+          const tempEmp: Employee = {
+            id: existing?.id || `att-${Date.now()}-${idx}`,
+            name: s.name,
+            days: daysVal,
+            workedDays: s.workedDays,
+            totalHours: s.totalHours || s.workedDays * 8,
+            addedDays: existing?.addedDays ?? 0,
+            lunchPay: existing?.lunchPay ?? s.workedDays * 20000,
+            bonus: existing?.bonus ?? 0,
+            overtimePay: existing?.overtimePay ?? 0,
+            deduction: existing?.deduction ?? 0,
+            advance: existing?.advance ?? 0,
+            range: s.range || existing?.range || '',
+            salary: baseSalary,
+            amount: 0
+          };
+
+          if (salaryMode === 'restaurant') {
+            tempEmp.amount = getRestaurantDetails(tempEmp).tongNhan;
+          } else if (salaryMode === 'hourly') {
+            tempEmp.amount = roundSalary(baseSalary * daysVal);
+          } else {
+            tempEmp.amount = roundSalary((baseSalary * daysVal) / standardDays);
+          }
+          return tempEmp;
+        });
+
+        setSelectedEmployeeIds(new Set(next.map(e => e.id)));
+        return next;
+      });
+
+      showToast(`Đã đồng bộ ${summaries.length} nhân viên từ Bảng Chấm Công sang Tính Lương!`, 'success');
+    } catch (e) {
+      console.error(e);
+    }
+  }, [salaryMode, standardDays]);
+
+  const handlePipeToTransferTool = () => {
+    if (employees.length === 0) {
+      showToast('Chưa có dữ liệu nhân viên để chuyển sang Lập lệnh chuyển khoản.', 'error');
+      return;
+    }
+    const stateToSave = {
+      salaryMode,
+      payMonth,
+      voucherDate,
+      standardDays,
+      defaultPosition,
+      defaultDept,
+      roundMode,
+      advance,
+      employees,
+      deductions
+    };
+    localStorage.setItem('kg_tool_payroll_state', JSON.stringify(stateToSave));
+    localStorage.setItem('kg_tool_pending_payroll_transfer', '1');
+    window.dispatchEvent(new CustomEvent('kg-navigate-tab', { detail: 'transfer' }));
+    window.dispatchEvent(new CustomEvent('kg-import-payroll-to-transfer'));
+  };
+
+  useEffect(() => {
+    if (localStorage.getItem('kg_tool_pending_attendance_payroll') === '1') {
+      localStorage.removeItem('kg_tool_pending_attendance_payroll');
+      importFromAttendanceSummary();
+    }
+    const onImportAtt = () => importFromAttendanceSummary();
+    const onPresetK80 = () => {
+      setPaperSize('k80');
+      setActiveTemplate('k80');
+      showToast('Đã chuyển sang chế độ In nhiệt K80 (80mm)!', 'success');
+    };
+    window.addEventListener('kg-import-attendance-to-payroll', onImportAtt);
+    window.addEventListener('kg-preset-k80', onPresetK80);
+    return () => {
+      window.removeEventListener('kg-import-attendance-to-payroll', onImportAtt);
+      window.removeEventListener('kg-preset-k80', onPresetK80);
+    };
+  }, [importFromAttendanceSummary]);
 
   const importPayrollFromExcel = async (file: File) => {
     try {
@@ -1636,7 +1752,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const words = numberToVietnamese(net);
     const isHourly = salaryMode === 'hourly';
 
-    const rows = employees.slice(0, 15).map((e, i) => {
+    const rows = employees.map((e, i) => {
       const y = 382 + i * 66;
       return `
         <text x="75" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="20">${i + 1}</text>
@@ -2108,7 +2224,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     });
 
     // Divider after table
-    elements.push(`<line x1="15" y1="${currentY}" class="k80-divider" />`);
+    elements.push(`<line x1="15" y1="${currentY}" x2="305" y2="${currentY}" class="k80-divider" />`);
     currentY += 15;
 
     const bottomTotalLabel = isHourly ? "Tổng giờ làm việc" : "Tổng công nhân viên";
@@ -2145,7 +2261,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     });
 
     // Divider before Net
-    elements.push(`<line x1="15" y1="${currentY + 5}" class="k80-divider" />`);
+    elements.push(`<line x1="15" y1="${currentY + 5}" x2="305" y2="${currentY + 5}" class="k80-divider" />`);
     currentY += 15;
 
     // Net Pay
@@ -2422,7 +2538,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const words = numberToVietnamese(net);
     const isHourly = salaryMode === 'hourly';
 
-    const rows = employees.slice(0, 10).map((e, i) => {
+    const rows = employees.map((e, i) => {
       const y = 390 + i * 58;
       return `
         <text x="90" y="${y}" font-family="'${selectedFont}', sans-serif" font-size="15" fill="#334155">${i + 1}</text>
@@ -2837,62 +2953,29 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const isHourly = salaryMode === 'hourly';
 
   const [showMobileEmpList, setShowMobileEmpList] = useState(false);
-  const [activeAccordion, setActiveAccordion] = useState<string[]>(['general_settings', 'data_and_employees']);
-
-  const toggleAccordion = (key: string) => {
-    setActiveAccordion(prev => 
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
-  };
-  
-  const isAccordionOpen = (key: string) => activeAccordion.includes(key);
-
   const paperBaseWidthPx = activeTemplate === 'k80' ? 320 : 1000;
-  const fitScale = useMemo(() => {
-    if (!viewportWidth) return 1;
-    const padding = activeTemplate === 'k80' ? 0 : 32;
-    const availableWidth = viewportWidth - padding;
-    return Math.min(1, availableWidth / paperBaseWidthPx);
-  }, [viewportWidth, activeTemplate, paperBaseWidthPx]);
-
-  const getZoomWidthStyle = () => {
+    const getZoomWidthStyle = () => {
     if (zoomLevel === 'fit') {
+      const avail = viewportWidth ? Math.max(260, viewportWidth - (activeTemplate === 'k80' ? 16 : 32)) : paperBaseWidthPx;
+      const effectiveWidth = Math.min(paperBaseWidthPx, avail);
       return { 
-        width: `${paperBaseWidthPx * fitScale}px`, 
+        width: `${effectiveWidth}px`, 
         maxWidth: '100%', 
-        transform: 'none' 
+        margin: '0 auto',
+        transform: 'none',
+        boxSizing: 'border-box' as const
       };
     }
     const zoomVal = Number(zoomLevel) || 100;
     const scaleVal = zoomVal / 100;
     return { 
-      width: `${paperBaseWidthPx * scaleVal}px`, 
+      width: `${Math.round(paperBaseWidthPx * scaleVal)}px`, 
+      minWidth: `${Math.round(paperBaseWidthPx * scaleVal)}px`,
       maxWidth: 'none', 
-      transform: 'none' 
+      margin: '0 auto',
+      transform: 'none',
+      boxSizing: 'border-box' as const
     };
-  };
-
-  const renderAccordionSection = (key: string, title: string, icon: string, children: React.ReactNode) => {
-    const isOpen = isAccordionOpen(key);
-    return (
-      <div className={`glass-card collapsible-section ${isOpen ? 'open' : 'collapsed'}`} style={{ padding: '0.85rem 1rem' }}>
-        <div 
-          className="section-header" 
-          onClick={() => toggleAccordion(key)} 
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
-        >
-          <span className="card-heading-title" style={{ fontSize: '0.95rem' }}>
-            {icon} {title}
-          </span>
-          <span style={{ fontSize: '0.75rem', transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', color: 'var(--muted)' }}>▼</span>
-        </div>
-        {isOpen && (
-          <div className="section-content" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {children}
-          </div>
-        )}
-      </div>
-    );
   };
 
   const warningsList = useMemo(() => {
@@ -3047,161 +3130,82 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               </div>
             )}
             
-            {/* Group 1: General configurations and sync */}
-            {(!isMobileScreen || mobileActiveTab === 'data' || mobileActiveTab === 'settings') && renderAccordionSection('general_settings', 'Cấu hình & Đồng bộ Cloud', '⚙️', (
-              <>
-                <div className="sub-section">
-                  <div className="sub-section-header">⚙️ Cấu hình lương & thanh toán</div>
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Chế độ tính lương</label>
-                      <select 
-                        className="form-control" 
-                        value={salaryMode} 
-                        onChange={(e) => setSalaryMode(e.target.value as 'monthly' | 'hourly' | 'restaurant')}
-                      >
-                        <option value="restaurant">Nhà hàng F&B (Mức lương/Quy đổi/Giờ/Công/Cơm...)</option>
-                        <option value="monthly">Theo tháng (Lương tháng / ngày công)</option>
-                        <option value="hourly">Theo giờ (Lương giờ × số giờ)</option>
-                      </select>
-                    </div>
-                    
-                    <div className="form-group">
-                      <label className="form-label">Tháng thanh toán</label>
-                      <input type="month" className="form-control" value={payMonth} onChange={(e) => setPayMonth(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Ngày lập chứng từ</label>
-                      <input type="date" className="form-control" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
-                    </div>
-
-                    <div className="form-group" style={{ display: isHourly ? 'none' : 'block' }}>
-                      <label className="form-label">Số ngày công định mức</label>
-                      <input type="number" className="form-control" value={standardDays} onChange={(e) => setStandardDays(Number(e.target.value) || 26)} />
-                    </div>
-                  </div>
-
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Chức vụ mặc định</label>
-                      <input type="text" className="form-control" value={defaultPosition} onChange={(e) => setDefaultPosition(e.target.value)} />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Bộ phận mặc định</label>
-                      <input type="text" className="form-control" value={defaultDept} onChange={(e) => setDefaultDept(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Làm tròn số tiền</label>
-                      <select className="form-control" value={roundMode} onChange={(e) => setRoundMode(e.target.value as any)}>
-                        <option value="none">Không làm tròn</option>
-                        <option value="hundred">Làm tròn hàng trăm (100đ)</option>
-                        <option value="thousand">Làm tròn hàng nghìn (1.000đ)</option>
-                      </select>
-                    </div>
-                    
-                    <div className="form-group">
-                      <label className="form-label">Khấu trừ tạm ứng chung (đ)</label>
-                      <MoneyInput 
-                        className="form-control" 
-                        value={advance} 
-                        onChange={(val) => setAdvance(val)}
-                        formatMoney={formatMoney}
-                      />
-                    </div>
-                  </div>
+            {/* Clean Dedicated Employee Master Panel */}
+            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(77, 134, 224, 0.32)', borderRadius: '14px', background: 'linear-gradient(145deg, rgba(12, 29, 65, 0.8), rgba(8, 19, 44, 0.75))' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(15, 23, 42, 0.6)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>👥 Danh Sách Nhân Viên</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, background: 'rgba(59, 130, 246, 0.25)', color: '#60a5fa', padding: '2px 8px', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                    {employees.length}
+                  </span>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfigDrawerOpen(true)}
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      padding: '5px 12px',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      border: '1px solid rgba(59, 130, 246, 0.4)',
+                      borderRadius: '6px',
+                      color: '#93c5fd',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    title="Mở cấu hình tính lương và đồng bộ Cloud"
+                  >
+                    <span>⚙️</span>
+                    <span>Cài đặt Lương</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Toolbar */}
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+                <input type="file" ref={excelInputRef} accept=".xlsx, .xls" style={{ display: 'none' }} onChange={handleExcelImport} />
+                <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
                 
-                <div className="sub-section-divider"></div>
-                
-                <div className="sub-section">
-                  <div className="sub-section-header">☁️ Đồng bộ Google Sheets</div>
-                  <div className="sync-status">
-                    <span className={`sync-dot ${syncStatus}`}></span>
-                    <span>Google Sheets Sync: </span>
-                    <strong>{syncStatus === 'online' ? 'Sẵn sàng' : syncStatus === 'loading' ? 'Đang đồng bộ...' : 'Chưa kết nối'}</strong>
-                  </div>
-
-                  <div className="bulk-import-row" style={{ marginTop: '0.5rem' }}>
-                    <button type="button" className="primary" style={{ flexGrow: 1, height: '40px', fontSize: '13px' }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
-                      <Save size={14} />
-                      Lưu Cloud
-                    </button>
-                    <button type="button" className="btn-ghost" onClick={fetchHistoryMonths} disabled={syncStatus === 'loading'} title="Tải lại lịch sử">
-                      <RefreshCw size={14} className={syncStatus === 'loading' ? 'spinner' : ''} />
-                    </button>
-                  </div>
-
-                  <div className="history-list-header" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginTop: '4px' }}>Lịch sử tháng lương đã lưu:</div>
-                  <div className="history-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '130px', overflowY: 'auto' }}>
-                    {historyMonths.map(h => (
-                      <div key={h.month} className="history-item-row" onClick={() => loadHistoryMonth(h.month)} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                        <div className="history-meta">
-                          <span className="h-month">Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
-                          <span className="h-info" style={{ fontSize: '10px', color: 'var(--muted)' }}>Ghi bởi: {h.operator} - {h.updatedTime}</span>
-                        </div>
-                        <button 
-                          type="button"
-                          className="btn-danger small-btn" 
-                          style={{ padding: '3px 6px', fontSize: '10px' }} 
-                          onClick={(e) => { e.stopPropagation(); deleteHistoryMonth(h.month); }}
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    ))}
-                    {historyMonths.length === 0 && (
-                      <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>Chưa có dữ liệu nào lưu trữ đám mây.</div>
-                    )}
-                  </div>
-                </div>
-              </>
-            ))}
-            {/* Group 2: Bulk import, Employee data, and Deductions */}
-            {(!isMobileScreen || mobileActiveTab === 'data') && renderAccordionSection('data_and_employees', `Nhập liệu & Nhân viên (${employees.length})`, '📥', (
-              <>
-                <div className="sub-section">
-                  <div className="sub-section-header">📂 Nạp tệp & Dữ liệu mẫu</div>
-                  <div className="grid3">
-                    <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
-                    <input type="file" ref={excelInputRef} accept=".xlsx, .xls" style={{ display: 'none' }} onChange={handleExcelImport} />
-                    <button type="button" className="primary" onClick={triggerCsvSelect} style={{ height: '44px', fontSize: '13px' }}>
-                      <UploadCloud size={14} />
-                      Nhập file CSV
-                    </button>
-                    <button type="button" className="primary" onClick={triggerExcelSelect} style={{ height: '44px', fontSize: '13px' }}>
-                      <UploadCloud size={14} />
-                      Nhập file Excel
-                    </button>
-                    <button type="button" className="btn-outline" onClick={loadSampleData} style={{ height: '44px', fontSize: '13px' }}>Tải dữ liệu mẫu</button>
-                  </div>
-                  <div className="bulk-import-row">
-                    <button type="button" className="btn-outline" onClick={clearAllForms} style={{ flexGrow: 1, padding: '8px', fontSize: '13px' }}>Xóa form dữ liệu</button>
-                  </div>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Hỗ trợ định dạng: .csv, .xlsx, .xls</p>
+                {/* Row 1: Primary Add/Import */}
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                  <button 
+                    type="button" 
+                    className="primary" 
+                    onClick={triggerExcelSelect} 
+                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    title="Nạp bảng tính Excel .xlsx, .xls"
+                  >
+                    <UploadCloud size={13} />
+                    <span>Nhập Excel</span>
+                  </button>
+                  
+                  <button 
+                    type="button" 
+                    className="btn-outline" 
+                    onClick={addEmployee} 
+                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34d399' }}
+                    title="Thêm một nhân viên mới vào danh sách"
+                  >
+                    <Plus size={13} />
+                    <span>+ Thêm NV</span>
+                  </button>
                 </div>
 
-                <div className="sub-section-divider"></div>
-
-                <div className="sub-section">
-                  <div className="sub-section-header">👥 Quản lý Danh sách Nhân viên</div>
-                  <div className="grid2">
-                    <button type="button" className="primary" onClick={addEmployee} style={{ height: '40px', fontSize: '13px' }}>
-                      <Plus size={14} />
-                      Thêm nhân viên
-                    </button>
-                    <button type="button" className="btn-outline" onClick={() => {
+                {/* Row 2: Secondary Quick Actions */}
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-outline" 
+                    onClick={() => {
                       const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
                       if (text) {
                         const lines = text.split('\n');
                         const newEmps: Employee[] = [];
-                        const isHourly = salaryMode === 'hourly';
+                        const isHourlyMode = salaryMode === 'hourly';
                         lines.forEach((line, idx) => {
                           if (!line.trim()) return;
                           const cols = line.split('\t');
@@ -3209,118 +3213,336 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           const name = cols[0]?.trim();
                           const days = Number(cols[1]) || 0;
                           const range = cols[2]?.trim() || '';
-                          const salary = onlyNumber(cols[3] || (isHourly ? '35.000' : '10.000.000'));
-                          let amount = isHourly ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
+                          const salary = onlyNumber(cols[3] || (isHourlyMode ? '35.000' : '10.000.000'));
+                          let amount = isHourlyMode ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
                           newEmps.push({ id: Date.now().toString() + idx, name, days, range, salary, amount });
                         });
                         if (newEmps.length > 0) {
                           setEmployees(prev => [...prev, ...newEmps]);
-                          showToast(`Đã dán thành công ${newEmps.length} nhân viên!`, 'success');
+                          showToast('Đã dán thành công ' + newEmps.length + ' nhân viên!', 'success');
                         }
                       }
-                    }} style={{ height: '40px', fontSize: '13px' }}>
-                      Dán dữ liệu
+                    }}
+                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Dán dữ liệu từ Clipboard (Tab-separated)"
+                  >
+                    📋 Dán
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="btn-ghost" 
+                    onClick={loadSampleData} 
+                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px' }}
+                    title="Nạp dữ liệu mẫu thử nghiệm"
+                  >
+                    💡 Mẫu
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="btn-ghost" 
+                    onClick={triggerCsvSelect} 
+                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px' }}
+                    title="Nạp tệp CSV"
+                  >
+                    CSV
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="btn-ghost" 
+                    onClick={clearAllForms} 
+                    style={{ width: '30px', height: '30px', padding: 0, fontSize: '12px', color: '#f87171', border: '1px solid rgba(248, 113, 113, 0.2)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Xóa trắng form dữ liệu"
+                  >
+                    🗑️
+                  </button>
+                </div>
+
+                {/* Instant Realtime Search input */}
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="🔍 Tìm nhanh tên nhân viên..."
+                    value={searchEmployeeQuery}
+                    onChange={(e) => setSearchEmployeeQuery(e.target.value)}
+                    style={{
+                      height: '32px',
+                      fontSize: '12px',
+                      background: 'rgba(0,0,0,0.25)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      paddingLeft: '10px',
+                      borderRadius: '6px',
+                      width: '100%'
+                    }}
+                  />
+                  {searchEmployeeQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchEmployeeQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      ✕
                     </button>
-                  </div>
+                  )}
+                </div>
+              </div>
 
-                  <div className="employees-list-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto' }}>
-                    {employees.map((emp, idx) => (
-                      <div key={emp.id} className="employee-input-row" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div className="employee-row-title" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', fontWeight: 700 }}>
-                          <span style={{ color: 'var(--cyan)' }}>👤 Nhân viên #${idx + 1}</span>
-                          <button type="button" className="btn-danger small-btn" style={{ padding: '2px 6px', fontSize: '11px' }} onClick={() => deleteEmployee(emp.id)}>Xóa</button>
-                        </div>
-                        
-                        <div className="form-group" style={{ marginBottom: '8px' }}>
-                          <label className="form-label" style={{ fontSize: '11px' }}>Họ và tên</label>
-                          <input type="text" className="form-control input-compact" value={emp.name} onChange={(e) => updateEmployeeDetails(emp.id, 'name', e.target.value)} />
-                        </div>
+              {/* Master Employees List Container */}
+              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 'clamp(280px, calc(100vh - 350px), 580px)', overflowY: 'auto' }}>
+                {filteredNavigatorEmployees.map((emp) => {
+                  const realIdx = employees.findIndex(e => e.id === emp.id);
+                  const isCurrent = currentEmployeeIndex === realIdx;
+                  const isExpanded = editingEmployeeId === emp.id || (isCurrent && editingEmployeeId === null);
+                  const msgs = validationMap[emp.id] || [];
+                  const hasError = msgs.some(m => m.type === 'error');
 
-                        {salaryMode === 'restaurant' ? (
-                          <>
-                            <div className="grid3" style={{ marginBottom: '8px' }}>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Mức lương</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.salary}
-                                  onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
-                                  formatMoney={formatMoney}
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Số ngày làm/tháng</label>
-                                <input 
-                                  type="number" 
-                                  step="1" 
-                                  min="0" 
-                                  className="form-control input-compact" 
-                                  value={emp.workedDays !== undefined ? emp.workedDays : emp.days} 
-                                  onChange={(e) => updateEmployeeRestaurantField(emp.id, 'workedDays', Number(e.target.value) || 0)} 
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Ngày công thêm (+)</label>
-                                <input 
-                                  type="number" 
-                                  step="0.5" 
-                                  min="0" 
-                                  className="form-control input-compact" 
-                                  value={emp.addedDays || 0} 
-                                  onChange={(e) => updateEmployeeRestaurantField(emp.id, 'addedDays', Number(e.target.value) || 0)} 
-                                />
-                              </div>
+                  return (
+                    <div 
+                      key={emp.id} 
+                      style={{ 
+                        background: isCurrent ? 'rgba(30, 58, 138, 0.3)' : 'rgba(255,255,255,0.02)', 
+                        borderRadius: '10px', 
+                        border: isCurrent 
+                          ? '1px solid rgba(59, 130, 246, 0.7)' 
+                          : hasError 
+                            ? '1px solid rgba(239, 68, 68, 0.4)' 
+                            : '1px solid rgba(255,255,255,0.06)',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isCurrent ? '0 0 12px rgba(59, 130, 246, 0.2)' : 'none',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Summary Row (Clickable to switch preview) */}
+                      <div 
+                        onClick={() => {
+                          if (realIdx >= 0) setCurrentEmployeeIndex(realIdx);
+                        }}
+                        style={{ 
+                          padding: '10px 12px', 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          cursor: 'pointer',
+                          gap: '8px',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <span style={{ 
+                            fontSize: '11px', 
+                            fontWeight: 700, 
+                            color: isCurrent ? '#93c5fa' : '#64748b',
+                            background: isCurrent ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.05)',
+                            padding: '2px 6px',
+                            borderRadius: '4px'
+                          }}>
+                            #{realIdx + 1}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ 
+                              fontSize: '13px', 
+                              fontWeight: 600, 
+                              color: isCurrent ? '#ffffff' : '#e2e8f0', 
+                              whiteSpace: 'nowrap', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis' 
+                            }}>
+                              {emp.name || '(Chưa nhập tên)'}
                             </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                              {salaryMode === 'restaurant' 
+                                ? `${emp.workedDays !== undefined ? emp.workedDays : emp.days} ngày · ${emp.totalHours || 0}h`
+                                : `${emp.days} ${salaryMode === 'hourly' ? 'giờ' : 'công'}`
+                              }
+                            </div>
+                          </div>
+                        </div>
 
-                            <div className="grid3" style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <span style={{ 
+                            fontSize: '12px', 
+                            fontWeight: 700, 
+                            color: isCurrent ? '#22d3ee' : '#cbd5e1' 
+                          }}>
+                            {formatMoney(emp.amount)}
+                          </span>
+
+                          <button 
+                            type="button" 
+                            className="btn-ghost" 
+                            style={{ padding: '3px 6px', fontSize: '11px', color: isExpanded ? '#60a5fa' : '#94a3b8' }} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingEmployeeId(editingEmployeeId === emp.id ? 'NONE' : emp.id);
+                              if (realIdx >= 0) setCurrentEmployeeIndex(realIdx);
+                            }}
+                            title={isExpanded ? "Thu gọn form" : "Mở form chi tiết"}
+                          >
+                            {isExpanded ? '▲' : '✏️'}
+                          </button>
+
+                          <button 
+                            type="button" 
+                            className="btn-ghost" 
+                            style={{ padding: '3px 6px', fontSize: '11px', color: '#f87171' }} 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              deleteEmployee(emp.id); 
+                            }}
+                            title="Xóa nhân viên này"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Detailed Editor Form (Expanded) */}
+                      {isExpanded && (
+                        <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
+                          <div className="form-group" style={{ marginBottom: '8px' }}>
+                            <label className="form-label" style={{ fontSize: '11px' }}>Họ và tên nhân viên</label>
+                            <input 
+                              type="text" 
+                              className="form-control input-compact" 
+                              value={emp.name} 
+                              onChange={(e) => updateEmployeeDetails(emp.id, 'name', e.target.value)} 
+                            />
+                          </div>
+
+                          {salaryMode === 'restaurant' ? (
+                            <>
+                              <div className="grid3" style={{ marginBottom: '8px' }}>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Mức lương</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.salary}
+                                    onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Số ngày làm</label>
+                                  <input 
+                                    type="number" 
+                                    step="1" 
+                                    min="0" 
+                                    className="form-control input-compact" 
+                                    value={emp.workedDays !== undefined ? emp.workedDays : emp.days} 
+                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'workedDays', Number(e.target.value) || 0)} 
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Công thêm (+)</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.5" 
+                                    min="0" 
+                                    className="form-control input-compact" 
+                                    value={emp.addedDays || 0} 
+                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'addedDays', Number(e.target.value) || 0)} 
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid3" style={{ marginBottom: '8px' }}>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Tổng giờ làm</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1" 
+                                    min="0" 
+                                    className="form-control input-compact" 
+                                    value={emp.totalHours !== undefined ? emp.totalHours : 0} 
+                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'totalHours', Number(e.target.value) || 0)} 
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Tiền cơm (+)</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.lunchPay !== undefined ? emp.lunchPay : (emp.workedDays !== undefined ? emp.workedDays : emp.days) * 20000}
+                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'lunchPay', val)}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Thưởng (+)</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.bonus || 0}
+                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'bonus', val)}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid2" style={{ marginBottom: '8px' }}>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Tăng ca (+)</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.overtimePay || 0}
+                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'overtimePay', val)}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Tạm ứng (-)</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.advance || 0}
+                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'advance', val)}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid2">
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Đổ bể (-)</label>
+                                  <MoneyInput
+                                    className="form-control input-compact"
+                                    value={emp.deduction || 0}
+                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'deduction', val)}
+                                    formatMoney={formatMoney}
+                                  />
+                                </div>
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '11px' }}>Thời gian</label>
+                                  <input 
+                                    type="text" 
+                                    className="form-control input-compact" 
+                                    placeholder="01/06 - 30/06" 
+                                    value={emp.range} 
+                                    onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
+                                  />
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="grid3">
                               <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Tổng số giờ làm</label>
+                                <label className="form-label" style={{ fontSize: '11px' }}>{salaryMode === 'hourly' ? 'Giờ làm' : 'Công'}</label>
                                 <input 
                                   type="number" 
                                   step="0.1" 
                                   min="0" 
                                   className="form-control input-compact" 
-                                  value={emp.totalHours !== undefined ? emp.totalHours : 0} 
-                                  onChange={(e) => updateEmployeeRestaurantField(emp.id, 'totalHours', Number(e.target.value) || 0)} 
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Tiền cơm (+)</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.lunchPay !== undefined ? emp.lunchPay : (emp.workedDays !== undefined ? emp.workedDays : emp.days) * 20000}
-                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'lunchPay', val)}
-                                  formatMoney={formatMoney}
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Thưởng (+)</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.bonus || 0}
-                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'bonus', val)}
-                                  formatMoney={formatMoney}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid3" style={{ marginBottom: '8px' }}>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Tăng ca (+)</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.overtimePay || 0}
-                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'overtimePay', val)}
-                                  formatMoney={formatMoney}
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Đổ bể (-)</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.deduction || 0}
-                                  onChange={(val) => updateEmployeeRestaurantField(emp.id, 'deduction', val)}
-                                  formatMoney={formatMoney}
+                                  value={emp.days} 
+                                  onChange={(e) => updateEmployeeDays(emp.id, Number(e.target.value) || 0)} 
                                 />
                               </div>
                               <div className="form-group">
@@ -3333,412 +3555,182 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                                   onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
                                 />
                               </div>
+                              <div className="form-group">
+                                <label className="form-label" style={{ fontSize: '11px' }}>{salaryMode === 'hourly' ? 'Lương giờ' : 'Lương CB'}</label>
+                                <MoneyInput
+                                  className="form-control input-compact"
+                                  value={emp.salary}
+                                  onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
+                                  formatMoney={formatMoney}
+                                />
+                              </div>
                             </div>
-                          </>
-                        ) : (
-                          <div className="grid3">
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11px' }}>{isHourly ? 'Giờ làm' : 'Công'}</label>
-                              <input 
-                                type="number" 
-                                step="0.1" 
-                                min="0" 
-                                className="form-control input-compact" 
-                                value={emp.days} 
-                                onChange={(e) => updateEmployeeDays(emp.id, Number(e.target.value) || 0)} 
-                              />
-                            </div>
-                            
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11px' }}>Thời gian</label>
-                              <input 
-                                type="text" 
-                                className="form-control input-compact" 
-                                placeholder="01/06 - 30/06" 
-                                value={emp.range} 
-                                onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
-                              />
-                            </div>
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11px' }}>{isHourly ? 'Lương giờ' : 'Lương CB'}</label>
-                               <MoneyInput
-                                 className="form-control input-compact"
-                                 value={emp.salary}
-                                 onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
-                                 formatMoney={formatMoney}
-                               />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {employees.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '12px' }}>
-                        Chưa có nhân viên nào.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="sub-section-divider"></div>
-
-                <div className="sub-section">
-                  <div className="sub-section-header">💸 Khoản Khấu trừ Chung ({deductions.length})</div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-                    <button type="button" className="primary" onClick={addDeduction} style={{ height: '36px', padding: '0 12px', fontSize: '12px' }}>
-                      <Plus size={12} />
-                      Thêm khấu trừ
-                    </button>
-                  </div>
-
-                  <div className="deductions-list-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {deductions.map(d => (
-                      <div key={d.id} className="deduction-input-row" style={{ padding: '8px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div className="employee-row-title" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
-                          <span style={{ fontWeight: 600 }}>Khấu trừ</span>
-                          <button type="button" className="btn-danger small-btn" style={{ padding: '1px 5px', fontSize: '10px' }} onClick={() => deleteDeduction(d.id)}>Xóa</button>
+                          )}
                         </div>
-                        <div className="grid2">
-                          <div className="form-group">
-                            <label className="form-label" style={{ fontSize: '10px' }}>Nội dung</label>
-                            <input type="text" className="form-control input-compact" placeholder="BHXH, Phạt..." value={d.label} onChange={(e) => updateDeduction(d.id, 'label', e.target.value)} />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label" style={{ fontSize: '10px' }}>Số tiền (đ)</label>
-                            <MoneyInput
-                              className="form-control input-compact"
-                              value={d.amount}
-                              onChange={(val) => updateDeduction(d.id, 'amount', val)}
-                              formatMoney={formatMoney}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ))}
-            {/* Group 3: Customize, Typography, and Print configurations */}
-            {(!isMobileScreen || mobileActiveTab === 'settings' || mobileActiveTab === 'export') && renderAccordionSection('customize_and_print', 'Tùy chỉnh & Bố cục In ấn', '🎨', (
-              <>
-                <div className="sub-section">
-                  <div className="sub-section-header">📋 Mẫu cấu hình in ấn của tôi</div>
-                  <div className="custom-presets-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-                    {customPresets.map(preset => (
-                      <div key={preset.id} className="preset-item-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', padding: '6px 10px' }}>
-                        <span 
-                          style={{ cursor: 'pointer', flexGrow: 1, fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}
-                          onClick={() => applyCustomPreset(preset)}
-                          title="Click để áp dụng mẫu"
-                        >
-                          📄 {preset.name}
-                        </span>
-                        <button 
-                          type="button" 
-                          className="btn-danger small-btn" 
-                          style={{ padding: '2px 8px', fontSize: '11px', background: 'rgba(220, 38, 38, 0.2)', border: '1px solid rgba(220, 38, 38, 0.4)', color: '#f87171' }} 
-                          onClick={(e) => { e.stopPropagation(); deleteCustomPreset(preset.id); }}
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    ))}
-                    {customPresets.length === 0 && (
-                      <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', padding: '6px' }}>
-                        Chưa lưu mẫu cấu hình nào.
-                      </div>
-                    )}
-                  </div>
-
-                  <button 
-                    type="button" 
-                    className="primary" 
-                    onClick={saveCurrentAsPreset} 
-                    style={{ width: '100%', height: '36px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                  >
-                    <Save size={14} />
-                    Lưu cấu hình hiện tại thành mẫu
-                  </button>
-                </div>
-
-                <div className="sub-section-divider"></div>
-
-                <div className="sub-section">
-                  <div className="sub-section-header">👁️ Tùy chọn hiển thị phiếu</div>
-                  <div className="form-group" style={{ marginBottom: '8px' }}>
-                    <label className="form-label">Chọn Preset nhanh</label>
-                    <div className="preset-toggle-container">
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('full')}>Đầy đủ</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('compact')}>Rút gọn</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('internal')}>Nội bộ</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('k80')}>In nhiệt</button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>PHẦN ĐẦU PHIẾU</span>
-                      <div className="checkbox-grid">
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility((prev: any) => ({ ...prev, showLogo: e.target.checked }))} />
-                          <span>Logo đơn vị</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showUnitInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showUnitInfo: e.target.checked }))} />
-                          <span>Tên & địa chỉ đơn vị</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility((prev: any) => ({ ...prev, showTitle: e.target.checked }))} />
-                          <span>Tiêu đề phiếu</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showMetaInfo} onChange={e => setVisibility((prev: any) => ({ ...prev, showMetaInfo: e.target.checked }))} />
-                          <span>Tháng & Ngày lập</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>THÔNG TIN NHÂN VIÊN</span>
-                      <div className="checkbox-grid">
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showEmpName} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpName: e.target.checked }))} />
-                          <span>Tên nhân viên</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showEmpRole} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpRole: e.target.checked }))} />
-                          <span>Chức vụ</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showEmpDept} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpDept: e.target.checked }))} />
-                          <span>Bộ phận</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showEmpBank} onChange={e => setVisibility((prev: any) => ({ ...prev, showEmpBank: e.target.checked }))} />
-                          <span>Tài khoản ngân hàng</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '6px' }}>CHI TIẾT LƯƠNG & CHỮ KÝ</span>
-                      <div className="checkbox-grid">
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility((prev: any) => ({ ...prev, showBaseSalary: e.target.checked }))} />
-                          <span>Mức lương cơ bản</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility((prev: any) => ({ ...prev, showTime: e.target.checked }))} />
-                          <span>Số công/Số giờ làm</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility((prev: any) => ({ ...prev, showSignatures: e.target.checked }))} />
-                          <span>Chữ ký xác nhận</span>
-                        </label>
-                        <label className="checkbox-label">
-                          <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility((prev: any) => ({ ...prev, showNotes: e.target.checked }))} />
-                          <span>Ghi chú bằng chữ</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="sub-section-divider"></div>
-
-                <div className="sub-section">
-                  <div className="sub-section-header">🔤 Kiểu chữ & Typography</div>
-                  <div className="form-group">
-                    <label className="form-label">Chọn Preset phong cách nhanh</label>
-                    <div className="preset-toggle-container">
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('modern')}>Hiện đại</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('admin')}>Hành chính</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('minimalist')}>Tối giản</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('luxury')}>Sang trọng</button>
-                      <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('k80')}>In nhiệt K80</button>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Font chữ tiếng Việt</label>
-                    <select className="form-control" value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
-                      {AVAILABLE_FONTS.map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid3">
-                    <div className="form-group">
-                      <label className="form-label">Cỡ tiêu đề</label>
-                      <input type="number" className="form-control" value={fontSizeTitle} onChange={e => setFontSizeTitle(Number(e.target.value) || 28)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Cỡ nội dung</label>
-                      <input type="number" className="form-control" value={fontSizeContent} onChange={e => setFontSizeContent(Number(e.target.value) || 14)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Cỡ bảng</label>
-                      <input type="number" className="form-control" value={fontSizeTable} onChange={e => setFontSizeTable(Number(e.target.value) || 13)} />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Độ đậm tiêu đề</label>
-                    <select className="form-control" value={titleWeight} onChange={e => setTitleWeight(e.target.value)}>
-                      <option value="400">Regular (400)</option>
-                      <option value="500">Medium (500)</option>
-                      <option value="600">Semi Bold (600)</option>
-                      <option value="700">Bold (700)</option>
-                      <option value="800">Extra Bold (800)</option>
-                      <option value="900">Black (900)</option>
-                    </select>
-                  </div>
-
-                  <button type="button" className="btn-outline" onClick={resetAllConfigurations} style={{ padding: '8px', width: '100%', marginTop: '4px', fontSize: '13px' }}>
-                    Khôi phục mặc định
-                  </button>
-                </div>
-
-                <div className="sub-section-divider"></div>
-
-                <div className="sub-section">
-                  <div className="sub-section-header">🖨️ Khổ giấy & Thiết lập in</div>
-                  <div className="grid2">
-                    <div className="form-group">
-                      <label className="form-label">Phạm vi in ấn</label>
-                      <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
-                        <option value="current">Chỉ in phiếu đang chọn</option>
-                        <option value="all">In tất cả nhân viên</option>
-                        <option value="selected">In các nhân viên được chọn</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Chọn khổ giấy</label>
-                      <select 
-                        className="form-control" 
-                        value={paperSize} 
-                        onChange={e => {
-                          const val = e.target.value as 'a4' | 'k80';
-                          setPaperSize(val);
-                          if (val === 'k80') {
-                            setActiveTemplate('k80');
-                          } else {
-                            setActiveTemplate('standard');
-                          }
-                        }}
-                      >
-                        <option value="a4">Khổ giấy chuẩn A4 / A5</option>
-                        <option value="k80">Khổ giấy in nhiệt K80 (80mm)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {(paperSize === 'k80' || activeTemplate === 'k80') && (
-                    <div style={{ marginTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.85rem' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
-                        ⚙️ TÙY CHỌN IN NHIỆT (K80)
-                      </span>
-                      <div className="checkbox-grid" style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.splitEachSlip} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, splitEachSlip: e.target.checked }))} 
-                          />
-                          <span>Tách từng phiếu khi in hàng loạt</span>
-                        </label>
-                        
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.compactCut} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, compactCut: e.target.checked }))} 
-                          />
-                          <span>Cắt gọn cuối phiếu (Co theo nội dung)</span>
-                        </label>
-
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.hideSignature} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideSignature: e.target.checked }))} 
-                          />
-                          <span>Ẩn phần ký tên xác nhận</span>
-                        </label>
-
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.hideEmptyNotes} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideEmptyNotes: e.target.checked }))} 
-                          />
-                          <span>Ẩn ghi chú rỗng</span>
-                        </label>
-
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.hideEmptyRows} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideEmptyRows: e.target.checked }))} 
-                          />
-                          <span>Ẩn các dòng không có số liệu phát sinh</span>
-                        </label>
-
-                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={thermalOptions.showCutLine} 
-                            onChange={e => setThermalOptions((prev: any) => ({ ...prev, showCutLine: e.target.checked }))} 
-                          />
-                          <span>In đường cắt răng cưa (---)</span>
-                        </label>
-                      </div>
-
-                      <div className="form-group" style={{ marginTop: '8px' }}>
-                        <label className="form-label">Khoảng cách cuối phiếu</label>
-                        <select 
-                          className="form-control" 
-                          value={thermalOptions.bottomFeedMm} 
-                          onChange={e => setThermalOptions((prev: any) => ({ ...prev, bottomFeedMm: Number(e.target.value) }))}
-                        >
-                          <option value="0">0mm</option>
-                          <option value="4">4mm</option>
-                          <option value="6">6mm (Mặc định)</option>
-                          <option value="8">8mm</option>
-                          <option value="12">12mm</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, marginTop: '8px' }}>Cài đặt này sẽ được áp dụng trực tiếp khi bạn bấm nút In Phiếu.</p>
-                </div>
-              </>
-            ))}
-            {/* Section 9: Validation Messages */}
-            {(!isMobileScreen || mobileActiveTab === 'settings') && warningsList.length > 0 && renderAccordionSection('warnings', `Cảnh báo dữ liệu (${warningsList.length})`, '⚠️', (
-              <div className="warnings-container-scroll" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {employees.map(emp => {
-                  const msgs = validationMap[emp.id] || [];
-                  if (msgs.length === 0) return null;
-                  return (
-                    <div key={emp.id} style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.15)', padding: '6px 10px', borderRadius: '6px' }}>
-                      <strong style={{ color: 'white', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
-                      {msgs.map((m, i) => (
-                        <div key={i} style={{ color: m.type === 'error' ? '#ff5c7a' : '#ffc107', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <span>•</span>
-                          <span>{m.message}</span>
-                        </div>
-                      ))}
+                      )}
                     </div>
                   );
                 })}
-              </div>
-            ))}
 
+                {employees.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '13px' }}>
+                    Chưa có nhân viên nào. Bấm <strong>"Nhập Excel"</strong> hoặc <strong>"+ Thêm NV"</strong> để bắt đầu.
+                  </div>
+                )}
+              </div>
+
+              {/* Deductions Collapsible Section */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.1)' }}>
+                <div 
+                  onClick={() => setIsDeductionsExpanded(!isDeductionsExpanded)}
+                  style={{ 
+                    padding: '10px 16px', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>💸 Khoản Khấu Trừ Chung ({deductions.length})</span>
+                    {totalDeduct > 0 && (
+                      <span style={{ fontSize: '11px', color: '#f87171', fontWeight: 600 }}>-{formatMoney(totalDeduct)}</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      type="button" 
+                      className="btn-outline" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        addDeduction(); 
+                        setIsDeductionsExpanded(true); 
+                      }} 
+                      style={{ height: '26px', padding: '0 8px', fontSize: '11px' }}
+                    >
+                      <Plus size={11} />
+                      <span>Thêm</span>
+                    </button>
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>{isDeductionsExpanded ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {isDeductionsExpanded && (
+                  <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {deductions.map(d => (
+                      <div key={d.id} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input 
+                          type="text" 
+                          className="form-control input-compact" 
+                          placeholder="BHXH, Đồng phục, Phạt..." 
+                          value={d.label} 
+                          onChange={(e) => updateDeduction(d.id, 'label', e.target.value)} 
+                          style={{ flex: 1, height: '30px', fontSize: '12px' }}
+                        />
+                        <div style={{ width: '120px' }}>
+                          <MoneyInput
+                            className="form-control input-compact"
+                            value={d.amount}
+                            onChange={(val) => updateDeduction(d.id, 'amount', val)}
+                            formatMoney={formatMoney}
+                          />
+                        </div>
+                        <button 
+                          type="button" 
+                          className="btn-ghost" 
+                          style={{ color: '#f87171', padding: '4px' }} 
+                          onClick={() => deleteDeduction(d.id)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {deductions.length === 0 && (
+                      <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', padding: '4px' }}>
+                        Không có khoản khấu trừ nào.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Data Warning Footer */}
+              {warningsList.length > 0 && (
+                <div 
+                  onClick={() => {
+                    setConfigDrawerTab('warnings');
+                    setIsConfigDrawerOpen(true);
+                  }}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: 'rgba(239, 68, 68, 0.12)', 
+                    borderTop: '1px solid rgba(239, 68, 68, 0.25)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    cursor: 'pointer' 
+                  }}
+                >
+                  <span style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600 }}>
+                    ⚠️ {warningsList.length} nhân viên cần kiểm tra lại dữ liệu
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#60a5fa', fontWeight: 600 }}>Xem ›</span>
+                </div>
+              )}
+
+              {/* Saved Presets Collapsible */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
+                <div 
+                  onClick={() => setIsPresetsExpanded(!isPresetsExpanded)}
+                  style={{ 
+                    padding: '8px 14px', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#93c5fd' }}>
+                      🖨️ Mẫu Cấu Hình In Đã Lưu ({customPresets.length})
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>{isPresetsExpanded ? '▲' : '▼'}</span>
+                </div>
+
+                {isPresetsExpanded && (
+                  <div style={{ padding: '8px 14px 12px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                      <button type="button" className="btn-outline small-btn" onClick={resetAllConfigurations} style={{ fontSize: '10px', padding: '2px 8px' }}>
+                        Khôi phục mặc định
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '100px', overflowY: 'auto' }}>
+                      {customPresets.map(preset => (
+                        <div key={preset.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '4px 8px' }}>
+                          <span style={{ cursor: 'pointer', flexGrow: 1, fontSize: '11px', color: 'white', fontWeight: 500 }} onClick={() => applyCustomPreset(preset)} title="Click để áp dụng mẫu">
+                            📄 {preset.name}
+                          </span>
+                          <button type="button" className="btn-danger small-btn" style={{ padding: '1px 5px', fontSize: '9px' }} onClick={() => deleteCustomPreset(preset.id)}>
+                            Xóa
+                          </button>
+                        </div>
+                      ))}
+                      {customPresets.length === 0 && (
+                        <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', padding: '2px' }}>
+                          Chưa có mẫu cấu hình in riêng.
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" className="primary" onClick={saveCurrentAsPreset} style={{ width: '100%', height: '30px', fontSize: '11px', marginTop: '4px' }}>
+                      Lưu cấu hình hiện tại thành mẫu
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -3747,46 +3739,208 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           <div className="preview-pane">
             
             {/* Preview Tab Control Panel */}
-            <div className="preview-header-panel">
-              <div className="preview-views-toggle">
-                <button 
-                  type="button"
-                  className={`view-toggle-btn ${activeView === 'receipt' ? 'active' : ''}`} 
-                  onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
-                >
-                  📄 Phiếu Lương Nhân Viên
-                </button>
-                <button 
-                  type="button"
-                  className={`view-toggle-btn ${activeView === 'summary' ? 'active' : ''}`} 
-                  onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
-                >
-                  📊 Bảng Tổng Hợp Lương
-                </button>
+            
+            {/* Unified Sleek Preview Toolbar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              padding: '8px 12px',
+              background: 'rgba(15, 23, 42, 0.75)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '12px',
+              marginBottom: '10px',
+              backdropFilter: 'blur(12px)',
+              flexWrap: 'wrap'
+            }}>
+              {/* Left group: View Switcher and Template Pill Switcher */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.35)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button 
+                    type="button"
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: activeView === 'receipt' ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'transparent',
+                      color: activeView === 'receipt' ? '#fff' : '#94a3b8',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
+                  >
+                    📄 Phiếu Lương
+                  </button>
+                  <button 
+                    type="button"
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: activeView === 'summary' ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'transparent',
+                      color: activeView === 'summary' ? '#fff' : '#94a3b8',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
+                  >
+                    📊 Bảng Tổng Hợp
+                  </button>
+                </div>
+
+                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {(['standard', 'modern', 'k80'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: activeTemplate === t ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
+                        color: activeTemplate === t ? '#60a5fa' : '#94a3b8',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onClick={() => setActiveTemplate(t)}
+                    >
+                      {t === 'standard' ? 'Chuẩn' : t === 'modern' ? 'Modern' : 'K80 Nhiệt'}
+                    </button>
+                  ))}
+                </div>
+
+                {activeView === 'receipt' && (
+                  <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {([
+                      { id: 'single', label: '1 Phiếu' },
+                      { id: 'list', label: 'Danh sách' },
+                      { id: 'thumbnail', label: 'Lưới' }
+                    ] as const).map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        style={{
+                          padding: '5px 9px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          borderRadius: '6px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: previewMode === m.id ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
+                          color: previewMode === m.id ? 'var(--primary)' : '#94a3b8'
+                        }}
+                        onClick={() => setPreviewMode(m.id)}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="preview-templates-toggle">
-                <button 
+              {/* Center group: Employee navigator widget (when single slip) */}
+              {activeView === 'receipt' && previewMode === 'single' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.3)', padding: '2px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button type="button" className="btn-ghost" onClick={handlePrevEmployee} disabled={currentEmployeeIndex === 0} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ChevronLeft size={15} />
+                  </button>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'white', minWidth: '64px', textAlign: 'center' }}>
+                    {employees.length > 0 ? (currentEmployeeIndex + 1) + ' / ' + employees.length : '0 / 0'}
+                  </span>
+                  <button type="button" className="btn-ghost" onClick={handleNextEmployee} disabled={currentEmployeeIndex === employees.length - 1} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              )}
+
+              {/* Right group: Quick actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <button
                   type="button"
-                  className={`template-toggle-btn ${activeTemplate === 'standard' ? 'active' : ''}`} 
-                  onClick={() => setActiveTemplate('standard')}
+                  className="pipeline-quick-btn"
+                  onClick={handlePipeToTransferTool}
+                  title="Đẩy danh sách nhân viên và số tiền thực nhận sang công cụ Lập lệnh chuyển khoản MyVIB / VCB"
                 >
-                  Standard
+                  <span>⚡ Lập lệnh CK</span>
                 </button>
-                <button 
+
+                <select 
+                  className="form-control select-compact" 
+                  style={{ width: '85px', height: '32px', padding: '0 6px', fontSize: '11px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} 
+                  value={zoomLevel} 
+                  onChange={e => setZoomLevel(e.target.value)}
+                >
+                  <option value="fit">Vừa khít (Auto)</option>
+                  <option value="75">75%</option>
+                  <option value="100">100%</option>
+                  <option value="125">125%</option>
+                </select>
+
+                <button
                   type="button"
-                  className={`template-toggle-btn ${activeTemplate === 'modern' ? 'active' : ''}`} 
-                  onClick={() => setActiveTemplate('modern')}
+                  onClick={() => setIsConfigDrawerOpen(true)}
+                  className="btn-outline"
+                  style={{
+                    height: '32px',
+                    padding: '0 10px',
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}
+                  title="Cấu hình tham số lương & tùy chỉnh in ấn"
                 >
-                  Modern
+                  <span>⚙️ Cấu hình</span>
                 </button>
+
                 <button 
-                  type="button"
-                  className={`template-toggle-btn ${activeTemplate === 'k80' ? 'active' : ''}`} 
-                  onClick={() => setActiveTemplate('k80')}
+                  type="button" 
+                  className="btn-ghost" 
+                  onClick={() => setIsFullscreenPreview(!isFullscreenPreview)} 
+                  title="Bật/Tắt toàn màn hình preview"
+                  style={{ width: '30px', height: '30px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
                 >
-                  K80
+                  {isFullscreenPreview ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>
+
+                <button type="button" className="primary" onClick={() => handleDownloadPng()} style={{ height: '32px', padding: '0 10px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Download size={13} />
+                  <span>Ảnh</span>
+                </button>
+
+                {activeView === 'receipt' && (
+                  <button type="button" className="btn-outline" onClick={handleDownloadZip} disabled={isExporting} style={{ height: '32px', padding: '0 8px', fontSize: '12px' }} title="Tải toàn bộ phiếu lương dạng file nén ZIP">
+                    <Archive size={13} />
+                    <span>ZIP</span>
+                  </button>
+                )}
+                
+                <button type="button" className="btn-outline" onClick={() => handleDownloadPdf()} style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}>
+                  <FileText size={13} />
+                  <span>PDF</span>
+                </button>
+
+                <button type="button" className="btn-outline" onClick={handlePrint} style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}>
+                  <Printer size={13} />
+                  <span>In</span>
+                </button>
+
+                {(layoutMode === 'wide' || layoutMode === 'compact') && (
+                  <button 
+                    type="button" 
+                    className="btn-ghost" 
+                    onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)} 
+                    title="Ẩn hoặc hiện cột danh sách nhân viên bên trái"
+                    style={{ height: '32px', padding: '0 8px', fontSize: '12px', color: '#94a3b8' }}
+                  >
+                    {isLeftPanelCollapsed ? '📋 Hiện DS' : '‹ Ẩn DS'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -3812,179 +3966,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               </div>
             )}
 
-            {/* Quick Preview Toolbar: zoom, template, full-screen, print actions */}
-            <div className="preview-toolbar-bar">
-              <div className="toolbar-left-group">
-                {(layoutMode === 'wide' || layoutMode === 'compact') ? (
-                  <>
-                    <div className="zoom-controller-box">
-                      <span style={{ fontSize: '12px', fontWeight: 600 }}>Tỷ lệ:</span>
-                      <select 
-                        className="form-control select-compact" 
-                        style={{ width: '100px', height: '32px', padding: '0 8px', fontSize: '12px' }} 
-                        value={zoomLevel} 
-                        onChange={e => setZoomLevel(e.target.value)}
-                      >
-                        <option value="fit">Vừa khít</option>
-                        <option value="50">50%</option>
-                        <option value="75">75%</option>
-                        <option value="100">100%</option>
-                        <option value="125">125%</option>
-                        <option value="150">150%</option>
-                        <option value="200">200%</option>
-                      </select>
-                    </div>
-
-                    {activeView === 'receipt' && (
-                      <div className="preview-modes-toggle">
-                        <button type="button" className={`mode-toggle-btn ${previewMode === 'single' ? 'active' : ''}`} onClick={() => setPreviewMode('single')} title="Xem một phiếu">Phiếu</button>
-                        <button type="button" className={`mode-toggle-btn ${previewMode === 'list' ? 'active' : ''}`} onClick={() => setPreviewMode('list')} title="Xem danh sách liên tục">Liên tiếp</button>
-                        <button type="button" className={`mode-toggle-btn ${previewMode === 'thumbnail' ? 'active' : ''}`} onClick={() => setPreviewMode('thumbnail')} title="Xem dạng lưới nhỏ">Lưới</button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ position: 'relative' }}>
-                    <button 
-                      type="button" 
-                      className="btn-outline" 
-                      onClick={() => setShowToolbarOptions(!showToolbarOptions)}
-                      style={{ height: '32px', padding: '0 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', color: 'white', borderRadius: '6px', cursor: 'pointer' }}
-                    >
-                      ⚙️ Tùy chọn ▾
-                    </button>
-                    {showToolbarOptions && (
-                      <>
-                        <div className="dropdown-click-outside-backdrop" onClick={() => setShowToolbarOptions(false)} style={{ zIndex: 1000, position: 'fixed', inset: 0 }} />
-                        <div className="toolbar-options-dropdown" style={{ position: 'absolute', top: '36px', left: 0, background: 'linear-gradient(145deg, #0d1e44, #060e22)', border: '1px solid rgba(77,134,224,0.4)', borderRadius: '8px', padding: '12px', zIndex: 1001, display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '220px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
-                          <div className="zoom-controller-box" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#b6c7e8' }}>TỶ LỆ XEM:</span>
-                            <select 
-                              className="form-control select-compact" 
-                              style={{ width: '100%', height: '30px', padding: '0 8px', fontSize: '12px', background: 'rgba(5, 17, 42, 0.75)', border: '1px solid rgba(91,134,211,0.3)', color: 'white', borderRadius: '6px' }} 
-                              value={zoomLevel} 
-                              onChange={e => { setZoomLevel(e.target.value); setShowToolbarOptions(false); }}
-                            >
-                              <option value="fit">Vừa khít</option>
-                              <option value="50">50%</option>
-                              <option value="75">75%</option>
-                              <option value="100">100%</option>
-                              <option value="125">125%</option>
-                              <option value="150">150%</option>
-                              <option value="200">200%</option>
-                            </select>
-                          </div>
-                          
-                          {activeView === 'receipt' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#b6c7e8' }}>CHẾ ĐỘ HIỂN THỊ:</span>
-                              <div className="preview-modes-toggle" style={{ width: '100%', display: 'flex', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', borderRadius: '6px', padding: '2px' }}>
-                                <button type="button" className={`mode-toggle-btn ${previewMode === 'single' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('single'); setShowToolbarOptions(false); }}>Phiếu</button>
-                                <button type="button" className={`mode-toggle-btn ${previewMode === 'list' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('list'); setShowToolbarOptions(false); }}>Liên tiếp</button>
-                                <button type="button" className={`mode-toggle-btn ${previewMode === 'thumbnail' ? 'active' : ''}`} style={{ flexGrow: 1, padding: '4px 6px', fontSize: '11px' }} onClick={() => { setPreviewMode('thumbnail'); setShowToolbarOptions(false); }}>Lưới</button>
-                              </div>
-                            </div>
-                          )}
-
-                          {layoutMode === 'narrow' && (
-                            <button 
-                              type="button" 
-                              className="btn-outline" 
-                              onClick={() => { setIsLeftPanelCollapsed(!isLeftPanelCollapsed); setShowToolbarOptions(false); }}
-                              style={{ height: '30px', fontSize: '12px', width: '100%', padding: '0 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,132,206,0.22)', color: 'white', borderRadius: '6px', cursor: 'pointer' }}
-                            >
-                              {isLeftPanelCollapsed ? '⚙️ Hiện Cấu hình' : '⚙️ Ẩn Cấu hình'}
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <button 
-                  type="button" 
-                  className="btn-ghost" 
-                  onClick={() => setIsFullscreenPreview(!isFullscreenPreview)} 
-                  title="Bật/Tắt toàn màn hình preview"
-                  style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  {isFullscreenPreview ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                </button>
-                
-                {(layoutMode === 'wide' || layoutMode === 'compact') && (
-                  <button 
-                    type="button" 
-                    className="btn-ghost" 
-                    onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)} 
-                    title="Ẩn/Hiện cột cấu hình bên trái"
-                    style={{ padding: '0 8px', height: '32px', fontSize: '12px' }}
-                  >
-                    {isLeftPanelCollapsed ? ' Hiện cấu hình ›' : '‹ Ẩn cấu hình'}
-                  </button>
-                )}
-
-                {layoutMode === 'narrow' && isLeftPanelCollapsed && (
-                  <button 
-                    type="button" 
-                    className="btn-ghost" 
-                    onClick={() => setIsLeftPanelCollapsed(false)} 
-                    title="Hiện cột cấu hình"
-                    style={{ padding: '0 8px', height: '32px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(99,132,206,0.15)', borderRadius: '6px' }}
-                  >
-                    ⚙️ Cấu hình
-                  </button>
-                )}
-              </div>
-
-              <div className="toolbar-right-group">
-                {activeView === 'receipt' && previewMode === 'single' && (
-                  <div className="employee-navigator-widget" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button type="button" className="btn-ghost" onClick={handlePrevEmployee} disabled={currentEmployeeIndex === 0} style={{ width: '32px', height: '32px' }}>
-                      <ChevronLeft size={16} />
-                    </button>
-                    <span 
-                      style={{ fontSize: '13px', fontWeight: 600, color: 'white', minWidth: '70px', textAlign: 'center', cursor: isMobileScreen ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
-                      onClick={() => { if (isMobileScreen) setShowMobileEmpList(true); }}
-                      title={isMobileScreen ? "Click để chọn nhanh nhân viên" : undefined}
-                    >
-                      {employees.length > 0 ? `${currentEmployeeIndex + 1} / ${employees.length}` : '0 / 0'}
-                      {isMobileScreen && <span style={{ fontSize: '9px', color: 'var(--cyan)' }}>▼</span>}
-                    </span>
-                    <button type="button" className="btn-ghost" onClick={handleNextEmployee} disabled={currentEmployeeIndex === employees.length - 1} style={{ width: '32px', height: '32px' }}>
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                )}
-
-                <div className="action-buttons-box" style={{ display: 'flex', gap: '6px' }}>
-                  <button type="button" className="primary" onClick={() => handleDownloadPng()} style={{ height: '32px', padding: '0 12px', fontSize: '12px' }}>
-                    <Download size={13} />
-                    Xuất Ảnh
-                  </button>
-                  
-                  {activeView === 'receipt' && previewMode === 'single' && (
-                    <button type="button" className="btn-outline" onClick={() => handleDownloadPdf()} style={{ height: '32px', padding: '0 12px', fontSize: '12px' }}>
-                      <FileText size={13} />
-                      PDF
-                    </button>
-                  )}
-
-                  {activeView === 'receipt' && previewMode !== 'single' && (
-                    <button type="button" className="btn-outline" onClick={handleDownloadZip} disabled={isExporting} style={{ height: '32px', padding: '0 12px', fontSize: '12px' }}>
-                      <Archive size={13} />
-                      Tải ZIP
-                    </button>
-                  )}
-                  
-                  <button type="button" className="btn-outline" onClick={handlePrint} style={{ height: '32px', padding: '0 12px', fontSize: '12px' }}>
-                    <Printer size={13} />
-                    In Phiếu
-                  </button>
-                </div>
-              </div>
-            </div>
-
+            
             {/* Exporting progress overlay indicator */}
             {isExporting && (
               <div className="export-progress-overlay">
@@ -4059,7 +4041,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                                 checked={selectedEmployeeIds.has(emp.id)} 
                                 onChange={() => handleToggleEmployeeSelection(emp.id)} 
                               />
-                              <span>Phiếu #${index + 1} - {emp.name}</span>
+                              <span>Phiếu #{index + 1} - {emp.name}</span>
                             </div>
                             {validationMap[emp.id] && (
                               <span className="warning-pill-indicator">
@@ -4231,6 +4213,396 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           </div>
         </>
       )}
+
+      {/* Slide-over Drawer for Deep Configuration & Customization */}
+      <SlideOverDrawer
+        isOpen={isConfigDrawerOpen}
+        onClose={() => setIsConfigDrawerOpen(false)}
+        title="Cấu hình & Tùy chỉnh Bảng Lương"
+        subtitle="Thiết lập tham số lương, khấu trừ, mẫu in K80/A4 và đồng bộ Google Sheets"
+        badgeText={salaryMode === 'restaurant' ? 'F&B Nhà Hàng' : salaryMode === 'monthly' ? 'Lương Tháng' : 'Lương Giờ'}
+        width="540px"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+              Nhấn <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>ESC</kbd> để đóng
+            </span>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setIsConfigDrawerOpen(false)}
+              style={{ height: '36px', padding: '0 18px', fontSize: '13px' }}
+            >
+              Áp dụng & Đóng
+            </button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', gap: '6px', background: 'rgba(255, 255, 255, 0.04)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '8px' }}>
+          <button
+            type="button"
+            className={`tab-btn ${configDrawerTab === 'salary' ? 'active' : ''}`}
+            onClick={() => setConfigDrawerTab('salary')}
+            style={{
+              flex: 1,
+              padding: '8px 6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              border: 0,
+              borderRadius: '6px',
+              background: configDrawerTab === 'salary' ? 'var(--blue)' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>⚙️</span>
+            <span>Lương & Công</span>
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${configDrawerTab === 'print' ? 'active' : ''}`}
+            onClick={() => setConfigDrawerTab('print')}
+            style={{
+              flex: 1,
+              padding: '8px 6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              border: 0,
+              borderRadius: '6px',
+              background: configDrawerTab === 'print' ? 'var(--blue)' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>🎨</span>
+            <span>Mẫu & In ấn</span>
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${configDrawerTab === 'sync' ? 'active' : ''}`}
+            onClick={() => setConfigDrawerTab('sync')}
+            style={{
+              flex: 1,
+              padding: '8px 6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              border: 0,
+              borderRadius: '6px',
+              background: configDrawerTab === 'sync' ? 'var(--blue)' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>☁️</span>
+            <span>Cloud & Lưu</span>
+          </button>
+          {warningsList.length > 0 && (
+            <button
+              type="button"
+              className={`tab-btn ${configDrawerTab === 'warnings' ? 'active' : ''}`}
+              onClick={() => setConfigDrawerTab('warnings')}
+              style={{
+                flex: 1,
+                padding: '8px 6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: 0,
+                borderRadius: '6px',
+                background: configDrawerTab === 'warnings' ? '#dc2626' : 'transparent',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>⚠️</span>
+              <span>Lỗi ({warningsList.length})</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tab 1: Lương & Công */}
+        {configDrawerTab === 'salary' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Chế độ tính lương</span>
+                <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 600 }}>
+                  {salaryMode === 'restaurant' ? 'Chuẩn F&B Nhà Hàng' : salaryMode === 'monthly' ? 'Lương Tháng' : 'Theo Giờ'}
+                </span>
+              </label>
+              <div className="segmented-control" style={{ width: '100%' }}>
+                <button 
+                  type="button" 
+                  className={`segmented-item ${salaryMode === 'restaurant' ? 'active' : ''}`}
+                  onClick={() => setSalaryMode('restaurant')}
+                  style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
+                >
+                  🍽️ F&B Nhà Hàng
+                </button>
+                <button 
+                  type="button" 
+                  className={`segmented-item ${salaryMode === 'monthly' ? 'active' : ''}`}
+                  onClick={() => setSalaryMode('monthly')}
+                  style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
+                >
+                  📅 Theo Tháng
+                </button>
+                <button 
+                  type="button" 
+                  className={`segmented-item ${salaryMode === 'hourly' ? 'active' : ''}`}
+                  onClick={() => setSalaryMode('hourly')}
+                  style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
+                >
+                  ⏰ Theo Giờ
+                </button>
+              </div>
+            </div>
+
+            <div className="grid2">
+              <div className="form-group">
+                <label className="form-label">Tháng thanh toán</label>
+                <input type="month" className="form-control" value={payMonth} onChange={(e) => setPayMonth(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Ngày lập chứng từ</label>
+                <input type="date" className="form-control" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid2">
+              <div className="form-group" style={{ display: isHourly ? 'none' : 'block' }}>
+                <label className="form-label">Số ngày công định mức</label>
+                <input type="number" className="form-control" value={standardDays} onChange={(e) => setStandardDays(Number(e.target.value) || 26)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Làm tròn số tiền</label>
+                <select className="form-control" value={roundMode} onChange={(e) => setRoundMode(e.target.value as any)}>
+                  <option value="none">Không làm tròn</option>
+                  <option value="hundred">Làm tròn hàng trăm (100đ)</option>
+                  <option value="thousand">Làm tròn hàng nghìn (1.000đ)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid2">
+              <div className="form-group">
+                <label className="form-label">Chức vụ mặc định</label>
+                <input type="text" className="form-control" value={defaultPosition} onChange={(e) => setDefaultPosition(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Bộ phận mặc định</label>
+                <input type="text" className="form-control" value={defaultDept} onChange={(e) => setDefaultDept(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Khấu trừ tạm ứng chung (đ)</label>
+              <MoneyInput 
+                className="form-control" 
+                value={advance} 
+                onChange={(val) => setAdvance(val)}
+                formatMoney={formatMoney}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Mẫu in & Bố cục */}
+        {configDrawerTab === 'print' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label">Chọn Preset nhanh</label>
+              <div className="preset-toggle-container">
+                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('full')}>Đầy đủ</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('compact')}>Rút gọn</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('internal')}>Nội bộ</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('k80')}>In nhiệt</button>
+              </div>
+            </div>
+
+            <div className="grid2">
+              <div className="form-group">
+                <label className="form-label">Chọn khổ giấy</label>
+                <select 
+                  className="form-control" 
+                  value={paperSize} 
+                  onChange={e => {
+                    const val = e.target.value as 'a4' | 'k80';
+                    setPaperSize(val);
+                    if (val === 'k80') setActiveTemplate('k80');
+                    else setActiveTemplate('standard');
+                  }}
+                >
+                  <option value="a4">Khổ chuẩn A4 / A5</option>
+                  <option value="k80">Khổ in nhiệt K80 (80mm)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phạm vi in ấn</label>
+                <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
+                  <option value="current">Chỉ phiếu đang xem</option>
+                  <option value="all">In tất cả nhân viên</option>
+                  <option value="selected">In nhân viên được chọn</option>
+                </select>
+              </div>
+            </div>
+
+                        <div className="form-group">
+              <label className="form-label">Phong cách chữ nhanh</label>
+              <div className="preset-toggle-container" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('modern')} style={{ fontSize: '11px', padding: '3px 8px' }}>Hiện đại</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('admin')} style={{ fontSize: '11px', padding: '3px 8px' }}>Hành chính</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('minimalist')} style={{ fontSize: '11px', padding: '3px 8px' }}>Tối giản</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('luxury')} style={{ fontSize: '11px', padding: '3px 8px' }}>Trang trọng</button>
+                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('k80')} style={{ fontSize: '11px', padding: '3px 8px' }}>Nhiệt K80</button>
+              </div>
+            </div>
+
+<div className="form-group">
+              <label className="form-label">Font chữ tiếng Việt</label>
+              <select className="form-control" value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
+                {AVAILABLE_FONTS.map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
+                HIỂN THỊ PHẦN TỬ PHIẾU
+              </span>
+              <div className="checkbox-grid">
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility((prev: any) => ({ ...prev, showLogo: e.target.checked }))} />
+                  <span>Logo đơn vị</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility((prev: any) => ({ ...prev, showTitle: e.target.checked }))} />
+                  <span>Tiêu đề phiếu</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility((prev: any) => ({ ...prev, showBaseSalary: e.target.checked }))} />
+                  <span>Mức lương cơ bản</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility((prev: any) => ({ ...prev, showTime: e.target.checked }))} />
+                  <span>Số công/giờ làm</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility((prev: any) => ({ ...prev, showSignatures: e.target.checked }))} />
+                  <span>Chữ ký xác nhận</span>
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility((prev: any) => ({ ...prev, showNotes: e.target.checked }))} />
+                  <span>Ghi chú bằng chữ</span>
+                </label>
+              </div>
+            </div>
+
+            {(paperSize === 'k80' || activeTemplate === 'k80') && (
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
+                  ⚙️ TÙY CHỌN MÁY IN NHIỆT K80
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={thermalOptions.splitEachSlip} onChange={e => setThermalOptions((prev: any) => ({ ...prev, splitEachSlip: e.target.checked }))} />
+                    <span>Tách từng phiếu khi in hàng loạt</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={thermalOptions.compactCut} onChange={e => setThermalOptions((prev: any) => ({ ...prev, compactCut: e.target.checked }))} />
+                    <span>Cắt gọn cuối phiếu (co theo nội dung)</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={thermalOptions.hideSignature} onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideSignature: e.target.checked }))} />
+                    <span>Ẩn phần ký tên trên phiếu nhiệt</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Google Sheets Cloud */}
+        {configDrawerTab === 'sync' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="sync-status">
+              <span className={`sync-dot ${syncStatus}`}></span>
+              <span>Google Sheets Sync: </span>
+              <strong>{syncStatus === 'online' ? 'Sẵn sàng' : syncStatus === 'loading' ? 'Đang đồng bộ...' : 'Chưa kết nối'}</strong>
+            </div>
+
+            <div className="bulk-import-row">
+              <button type="button" className="primary" style={{ flexGrow: 1, height: '40px', fontSize: '13px' }} onClick={savePayrollToGAS} disabled={syncStatus === 'loading'}>
+                <Save size={14} />
+                Lưu Bảng Lương Lên Cloud
+              </button>
+              <button type="button" className="btn-ghost" onClick={fetchHistoryMonths} disabled={syncStatus === 'loading'} title="Tải lại lịch sử">
+                <RefreshCw size={14} className={syncStatus === 'loading' ? 'spinner' : ''} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginTop: '6px' }}>Lịch sử tháng lương đã lưu:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+              {historyMonths.map(h => (
+                <div key={h.month} onClick={() => loadHistoryMonth(h.month)} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, color: 'white' }}>Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--muted)', display: 'block' }}>Ghi bởi: {h.operator} - {h.updatedTime}</span>
+                  </div>
+                  <button 
+                    type="button"
+                    className="btn-danger small-btn" 
+                    style={{ padding: '3px 8px', fontSize: '10px' }} 
+                    onClick={(e) => { e.stopPropagation(); deleteHistoryMonth(h.month); }}
+                  >
+                    Xóa
+                  </button>
+                </div>
+              ))}
+              {historyMonths.length === 0 && (
+                <div style={{ padding: '1rem', textAlign: 'center', fontSize: '12px', color: 'var(--muted)' }}>Chưa có dữ liệu nào lưu trữ đám mây.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Cảnh báo */}
+        {configDrawerTab === 'warnings' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+            {employees.map(emp => {
+              const msgs = validationMap[emp.id] || [];
+              if (msgs.length === 0) return null;
+              return (
+                <div key={emp.id} style={{ fontSize: '0.8rem', background: 'rgba(220, 38, 38, 0.1)', border: '1px solid rgba(220, 38, 38, 0.3)', padding: '8px 12px', borderRadius: '6px' }}>
+                  <strong style={{ color: 'white', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
+                  {msgs.map((m, i) => (
+                    <div key={i} style={{ color: m.type === 'error' ? '#ff5c7a' : '#ffc107', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                      <span>•</span>
+                      <span>{m.message}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SlideOverDrawer>
 
     </div>
   );
