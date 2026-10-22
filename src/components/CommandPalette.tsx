@@ -113,7 +113,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <QrCode size={16} />,
       keywords: 'vietqr qr code chia tien bill thanh toan ngan hang',
       onSelect: () => {
-        onNavigateTab('qr');
+        onNavigateTab('vietqr');
         onClose();
       }
     },
@@ -151,7 +151,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <Sparkles size={16} />,
       keywords: 'lien thong chuyen cham cong sang tinh luong pipe attendance payroll',
       onSelect: () => {
-        onTriggerAction?.('act_pipe_attendance_payroll');
+        onTriggerAction?.('pipe_attendance_payroll');
         onClose();
       }
     },
@@ -163,7 +163,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <FileSpreadsheet size={16} />,
       keywords: 'lien thong chuyen luong sang chuyen khoan myvib vcb transfer',
       onSelect: () => {
-        onTriggerAction?.('act_pipe_payroll_transfer');
+        onTriggerAction?.('pipe_payroll_transfer');
         onClose();
       }
     },

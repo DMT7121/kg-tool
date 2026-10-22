@@ -70,28 +70,29 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
           width: '100%',
           maxWidth: width,
           height: '100%',
-          background: 'linear-gradient(180deg, #091736 0%, #050c1e 100%)',
-          borderLeft: '1px solid rgba(77, 134, 224, 0.3)',
-          boxShadow: '-15px 0 50px rgba(0, 0, 0, 0.7)',
+          background: 'var(--bg-elevated)',
+          borderLeft: '1px solid var(--border-strong)',
+          boxShadow: 'var(--shadow-xl)',
           display: 'flex',
           flexDirection: 'column',
           animation: 'slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-          position: 'relative'
+          position: 'relative',
+          color: 'var(--text)'
         }}
       >
         {/* Drawer Header */}
         <div style={{
           padding: '18px 24px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: '16px',
-          background: 'rgba(255, 255, 255, 0.015)'
+          background: 'var(--surface-subtle)'
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
                 {title}
               </h2>
               {badgeText && (
@@ -144,8 +145,8 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
         {footer && (
           <div style={{
             padding: '16px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'rgba(0, 0, 0, 0.2)',
+            borderTop: '1px solid var(--border)',
+            background: 'var(--surface-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',

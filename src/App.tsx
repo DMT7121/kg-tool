@@ -134,6 +134,8 @@ function App() {
         else if (e.key === '3') { e.preventDefault(); setCurrentView('transfer'); }
         else if (e.key === '4') { e.preventDefault(); setCurrentView('vietqr'); }
         else if (e.key === '5') { e.preventDefault(); setCurrentView('tts'); }
+        else if (e.key === '6') { e.preventDefault(); setCurrentView('settings'); }
+        else if (e.key === '7') { e.preventDefault(); setCurrentView('hikvision'); }
       }
     };
     const handleNavigateTab = (e: Event) => {
@@ -1196,7 +1198,7 @@ function App() {
 
 
   return (
-    <div className={`dashboard-layout ${isMobile ? 'layout-mobile' : ''} ${!isMobile && sidebarCollapsed ? 'layout-collapsed' : ''}`}>
+    <div className={`dashboard-layout ${isMobile ? 'layout-mobile' : ''} ${!isMobile && sidebarCollapsed ? 'layout-collapsed' : ''} ${isExtensionMode ? 'is-extension-mode' : ''}`}>
       {/* Toast Notification badges */}
       <div className="toast-container">
         {toasts.map(t => (
@@ -1215,49 +1217,54 @@ function App() {
       <aside className={`sidebar ${isMobile ? 'mobile-drawer' : ''} ${isMobile && isMobileDrawerOpen ? 'drawer-open' : ''} ${!isMobile && sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="brand">
           <div className="logo"></div>
-          <span className="logo-text">KG_TOOL</span>
+          <span className="logo-text">KG_STUDIO</span>
         </div>
 
         <nav className="nav">
           <button 
             className={`nav-item ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
             onClick={() => { setCurrentView('attendance'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Chấm Công & Thiết Bị" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Chấm Công & Thiết Bị (Alt+1)" : "Phím tắt: Alt+1"}
           >
             <span className="ico"><FileText size={20} /></span>
             <span>Chấm Công & Thiết Bị</span>
+            <span className="nav-kbd">Alt+1</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'payroll' || currentView === 'transfer' ? 'active' : ''}`}
             onClick={() => { setCurrentView('payroll'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Lương & Chuyển Tiền" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Lương & Chuyển Tiền (Alt+2)" : "Phím tắt: Alt+2 / Alt+3"}
           >
             <span className="ico"><CreditCard size={20} /></span>
             <span>Lương & Chuyển Tiền</span>
+            <span className="nav-kbd">Alt+2</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'vietqr' ? 'active' : ''}`}
             onClick={() => { setCurrentView('vietqr'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "VietQR & Thu Ngân" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "VietQR & Thu Ngân (Alt+4)" : "Phím tắt: Alt+4"}
           >
             <span className="ico"><QrCode size={20} /></span>
             <span>VietQR & Thu Ngân</span>
+            <span className="nav-kbd">Alt+4</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'tts' ? 'active' : ''}`}
             onClick={() => { setCurrentView('tts'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Đọc TTS AI" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Đọc TTS AI (Alt+5)" : "Phím tắt: Alt+5"}
           >
             <span className="ico"><Volume2 size={20} /></span>
             <span>Đọc TTS AI</span>
+            <span className="nav-kbd">Alt+5</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => { setCurrentView('settings'); setIsMobileDrawerOpen(false); }}
-            title={(!isMobile && sidebarCollapsed) ? "Cấu Hình System" : undefined}
+            title={(!isMobile && sidebarCollapsed) ? "Cấu Hình System (Alt+6)" : "Phím tắt: Alt+6"}
           >
             <span className="ico"><Settings size={20} /></span>
             <span>Cấu Hình System</span>
+            <span className="nav-kbd">Alt+6</span>
           </button>
         </nav>
 
@@ -1272,7 +1279,7 @@ function App() {
         </div>
 
         <div className="foot">
-          <span>Phiên bản v1.2.0</span>
+          <span>Phiên bản v2.5.0</span>
           <span>Kings Grill</span>
         </div>
       </aside>
@@ -1287,16 +1294,63 @@ function App() {
         
         {/* Top Header Bar */}
         <div className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="hamb" onClick={toggleSidebar}>☰</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            <button className="hamb" onClick={toggleSidebar} title="Thu gọn / Mở rộng thanh điều hướng">☰</button>
             <div 
               className="topbar-command-trigger"
               onClick={() => setIsCommandPaletteOpen(true)}
               title="Mở Command Hub (Ctrl+K)"
             >
               <Search size={14} style={{ color: 'var(--cyan)' }} />
-              <span className="command-trigger-text">Tìm kiếm & Thao tác nhanh...</span>
+              <span className="command-trigger-text">Tìm lệnh & thao tác nhanh...</span>
               <kbd>Ctrl+K</kbd>
+            </div>
+
+            {/* 1-Click Operational Workflow Pipeline */}
+            <div className="topbar-quick-pipeline" aria-label="Quy trình vận hành nhanh">
+              <button
+                type="button"
+                className={`pipeline-step-pill ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
+                onClick={() => setCurrentView('attendance')}
+                title="Bước 1: Xử lý Chấm công & Máy chấm công (Alt+1)"
+              >
+                <span>1. Chấm công</span>
+              </button>
+              <span className="pipeline-arrow">›</span>
+              <button
+                type="button"
+                className={`pipeline-step-pill ${currentView === 'payroll' ? 'active' : ''}`}
+                onClick={() => setCurrentView('payroll')}
+                title="Bước 2: Tính lương & In phiếu K80/A4 (Alt+2)"
+              >
+                <span>2. Tính lương</span>
+              </button>
+              <span className="pipeline-arrow">›</span>
+              <button
+                type="button"
+                className={`pipeline-step-pill ${currentView === 'transfer' ? 'active' : ''}`}
+                onClick={() => setCurrentView('transfer')}
+                title="Bước 3: Xuất lệnh chuyển khoản lô MyVIB / VCB (Alt+3)"
+              >
+                <span>3. Lệnh CK</span>
+              </button>
+              <span className="pipeline-arrow" style={{ margin: '0 2px', opacity: 0.4 }}>|</span>
+              <button
+                type="button"
+                className={`pipeline-step-pill ${currentView === 'vietqr' ? 'active' : ''}`}
+                onClick={() => setCurrentView('vietqr')}
+                title="Thu ngân: Tạo mã VietQR & Chia bill POS (Alt+4)"
+              >
+                <span>⚡ VietQR</span>
+              </button>
+              <button
+                type="button"
+                className={`pipeline-step-pill ${currentView === 'tts' ? 'active' : ''}`}
+                onClick={() => setCurrentView('tts')}
+                title="Phát thanh: Đọc thông báo AI TTS (Alt+5)"
+              >
+                <span>🔊 TTS AI</span>
+              </button>
             </div>
           </div>
           
@@ -2057,7 +2111,7 @@ function App() {
                               onChange={(e) => { setNewSearchBankQuery(e.target.value); setShowNewBankDropdown(true); }}
                               onFocus={() => setShowNewBankDropdown(true)}
                               disabled={isBanksLoading}
-                              style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid rgba(91,134,211,.3)', background: 'rgba(5,17,42,.75)', color: 'white', padding: '0 14px' }}
+                              style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text)', padding: '0 14px' }}
                             />
                             
                             {showNewBankDropdown && (
@@ -2282,7 +2336,7 @@ function App() {
                             onChange={(e) => { setSearchBankQuery(e.target.value); setShowBankDropdown(true); }}
                             onFocus={() => setShowBankDropdown(true)}
                             disabled={isBanksLoading}
-                            style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid rgba(91,134,211,.3)', background: 'rgba(5,17,42,.75)', color: 'white', padding: '0 14px' }}
+                            style={{ width: '100%', height: '48px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text)', padding: '0 14px' }}
                           />
                           
                           {showBankDropdown && (
@@ -2380,11 +2434,22 @@ function App() {
                         <label>Số tiền chuyển khoản (VND)</label>
                         <input 
                           type="text" 
-                          placeholder="Ví dụ: 100.000"
+                          placeholder="Ví dụ: 100.000 (hoặc gõ 150 rồi bấm .000)"
                           value={amount ? formatVND(amount) : ''}
                           onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
                         />
                         <div className="amount-chips-row">
+                          {amount && amount.length > 0 && amount.length <= 6 && !amount.endsWith('000') && (
+                            <button
+                              type="button"
+                              className="amount-chip"
+                              style={{ borderColor: 'var(--green)', color: 'var(--green)', background: 'rgba(34, 197, 94, 0.12)' }}
+                              onClick={() => setAmount(`${amount.replace(/\D/g, '')}000`)}
+                              title="Nhân 1.000 VNĐ"
+                            >
+                              ⚡ {formatVND(`${amount}000`)}đ (.000)
+                            </button>
+                          )}
                           {[50000, 100000, 200000, 500000, 1000000, 2000000].map(val => (
                             <button 
                               key={val}
@@ -2394,6 +2459,7 @@ function App() {
                                 const current = amount ? Number(amount.replace(/\D/g, '')) : 0;
                                 setAmount(String(current + val));
                               }}
+                              title="Cộng dồn thêm vào số tiền hiện tại"
                             >
                               +{val >= 1000000 ? `${val / 1000000}tr` : `${val / 1000}k`}
                             </button>
@@ -2416,6 +2482,18 @@ function App() {
                           value={memo}
                           onChange={(e) => setMemo(e.target.value)}
                         />
+                        <div className="amount-chips-row">
+                          {['THANH TOAN BAN 01', 'THANH TOAN BAN 05', 'DAT COC TIEC KINGS GRILL', 'CK TIEN COM'].map(presetMemo => (
+                            <button
+                              key={presetMemo}
+                              type="button"
+                              className="amount-chip"
+                              onClick={() => setMemo(presetMemo)}
+                            >
+                              {presetMemo}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       <button className="primary full" onClick={handleSaveToSpreadsheet} disabled={isSavingAccount}>
@@ -2505,7 +2583,7 @@ function App() {
                           className="form-control"
                           value={splitMethod}
                           onChange={(e) => setSplitMethod(e.target.value as any)}
-                          style={{ height: '48px', borderRadius: '12px', background: 'rgba(5,17,42,.75)', border: '1px solid rgba(91,134,211,.3)', color: 'white', padding: '0 12px' }}
+                          style={{ height: '48px', borderRadius: '12px', background: 'var(--surface-input)', border: '1px solid var(--border)', color: 'var(--text)', padding: '0 12px' }}
                         >
                           <option value="equal">Chia đều</option>
                           <option value="custom">Tự điền (Custom)</option>
@@ -2831,6 +2909,71 @@ function App() {
                     description="Nhập đầy đủ thông tin ngân hàng, số tài khoản và họ tên chủ tài khoản ở bảng bên để hệ thống tạo mã QR thanh toán động."
                     style={{ minHeight: '320px', border: 'none', background: 'transparent' }}
                   />
+                )}
+
+                {/* Recent VietQR Transactions History for 1-click Cashier Reuse */}
+                {qrHistory.length > 0 && (
+                  <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                        🕒 Giao dịch QR gần đây ({qrHistory.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQrHistory([]);
+                          localStorage.removeItem('kg_tool_qr_history');
+                          showToast('Đã xóa lịch sử giao dịch QR gần đây', 'info');
+                        }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: '11px', cursor: 'pointer', padding: '2px 6px' }}
+                      >
+                        Xóa lịch sử
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                      {qrHistory.slice(-5).reverse().map((tx, idx) => (
+                        <div
+                          key={tx.id || idx}
+                          onClick={() => {
+                            if (tx.amount) setAmount(String(tx.amount));
+                            if (tx.memo) setMemo(tx.memo);
+                            if (tx.accountNo) setAccountNo(tx.accountNo);
+                            if (tx.bankCode) {
+                              const found = banks.find(b => b.code === tx.bankCode);
+                              if (found) setSelectedBank(found);
+                            }
+                            setVietQrViewMode('single');
+                            showToast(`Đã nạp lại mẫu QR: ${formatVND(String(tx.amount || 0))}đ`, 'info');
+                          }}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            background: 'var(--surface-subtle)',
+                            border: '1px solid var(--border)',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Nhấn để nạp lại số tiền và nội dung này"
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <strong style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {tx.bankCode || 'QR'} • {tx.memo || 'Không có nội dung'}
+                            </strong>
+                            <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
+                              STK: {tx.accountNo} • {tx.timestamp ? new Date(tx.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                          </div>
+                          <span style={{ fontWeight: 700, color: 'var(--green)', whiteSpace: 'nowrap', marginLeft: '8px', fontFamily: 'var(--font-mono)' }}>
+                            {formatVND(String(tx.amount || 0))} đ
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

@@ -457,7 +457,45 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   };
 
   // Inline table cell update helper (zero-modal fast editing)
-  const handleInlineFieldChange = (id: string, field: 'accountNo' | 'amount' | 'memo', rawValue: string) => {
+  const [tableSearch, setTableSearch] = useState('');
+  const [tableFilter, setTableFilter] = useState<'all' | 'valid' | 'invalid'>('all');
+
+  const filteredEmployees = useMemo(() => {
+    let list = employees;
+    if (tableFilter === 'valid') list = list.filter(e => e.isValid);
+    else if (tableFilter === 'invalid') list = list.filter(e => !e.isValid);
+    if (tableSearch.trim()) {
+      const q = removeVietnameseAccents(tableSearch.trim()).toLowerCase();
+      list = list.filter(e =>
+        removeVietnameseAccents(e.name).toLowerCase().includes(q) ||
+        (e.accountNo && e.accountNo.toLowerCase().includes(q)) ||
+        removeVietnameseAccents(e.bankCodeName || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [employees, tableFilter, tableSearch]);
+
+  const handleBulkFillMissingBank = () => {
+    const defaultBank = bankTemplate === 'vib' ? '203 - Vietcombank' : '(VCB) Vietcombank';
+    let count = 0;
+    const updated = employees.map(emp => {
+      if (!emp.bankCodeName || emp.bankCodeName.trim() === '') {
+        count++;
+        const nextEmp = { ...emp, bankCodeName: defaultBank };
+        const v = validateRecord(nextEmp, bankTemplate);
+        return { ...nextEmp, isValid: v.isValid, errors: v.errors };
+      }
+      return emp;
+    });
+    if (count === 0) {
+      showToast('Tất cả nhân viên đã có ngân hàng nhận!', 'info');
+      return;
+    }
+    setEmployees(updated);
+    showToast(`Đã gán nhanh ${defaultBank} cho ${count} dòng chưa có ngân hàng!`, 'success');
+  };
+
+  const handleInlineFieldChange = (id: string, field: 'name' | 'accountNo' | 'amount' | 'memo', rawValue: string) => {
     setEmployees(prev => prev.map(emp => {
       if (emp.id !== id) return emp;
       const updated: TransferEmployee = {
@@ -1269,6 +1307,18 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               <button 
                 type="button"
                 className="btn-outline" 
+                onClick={handleBulkFillMissingBank}
+                disabled={employees.length === 0}
+                title="Gán nhanh ngân hàng mặc định (Vietcombank) cho các dòng đang bị trống ngân hàng"
+                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <CheckCircle size={15} style={{ color: 'var(--green)' }} />
+                <span>Gán NH dòng trống</span>
+              </button>
+
+              <button 
+                type="button"
+                className="btn-outline" 
                 onClick={handleAddManualRow}
                 style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
@@ -1356,11 +1406,63 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       {/* TABLE VIEW OF ENTRIES */}
       <div className="card panel" style={{ padding: '1rem 0', background: 'var(--panel-bg)', overflow: 'visible' }}>
-        <div style={{ padding: '0 1.25rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '1.1rem', margin: 0 }}>📋 Preview danh sách xuất file ({employees.length})</h2>
-          <span style={{ fontSize: '0.8rem', opacity: 0.6, fontStyle: 'italic' }}>
-            * Bắt đầu ghi từ hàng {bankTemplate === 'vib' ? '5' : '2'} của Sheet
-          </span>
+        <div style={{ padding: '0 1.25rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>📋 Preview danh sách xuất file ({filteredEmployees.length}/{employees.length})</h2>
+            <span style={{ fontSize: '0.78rem', opacity: 0.6, fontStyle: 'italic' }}>
+              * Ghi từ hàng {bankTemplate === 'vib' ? '5' : '2'} của Sheet
+            </span>
+          </div>
+
+          {employees.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '210px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Tìm tên, số TK, ngân hàng..."
+                  value={tableSearch}
+                  onChange={e => setTableSearch(e.target.value)}
+                  style={{ height: '32px', fontSize: '12px', paddingLeft: '30px', paddingRight: '24px' }}
+                />
+                {tableSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTableSearch('')}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  type="button"
+                  className={`filter-tag ${tableFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setTableFilter('all')}
+                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                >
+                  Tất cả ({stats.total})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-tag ${tableFilter === 'valid' ? 'active' : ''}`}
+                  onClick={() => setTableFilter('valid')}
+                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                >
+                  ✅ Hợp lệ ({stats.validCount})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-tag ${tableFilter === 'invalid' ? 'active' : ''}`}
+                  onClick={() => setTableFilter('invalid')}
+                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                >
+                  ⚠️ Cần sửa ({stats.invalidCount})
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {employees.length === 0 ? (
@@ -1374,7 +1476,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         ) : isMobileScreen ? (
           /* Mobile Card list view */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0 1rem' }}>
-            {employees.map((emp, idx) => {
+            {filteredEmployees.map((emp, idx) => {
               const hasSelector = showBankSelectorForId === emp.id;
 
               return (
@@ -1485,9 +1587,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                           left: '12px', 
                           right: '12px', 
                           zIndex: 1000, 
-                          background: '#111827', 
-                          border: '1px solid var(--glass-border)', 
-                          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)',
+                          background: 'var(--bg-elevated)', 
+                          border: '1px solid var(--border-strong)', 
+                          boxShadow: 'var(--shadow-lg)',
                           borderRadius: '8px',
                           padding: '8px',
                           maxHeight: '200px',
@@ -1587,15 +1689,25 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                 </tr>
               </thead>
               <tbody>
-                {employees.map((emp, idx) => {
+                {filteredEmployees.map((emp, idx) => {
                   const hasSelector = showBankSelectorForId === emp.id;
                   
                   return (
                     <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: emp.isValid ? 'transparent' : 'rgba(239, 68, 68, 0.02)' }}>
                       <td style={{ padding: '12px 16px', color: 'var(--muted)' }}>{idx + 1}</td>
                       
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>
-                        <span style={{ display: 'block' }}>{emp.name}</span>
+                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>
+                        <input
+                          type="text"
+                          value={emp.name}
+                          onChange={e => handleInlineFieldChange(emp.id, 'name', e.target.value)}
+                          style={{
+                            height: '32px',
+                            fontWeight: 600,
+                            fontSize: '0.84rem',
+                            minWidth: '145px'
+                          }}
+                        />
                         {emp.source === 'payroll' && <span className="badge" style={{ display: 'inline-block', fontSize: '10px', padding: '1px 4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--green)', borderRadius: '4px', marginTop: '2px' }}>Phiếu lương</span>}
                       </td>
 
@@ -1729,7 +1841,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                                     padding: '6px 8px', 
                                     background: 'transparent', 
                                     border: 'none', 
-                                    color: 'white', 
+                                    color: 'var(--text)', 
                                     fontSize: '0.75rem',
                                     borderRadius: '4px',
                                     cursor: 'pointer'
@@ -1793,10 +1905,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       {/* MODAL FOR BULK DATA PASTE */}
       {showBulkModal && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="card panel modal-box" style={{ maxWidth: '640px', width: '100%', padding: '1.5rem', background: '#0c152a', border: '1px solid var(--glass-border)' }}>
+          <div className="card panel modal-box" style={{ maxWidth: '640px', width: '100%', padding: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)' }}>
             <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>📋 Dán dữ liệu hàng loạt</span>
-              <button onClick={() => setShowBulkModal(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+              <button onClick={() => setShowBulkModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </h3>
             
             <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem', lineHeight: 1.4 }}>
@@ -1807,7 +1919,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
             <textarea 
               className="form-control"
               placeholder="VD: Nguyen Van A	0000000001	100000	Thanh toan luong	(ACB) Á Châu"
-              style={{ width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', color: 'white' }}
+              style={{ width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '1rem', background: 'var(--surface-input)', color: 'var(--text)' }}
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
             />
@@ -1823,10 +1935,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       {/* FORM MODAL FOR ADD/EDIT EMPLOYEE */}
       {activeEmployeeEdit && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="card panel modal-box" style={{ maxWidth: '480px', width: '100%', padding: '1.5rem', background: '#0c152a', border: '1px solid var(--glass-border)', overflow: 'visible' }}>
+          <div className="card panel modal-box" style={{ maxWidth: '480px', width: '100%', padding: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', overflow: 'visible' }}>
             <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{isAdding ? '➕ Thêm nhân viên chuyển tiền' : '✏️ Sửa thông tin nhân viên'}</span>
-              <button onClick={() => setActiveEmployeeEdit(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+              <button onClick={() => setActiveEmployeeEdit(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
@@ -1991,7 +2103,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                             padding: '6px 8px', 
                             background: 'transparent', 
                             border: 'none', 
-                            color: 'white', 
+                            color: 'var(--text)', 
                             fontSize: '0.75rem',
                             borderRadius: '4px',
                             cursor: 'pointer'
