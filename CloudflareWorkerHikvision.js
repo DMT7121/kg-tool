@@ -639,6 +639,38 @@ async function handleTtsProxy(data) {
 
   try {
     const provider = String(data.provider || "edge").toLowerCase();
+
+    if (provider === "capcut_token") {
+      const tokenUrl = "https://edit-api-sg.capcut.com/lv/v1/common/tts/token";
+      const deviceTime = Math.floor(Date.now() / 1000).toString();
+      const sign = await md5(`9e2c|s/token|7|5.8.0|${deviceTime}||11ac`);
+      const tokenRes = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Appvr": "5.8.0",
+          "Device-Time": deviceTime,
+          "Origin": "https://www.capcut.com",
+          "Pf": "7",
+          "Sign": sign,
+          "Sign-Ver": "1",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+      });
+      const tokenJson = await tokenRes.json();
+      const token = tokenJson?.data?.token;
+      const appKey = tokenJson?.data?.app_key;
+      if (!token || !appKey) {
+        return new Response(JSON.stringify({ success: false, error: "Không lấy được token CapCut" }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ success: true, token, appKey, app_key: appKey }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     const text = String(data.text || "").trim();
     if (!text) {
       return new Response(JSON.stringify({ success: false, error: "Thiếu văn bản cần đọc (text)" }), {
@@ -650,14 +682,33 @@ async function handleTtsProxy(data) {
     if (provider === "google") {
       const rate = Number(data.rate ?? 1.0);
       const speedParam = rate < 0.85 ? "0.3" : "1";
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&ttsspeed=${speedParam}&q=${encodeURIComponent(text.slice(0, 195))}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-      });
-      const buf = await res.arrayBuffer();
-      return new Response(buf, {
+      const rawChunks = text.match(/.{1,180}(\s|$)/g) || [text];
+      const buffers = [];
+      for (let i = 0; i < rawChunks.length; i++) {
+        const c = rawChunks[i].trim();
+        if (!c) continue;
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&ttsspeed=${speedParam}&total=${rawChunks.length}&idx=${i}&textlen=${c.length}&q=${encodeURIComponent(c)}`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+        });
+        if (res.ok) {
+          buffers.push(new Uint8Array(await res.arrayBuffer()));
+        }
+      }
+      const totalLen = buffers.reduce((s, b) => s + b.byteLength, 0);
+      const merged = new Uint8Array(totalLen);
+      let off = 0;
+      for (const b of buffers) {
+        merged.set(b, off);
+        off += b.byteLength;
+      }
+      return new Response(merged.buffer, {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "audio/mpeg" }
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "audio/mpeg",
+          ...(data._fallbackFrom ? { "X-TTS-Fallback": data._fallbackFrom } : {})
+        }
       });
     }
 
@@ -766,6 +817,9 @@ async function handleTtsProxy(data) {
       });
 
       const totalLen = audioBuffer.reduce((s, c) => s + c.byteLength, 0);
+      if (totalLen === 0) {
+        return await handleTtsProxy({ ...data, provider: "google", _fallbackFrom: "google-multi-chunk" });
+      }
       const merged = new Uint8Array(totalLen);
       let off = 0;
       for (const c of audioBuffer) {

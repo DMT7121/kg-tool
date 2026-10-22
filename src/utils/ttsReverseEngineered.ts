@@ -294,7 +294,7 @@ export function synthesizeCapCutBrowserWS(params: {
             if (chunks.length === 0) {
               reject(new Error('CapCut WebSocket không trả về dữ liệu âm thanh'));
             } else {
-              resolve(new Blob(chunks, { type: 'audio/wav' }));
+              resolve(new Blob(chunks, { type: 'audio/mpeg' }));
             }
           } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code !== 20000000)) {
             window.clearTimeout(timer);
@@ -316,7 +316,7 @@ export function synthesizeCapCutBrowserWS(params: {
               window.clearTimeout(timer);
               settled = true;
               ws.close();
-              resolve(new Blob(chunks, { type: 'audio/wav' }));
+              resolve(new Blob(chunks, { type: 'audio/mpeg' }));
               return;
             } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code !== 20000000)) {
               window.clearTimeout(timer);
@@ -327,7 +327,7 @@ export function synthesizeCapCutBrowserWS(params: {
             }
           }
         } catch {
-          // Binary WAV data
+          // Binary audio data
         }
         chunks.push(ev.data);
       }
@@ -346,7 +346,7 @@ export function synthesizeCapCutBrowserWS(params: {
         window.clearTimeout(timer);
         settled = true;
         if (chunks.length > 0) {
-          resolve(new Blob(chunks, { type: 'audio/wav' }));
+          resolve(new Blob(chunks, { type: 'audio/mpeg' }));
         } else {
           reject(new Error('Kết nối CapCut đóng trước khi hoàn tất'));
         }
@@ -403,7 +403,70 @@ export async function synthesizeReverseEngineeredTTS(req: ReverseTtsRequest): Pr
 
   let lastError: Error | null = null;
 
-  // BƯỚC 1: Thử gọi qua Proxy (Vite Middleware hoặc Cloudflare Worker)
+  // BƯỚC 1: Nếu là CapCut trên trình duyệt, ưu tiên lấy Token qua Proxy/Worker/GAS rồi kết nối thẳng WebSocket từ trình duyệt người dùng
+  if (req.provider === 'capcut' && typeof WebSocket !== 'undefined') {
+    if (!cachedCapCutToken || Date.now() > cachedCapCutToken.expiresAt) {
+      for (const proxyEndpoint of candidates) {
+        try {
+          const tokenRes = await fetch(proxyEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'tts_proxy', provider: 'capcut_token' }),
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            const appKeyVal = tokenData.appKey || tokenData.app_key;
+            if (tokenData.success && tokenData.token && appKeyVal) {
+              cachedCapCutToken = {
+                token: tokenData.token,
+                appKey: appKeyVal,
+                expiresAt: Date.now() + 5 * 3600 * 1000,
+              };
+              break;
+            }
+          }
+        } catch {
+          // Try next endpoint
+        }
+      }
+    }
+    if ((!cachedCapCutToken || Date.now() > cachedCapCutToken.expiresAt) && req.gasUrl) {
+      try {
+        const tokenRes = await fetch(`${req.gasUrl}?action=tts_proxy&provider=capcut_token`);
+        const tokenData = await tokenRes.json();
+        const appKeyVal = tokenData.appKey || tokenData.app_key;
+        if (tokenData.success && tokenData.token && appKeyVal) {
+          cachedCapCutToken = {
+            token: tokenData.token,
+            appKey: appKeyVal,
+            expiresAt: Date.now() + 5 * 3600 * 1000,
+          };
+        }
+      } catch {
+        // Ignore GAS token error
+      }
+    }
+    if (cachedCapCutToken) {
+      try {
+        const blob = await synthesizeCapCutBrowserWS({
+          text: req.text,
+          speaker: req.voice || 'BV074_streaming',
+          speed: req.rate ?? 10,
+          pitch: req.pitch ?? 10,
+          volume: Math.round((req.volume ?? 1) * 10),
+          token: cachedCapCutToken.token,
+          appKey: cachedCapCutToken.appKey,
+        });
+        if (blob.size > 100) {
+          return { blob };
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+  }
+
+  // BƯỚC 2: Thử gọi qua Proxy (Vite Middleware hoặc Cloudflare Worker)
   for (const proxyEndpoint of candidates) {
     try {
       const response = await fetch(proxyEndpoint, {
