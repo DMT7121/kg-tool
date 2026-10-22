@@ -716,7 +716,8 @@ async function handleTtsProxy(data) {
               }
             } catch {}
           } else if (ev.data) {
-            const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
+            const raw = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : new Uint8Array(ev.data.buffer || ev.data);
+            const u8 = new Uint8Array(raw); // Copy buffer so workerd does not detach it after event turn
             if (u8.byteLength > 0 && u8[0] === 0x7b && u8[u8.byteLength - 1] === 0x7d) {
               try {
                 const txt = new TextDecoder().decode(u8);
@@ -773,7 +774,7 @@ async function handleTtsProxy(data) {
       }
       return new Response(merged.buffer, {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "audio/wav" }
+        headers: { ...corsHeaders, "Content-Type": "audio/mpeg" }
       });
     }
 
@@ -827,12 +828,12 @@ async function handleTtsProxy(data) {
             resolve(chunks);
           }
         } else if (ev.data) {
-          const buf = ev.data instanceof ArrayBuffer ? ev.data : ev.data.buffer;
-          const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(buf);
+          const u8 = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : new Uint8Array(ev.data.buffer || ev.data);
           if (u8.byteLength > 2) {
             const hLen = (u8[0] << 8) | u8[1];
             if (u8.byteLength > 2 + hLen) {
-              chunks.push(u8.subarray(2 + hLen));
+              // Copy bytes into a fresh Uint8Array so workerd does not detach the underlying ArrayBuffer
+              chunks.push(new Uint8Array(u8.subarray(2 + hLen)));
             }
           }
         }
