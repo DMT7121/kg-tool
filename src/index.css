@@ -216,6 +216,9 @@
   color: var(--text-primary);
 }
 
+[data-theme="light"] select,
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[data-theme="light"] textarea,
 [data-theme="light"] select.form-control,
 [data-theme="light"] input.form-control,
 [data-theme="light"] textarea.form-control {
@@ -234,7 +237,7 @@ html, body {
   min-height: 100vh;
   background-color: var(--bg-base);
   color: var(--text-primary);
-  overflow-x: hidden;
+  overflow-x: clip;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 

@@ -3181,7 +3181,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               </div>
 
               {/* Action Toolbar */}
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
                 <input type="file" ref={excelInputRef} accept=".xlsx, .xls" style={{ display: 'none' }} onChange={handleExcelImport} />
                 <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
                 
@@ -3202,7 +3202,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     type="button" 
                     className="btn-outline" 
                     onClick={addEmployee} 
-                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34d399' }}
+                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'var(--status-success-bg)', borderColor: 'var(--status-success-border)', color: 'var(--status-success)' }}
                     title="Thêm một nhân viên mới vào danh sách"
                   >
                     <Plus size={13} />
@@ -3246,9 +3246,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
                   <button 
                     type="button" 
-                    className="btn-ghost" 
+                    className="btn-outline" 
                     onClick={loadSampleData} 
-                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px' }}
+                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: 'var(--text-secondary)', borderRadius: '6px' }}
                     title="Nạp dữ liệu mẫu thử nghiệm"
                   >
                     💡 Mẫu
@@ -3256,9 +3256,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
                   <button 
                     type="button" 
-                    className="btn-ghost" 
+                    className="btn-outline" 
                     onClick={triggerCsvSelect} 
-                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px' }}
+                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: 'var(--text-secondary)', borderRadius: '6px' }}
                     title="Nạp tệp CSV"
                   >
                     CSV
@@ -3268,7 +3268,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     type="button" 
                     className="btn-ghost" 
                     onClick={clearAllForms} 
-                    style={{ width: '30px', height: '30px', padding: 0, fontSize: '12px', color: '#f87171', border: '1px solid rgba(248, 113, 113, 0.2)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ width: '30px', height: '30px', padding: 0, fontSize: '12px', color: 'var(--status-danger)', border: '1px solid var(--status-danger-border)', background: 'var(--status-danger-bg)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Xóa trắng form dữ liệu"
                   >
                     🗑️
@@ -3286,8 +3286,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     style={{
                       height: '32px',
                       fontSize: '12px',
-                      background: 'rgba(0,0,0,0.25)',
-                      border: '1px solid rgba(255,255,255,0.08)',
+                      background: 'var(--surface-input)',
+                      border: '1px solid var(--border-default)',
                       paddingLeft: '10px',
                       borderRadius: '6px',
                       width: '100%'
@@ -3304,7 +3304,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         transform: 'translateY(-50%)',
                         background: 'none',
                         border: 'none',
-                        color: '#94a3b8',
+                        color: 'var(--text-muted)',
                         cursor: 'pointer',
                         fontSize: '12px'
                       }}
@@ -3328,15 +3328,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     <div 
                       key={emp.id} 
                       style={{ 
-                        background: isCurrent ? 'rgba(30, 58, 138, 0.3)' : 'rgba(255,255,255,0.02)', 
+                        background: isCurrent ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
                         borderRadius: '10px', 
                         border: isCurrent 
-                          ? '1px solid rgba(59, 130, 246, 0.7)' 
+                          ? '1px solid var(--accent-primary)' 
                           : hasError 
-                            ? '1px solid rgba(239, 68, 68, 0.4)' 
-                            : '1px solid rgba(255,255,255,0.06)',
+                            ? '1px solid var(--status-danger-border)' 
+                            : '1px solid var(--border-default)',
                         transition: 'all 0.15s ease',
-                        boxShadow: isCurrent ? '0 0 12px rgba(59, 130, 246, 0.2)' : 'none',
+                        boxShadow: isCurrent ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : 'none',
                         overflow: 'hidden'
                       }}
                     >
@@ -3359,8 +3359,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           <span style={{ 
                             fontSize: '11px', 
                             fontWeight: 700, 
-                            color: isCurrent ? '#93c5fa' : '#64748b',
-                            background: isCurrent ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.05)',
+                            color: isCurrent ? 'var(--accent-primary)' : 'var(--text-muted)',
+                            background: isCurrent ? 'rgba(59, 130, 246, 0.16)' : 'var(--surface-subtle)',
+                            border: '1px solid var(--border-subtle)',
                             padding: '2px 6px',
                             borderRadius: '4px'
                           }}>
@@ -3370,14 +3371,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                             <div style={{ 
                               fontSize: '13px', 
                               fontWeight: 600, 
-                              color: isCurrent ? '#ffffff' : '#e2e8f0', 
+                              color: 'var(--text-primary)', 
                               whiteSpace: 'nowrap', 
                               overflow: 'hidden', 
                               textOverflow: 'ellipsis' 
                             }}>
                               {emp.name || '(Chưa nhập tên)'}
                             </div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                               {salaryMode === 'restaurant' 
                                 ? `${emp.workedDays !== undefined ? emp.workedDays : emp.days} ngày · ${emp.totalHours || 0}h`
                                 : `${emp.days} ${salaryMode === 'hourly' ? 'giờ' : 'công'}`
@@ -3390,7 +3391,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           <span style={{ 
                             fontSize: '12px', 
                             fontWeight: 700, 
-                            color: isCurrent ? '#22d3ee' : '#cbd5e1' 
+                            color: isCurrent ? 'var(--accent-primary)' : 'var(--text-secondary)' 
                           }}>
                             {formatMoney(emp.amount)}
                           </span>
@@ -3398,7 +3399,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           <button 
                             type="button" 
                             className="btn-ghost" 
-                            style={{ padding: '3px 6px', fontSize: '11px', color: isExpanded ? '#60a5fa' : '#94a3b8' }} 
+                            style={{ padding: '3px 6px', fontSize: '11px', color: isExpanded ? 'var(--accent-primary)' : 'var(--text-muted)' }} 
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingEmployeeId(editingEmployeeId === emp.id ? 'NONE' : emp.id);
@@ -3412,7 +3413,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           <button 
                             type="button" 
                             className="btn-ghost" 
-                            style={{ padding: '3px 6px', fontSize: '11px', color: '#f87171' }} 
+                            style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--status-danger)' }} 
                             onClick={(e) => { 
                               e.stopPropagation(); 
                               deleteEmployee(emp.id); 
@@ -3426,7 +3427,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
                       {/* Detailed Editor Form (Expanded) */}
                       {isExpanded && (
-                        <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
+                        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
                           <div className="form-group" style={{ marginBottom: '8px' }}>
                             <label className="form-label" style={{ fontSize: '11px' }}>Họ và tên nhân viên</label>
                             <input 
@@ -3588,14 +3589,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 })}
 
                 {employees.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '13px' }}>
-                    Chưa có nhân viên nào. Bấm <strong>"Nhập Excel"</strong> hoặc <strong>"+ Thêm NV"</strong> để bắt đầu.
+                  <div style={{ textAlign: 'center', padding: '1.75rem 1rem', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    Chưa có nhân viên nào. Bấm <strong style={{ color: 'var(--text-primary)' }}>"Nhập Excel"</strong> hoặc <strong style={{ color: 'var(--text-primary)' }}>"+ Thêm NV"</strong> để bắt đầu.
                   </div>
                 )}
               </div>
 
               {/* Deductions Collapsible Section */}
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.1)' }}>
+              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
                 <div 
                   onClick={() => setIsDeductionsExpanded(!isDeductionsExpanded)}
                   style={{ 
@@ -3608,9 +3609,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>💸 Khoản Khấu Trừ Chung ({deductions.length})</span>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>💸 Khoản Khấu Trừ Chung ({deductions.length})</span>
                     {totalDeduct > 0 && (
-                      <span style={{ fontSize: '11px', color: '#f87171', fontWeight: 600 }}>-{formatMoney(totalDeduct)}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 600 }}>-{formatMoney(totalDeduct)}</span>
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3627,12 +3628,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       <Plus size={11} />
                       <span>Thêm</span>
                     </button>
-                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>{isDeductionsExpanded ? '▲' : '▼'}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{isDeductionsExpanded ? '▲' : '▼'}</span>
                   </div>
                 </div>
 
                 {isDeductionsExpanded && (
-                  <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-subtle)' }}>
                     {deductions.map(d => (
                       <div key={d.id} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <input 
@@ -3654,7 +3655,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         <button 
                           type="button" 
                           className="btn-ghost" 
-                          style={{ color: '#f87171', padding: '4px' }} 
+                          style={{ color: 'var(--status-danger)', padding: '4px' }} 
                           onClick={() => deleteDeduction(d.id)}
                         >
                           ✕
@@ -3662,7 +3663,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       </div>
                     ))}
                     {deductions.length === 0 && (
-                      <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', padding: '4px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '4px' }}>
                         Không có khoản khấu trừ nào.
                       </div>
                     )}
@@ -3679,27 +3680,27 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   }}
                   style={{ 
                     padding: '8px 16px', 
-                    background: 'rgba(239, 68, 68, 0.12)', 
-                    borderTop: '1px solid rgba(239, 68, 68, 0.25)', 
+                    background: 'var(--status-danger-bg)', 
+                    borderTop: '1px solid var(--status-danger-border)', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'space-between',
                     cursor: 'pointer' 
                   }}
                 >
-                  <span style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 600 }}>
                     ⚠️ {warningsList.length} nhân viên cần kiểm tra lại dữ liệu
                   </span>
-                  <span style={{ fontSize: '11px', color: '#60a5fa', fontWeight: 600 }}>Xem ›</span>
+                  <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 600 }}>Xem ›</span>
                 </div>
               )}
 
               {/* Saved Presets Collapsible */}
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
+              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--bg-elevated)' }}>
                 <div 
                   onClick={() => setIsPresetsExpanded(!isPresetsExpanded)}
                   style={{ 
-                    padding: '8px 14px', 
+                    padding: '9px 16px', 
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
@@ -3708,15 +3709,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#93c5fd' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--accent-primary)' }}>
                       🖨️ Mẫu Cấu Hình In Đã Lưu ({customPresets.length})
                     </span>
                   </div>
-                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>{isPresetsExpanded ? '▲' : '▼'}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{isPresetsExpanded ? '▲' : '▼'}</span>
                 </div>
 
                 {isPresetsExpanded && (
-                  <div style={{ padding: '8px 14px 12px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.2)' }}>
+                  <div style={{ padding: '8px 14px 12px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--surface-subtle)', borderTop: '1px solid var(--border-subtle)' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
                       <button type="button" className="btn-outline small-btn" onClick={resetAllConfigurations} style={{ fontSize: '10px', padding: '2px 8px' }}>
                         Khôi phục mặc định
@@ -3724,8 +3725,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '100px', overflowY: 'auto' }}>
                       {customPresets.map(preset => (
-                        <div key={preset.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '4px 8px' }}>
-                          <span style={{ cursor: 'pointer', flexGrow: 1, fontSize: '11px', color: 'white', fontWeight: 500 }} onClick={() => applyCustomPreset(preset)} title="Click để áp dụng mẫu">
+                        <div key={preset.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '4px 8px' }}>
+                          <span style={{ cursor: 'pointer', flexGrow: 1, fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500 }} onClick={() => applyCustomPreset(preset)} title="Click để áp dụng mẫu">
                             📄 {preset.name}
                           </span>
                           <button type="button" className="btn-danger small-btn" style={{ padding: '1px 5px', fontSize: '9px' }} onClick={() => deleteCustomPreset(preset.id)}>
@@ -3866,11 +3867,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
               {/* Center group: Employee navigator widget (when single slip) */}
               {activeView === 'receipt' && previewMode === 'single' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.3)', padding: '2px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                   <button type="button" className="btn-ghost" onClick={handlePrevEmployee} disabled={currentEmployeeIndex === 0} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <ChevronLeft size={15} />
                   </button>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'white', minWidth: '64px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', minWidth: '58px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                     {employees.length > 0 ? (currentEmployeeIndex + 1) + ' / ' + employees.length : '0 / 0'}
                   </span>
                   <button type="button" className="btn-ghost" onClick={handleNextEmployee} disabled={currentEmployeeIndex === employees.length - 1} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3892,7 +3893,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
                 <select 
                   className="form-control select-compact" 
-                  style={{ width: '85px', height: '32px', padding: '0 6px', fontSize: '11px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} 
+                  style={{ width: '92px', height: '32px', padding: '0 6px', fontSize: '11px', background: 'var(--surface-input)', border: '1px solid var(--border-default)' }} 
                   value={zoomLevel} 
                   onChange={e => setZoomLevel(e.target.value)}
                 >
@@ -4009,7 +4010,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   description="Vui lòng thêm nhân viên mới hoặc tải file CSV dữ liệu chấm công ở cột bên trái để bắt đầu tạo phiếu lương và bảng tổng hợp."
                   actionLabel="Thêm nhân viên đầu tiên"
                   onAction={addEmployee}
-                  style={{ height: '450px' }}
+                  style={{ padding: '2.75rem 1.5rem' }}
                 />
               ) : (
                 <div className="sheet-canvas-wrapper" style={getZoomWidthStyle()}>
@@ -4166,8 +4167,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           <div className="dropdown-click-outside-backdrop" onClick={() => setShowMobileEmpList(false)} style={{ zIndex: 2002, background: 'rgba(5, 11, 30, 0.7)' }} />
           <div className="bank-dropdown-popover" style={{ zIndex: 2101, maxHeight: '80vh', height: '80vh', padding: '16px', display: 'flex', flexDirection: 'column' }}>
             <div className="bank-dropdown-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-              <span style={{ fontSize: '14px', color: 'white', fontWeight: 700 }}>Danh sách nhân viên ({employees.length})</span>
-              <button type="button" className="close-dropdown-btn" onClick={() => setShowMobileEmpList(false)} style={{ background: 'none', border: 0, color: 'white', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+              <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 700 }}>Danh sách nhân viên ({employees.length})</span>
+              <button type="button" className="close-dropdown-btn" onClick={() => setShowMobileEmpList(false)} style={{ background: 'none', border: 0, color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
             </div>
             
             <div className="search-field-box" style={{ marginBottom: '12px', flexShrink: 0 }}>
@@ -4201,13 +4202,13 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       alignItems: 'center', 
                       padding: '12px', 
                       borderRadius: '10px', 
-                      background: isCurrent ? 'var(--blue)' : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${isCurrent ? 'var(--blue)' : 'rgba(255,255,255,0.05)'}`,
+                      background: isCurrent ? 'var(--accent-primary-subtle)' : 'var(--surface-subtle)',
+                      border: `1px solid ${isCurrent ? 'var(--accent-primary)' : 'var(--border-default)'}`,
                       cursor: 'pointer'
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                      <strong style={{ color: 'white', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {emp.name || '(Chưa điền tên)'}
                       </strong>
                       <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
@@ -4215,7 +4216,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: isCurrent ? 'white' : 'var(--green)' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: isCurrent ? 'var(--accent-primary)' : 'var(--green)' }}>
                         {formatMoney(emp.amount)}
                       </span>
                       {hasWarning && <span style={{ fontSize: '14px' }}>⚠️</span>}
@@ -4257,7 +4258,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           </div>
         }
       >
-        <div style={{ display: 'flex', gap: '6px', background: 'rgba(255, 255, 255, 0.04)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '6px', background: 'var(--surface-subtle)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-default)', marginBottom: '12px' }}>
           <button
             type="button"
             className={`tab-btn ${configDrawerTab === 'salary' ? 'active' : ''}`}
@@ -4269,8 +4270,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               fontWeight: 600,
               border: 0,
               borderRadius: '6px',
-              background: configDrawerTab === 'salary' ? 'var(--blue)' : 'transparent',
-              color: 'white',
+              background: configDrawerTab === 'salary' ? 'var(--accent-primary-subtle)' : 'transparent',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -4292,8 +4293,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               fontWeight: 600,
               border: 0,
               borderRadius: '6px',
-              background: configDrawerTab === 'print' ? 'var(--blue)' : 'transparent',
-              color: 'white',
+              background: configDrawerTab === 'print' ? 'var(--accent-primary-subtle)' : 'transparent',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -4315,8 +4316,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               fontWeight: 600,
               border: 0,
               borderRadius: '6px',
-              background: configDrawerTab === 'sync' ? 'var(--blue)' : 'transparent',
-              color: 'white',
+              background: configDrawerTab === 'sync' ? 'var(--accent-primary-subtle)' : 'transparent',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -4339,8 +4340,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 fontWeight: 600,
                 border: 0,
                 borderRadius: '6px',
-                background: configDrawerTab === 'warnings' ? '#dc2626' : 'transparent',
-                color: 'white',
+                background: configDrawerTab === 'warnings' ? 'var(--status-danger-bg)' : 'transparent',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -4579,9 +4580,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginTop: '6px' }}>Lịch sử tháng lương đã lưu:</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
               {historyMonths.map(h => (
-                <div key={h.month} onClick={() => loadHistoryMonth(h.month)} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div key={h.month} onClick={() => loadHistoryMonth(h.month)} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: 'var(--surface-subtle)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', border: '1px solid var(--border-default)' }}>
                   <div>
-                    <span style={{ fontWeight: 600, color: 'white' }}>Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Tháng {h.month.split('-')[1]}/{h.month.split('-')[0]}</span>
                     <span style={{ fontSize: '10px', color: 'var(--muted)', display: 'block' }}>Ghi bởi: {h.operator} - {h.updatedTime}</span>
                   </div>
                   <button 
@@ -4609,7 +4610,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               if (msgs.length === 0) return null;
               return (
                 <div key={emp.id} style={{ fontSize: '0.8rem', background: 'rgba(220, 38, 38, 0.1)', border: '1px solid rgba(220, 38, 38, 0.3)', padding: '8px 12px', borderRadius: '6px' }}>
-                  <strong style={{ color: 'white', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
+                  <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '2px' }}>{emp.name || '(Trống)'}</strong>
                   {msgs.map((m, i) => (
                     <div key={i} style={{ color: m.type === 'error' ? '#ff5c7a' : '#ffc107', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                       <span>•</span>

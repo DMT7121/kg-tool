@@ -1810,11 +1810,11 @@ function App() {
                     <div className="datagrid-card" style={{ width: '100%', marginTop: '0.5rem' }}>
                       <div className="datagrid-toolbar">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <FileText size={16} color="var(--cyan)" />
+                          <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileText size={16} color="var(--accent-primary)" />
                             Xem trước kết quả đã xử lý
                           </span>
-                          <span style={{ fontSize: '11px', color: 'var(--muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '10px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
                             {filteredAttendanceRecords.length} / {processedRecords.length} dòng
                           </span>
                         </div>
@@ -1828,7 +1828,7 @@ function App() {
                               placeholder="Tìm theo tên nhân viên..."
                               value={attendanceSearch}
                               onChange={(e) => setAttendanceSearch(e.target.value)}
-                              style={{ width: '100%', height: '32px', fontSize: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', padding: '0 28px 0 30px' }}
+                              style={{ width: '100%', height: '32px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 28px 0 30px' }}
                             />
                             {attendanceSearch && (
                               <button 
@@ -1903,7 +1903,7 @@ function App() {
                                 return (
                                   <tr key={`${r.employeeName}-${r.logicalDate}-${idx}`}>
                                     <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>{idx + 1}</td>
-                                    <td style={{ fontWeight: 600, color: '#ffffff' }}>{r.employeeName}</td>
+                                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.employeeName}</td>
                                     <td style={{ color: 'var(--muted)', fontSize: '12px' }}>{formatDateStr(r.logicalDate)}</td>
                                     <td>
                                       {r.checkIn ? (
@@ -2079,7 +2079,7 @@ function App() {
                 {showAddAccountForm && (
                   <form onSubmit={handleAddAccount} className="card panel" style={{ border: '1px dashed rgba(34,211,238,0.5)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white' }}>Thêm tài khoản mới</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Thêm tài khoản mới</span>
                       <button type="button" className="btn-outline" style={{ padding: '4px 12px', borderRadius: '6px', fontSize: '0.75rem' }} onClick={() => setShowAddAccountForm(false)}>Hủy</button>
                     </div>
 
@@ -2633,13 +2633,13 @@ function App() {
                                   alignItems: 'center', 
                                   padding: '10px 12px', 
                                   borderRadius: '10px', 
-                                  background: isSelected ? 'rgba(34, 211, 238, 0.08)' : 'rgba(255,255,255,0.01)', 
-                                  border: `1px solid ${isSelected ? 'var(--cyan)' : 'rgba(255,255,255,0.05)'}`,
+                                  background: isSelected ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
+                                  border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-default)'}`,
                                   cursor: 'pointer',
                                   transition: 'all 0.2s ease'
                                 }}
                               >
-                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: isSelected ? 'var(--cyan)' : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#000' : '#fff', fontSize: '11px', fontWeight: 'bold' }}>
+                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: isSelected ? 'var(--accent-primary)' : 'var(--surface-subtle)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#fff' : 'var(--text-secondary)', fontSize: '11px', fontWeight: 'bold' }}>
                                   {idx + 1}
                                 </div>
                                 <input 
@@ -2649,7 +2649,7 @@ function App() {
                                     const val = e.target.value;
                                     setSplitGuests(prev => prev.map((g, i) => i === idx ? { ...g, name: val } : g));
                                   }}
-                                  style={{ flexGrow: 1, minWidth: 0, background: 'transparent', border: 0, padding: 0, color: 'white', fontSize: '13px', fontWeight: 600 }}
+                                  style={{ flexGrow: 1, minWidth: 0, background: 'transparent', border: 0, padding: 0, color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600, height: '24px', boxShadow: 'none' }}
                                   onClick={(e) => e.stopPropagation()}
                                 />
                                 <input 
@@ -2660,7 +2660,7 @@ function App() {
                                     const val = Number(e.target.value.replace(/\D/g, '')) || 0;
                                     setSplitGuests(prev => prev.map((g, i) => i === idx ? { ...g, amount: val } : g));
                                   }}
-                                  style={{ width: '110px', textAlign: 'right', background: 'transparent', border: 0, padding: 0, color: isSelected ? 'var(--green)' : 'white', fontSize: '13px', fontWeight: 700 }}
+                                  style={{ width: '110px', textAlign: 'right', background: 'transparent', border: 0, padding: 0, color: isSelected ? 'var(--green)' : 'var(--text-primary)', fontSize: '13px', fontWeight: 700, height: '24px', boxShadow: 'none' }}
                                   onClick={(e) => e.stopPropagation()}
                                 />
                                 <span style={{ fontSize: '11px', color: 'var(--muted)' }}>đ</span>
@@ -2693,18 +2693,18 @@ function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
                   <h2 style={{ margin: 0 }}>▦ Mã QR thanh toán</h2>
                   {qrUrl && (
-                    <div style={{ display: 'flex', gap: '2px', background: 'rgba(15, 23, 42, 0.4)', padding: '3px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                    <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                       <button 
                         type="button" 
                         onClick={() => setReceiptShowBranded(false)}
-                        style={{ border: 0, background: !receiptShowBranded ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ height: '28px', border: 0, background: !receiptShowBranded ? 'var(--blue)' : 'transparent', color: !receiptShowBranded ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                       >
                         Mẫu QR thường
                       </button>
                       <button 
                         type="button" 
                         onClick={() => setReceiptShowBranded(true)}
-                        style={{ border: 0, background: receiptShowBranded ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ height: '28px', border: 0, background: receiptShowBranded ? 'var(--blue)' : 'transparent', color: receiptShowBranded ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                       >
                         Biên lai Kings Grill
                       </button>
@@ -2716,14 +2716,14 @@ function App() {
                 {qrUrl ? (
                   !receiptShowBranded ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
-                      <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--glass-border)' }}>
-                        <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
-                        <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
-                        <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
-                        <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
+                      <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-elevated)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--border-default)' }}>
+                        <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'qr_only' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
+                        <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'compact' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
+                        <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'compact2' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
+                        <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'print' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
                       </div>
 
-                      <div className="qr-image-frame" style={{ width: '260px', height: '260px', borderRadius: '22px', background: 'white', padding: '10px', boxShadow: '0 0 45px rgba(69,115,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                      <div className="qr-image-frame" style={{ width: '260px', height: '260px', borderRadius: '20px', background: '#ffffff', padding: '12px', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                         <img 
                           src={qrUrl} 
                           alt="VietQR Code" 
@@ -2734,12 +2734,12 @@ function App() {
                         {isQrLoading && <Loader2 className="loader qr-spinner" size={32} style={{ position: 'absolute', color: 'var(--blue)' }} />}
                       </div>
 
-                      <div className="qr-details" style={{ width: '100%', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' }}>
-                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Chủ TK:</span><span style={{ fontWeight: 600, color: 'white', textTransform: 'uppercase' }}>{accountHolder}</span></div>
-                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số TK:</span><span style={{ fontWeight: 600, color: 'white', fontFamily: 'monospace' }}>{accountNo}</span></div>
-                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Ngân hàng:</span><span style={{ fontWeight: 600, color: 'white' }}>{selectedBank?.shortName}</span></div>
-                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--muted)' }}>Số tiền:</span><span style={{ fontWeight: 700, color: 'var(--green)' }}>{formatVND(String(activeAmount))} đ</span></div>
-                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Nội dung:</span><span style={{ fontWeight: 600, color: 'white' }}>{activeMemo}</span></div>
+                      <div className="qr-details" style={{ width: '100%', background: 'var(--bg-elevated)', borderRadius: '12px', padding: '1rem', border: '1px solid var(--border-default)', fontSize: '0.85rem' }}>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ color: 'var(--muted)' }}>Chủ TK:</span><span style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase' }}>{accountHolder}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ color: 'var(--muted)' }}>Số TK:</span><span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{accountNo}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ color: 'var(--muted)' }}>Ngân hàng:</span><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{selectedBank?.shortName}</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ color: 'var(--muted)' }}>Số tiền:</span><span style={{ fontWeight: 700, color: 'var(--green)' }}>{formatVND(String(activeAmount))} đ</span></div>
+                        <div className="qr-detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--muted)' }}>Nội dung:</span><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeMemo}</span></div>
                       </div>
 
                       <div className="form-grid" style={{ width: '100%' }}>
@@ -2846,8 +2846,8 @@ function App() {
                       </div>
 
                       {/* Customizer controls */}
-                      <div style={{ width: '100%', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', boxSizing: 'border-box' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan)', display: 'block', marginBottom: '12px' }}>
+                      <div style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '16px', padding: '16px', boxSizing: 'border-box' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent-primary)', display: 'block', marginBottom: '12px' }}>
                           🎨 Tùy chỉnh phong cách biên lai:
                         </span>
                         
@@ -2865,10 +2865,10 @@ function App() {
                                 type="button"
                                 onClick={() => setReceiptTheme(t.key as any)}
                                 style={{ 
-                                  width: '20px', 
-                                  height: '20px', 
+                                  width: '22px', 
+                                  height: '22px', 
                                   borderRadius: '50%', 
-                                  border: receiptTheme === t.key ? '2px solid white' : '1px solid transparent',
+                                  border: receiptTheme === t.key ? '2px solid var(--text-primary)' : '1px solid transparent',
                                   background: t.color,
                                   cursor: 'pointer',
                                   padding: 0
@@ -2885,7 +2885,7 @@ function App() {
                               type="text" 
                               value={receiptThankYou} 
                               onChange={(e) => setReceiptThankYou(e.target.value)} 
-                              style={{ width: '100%', height: '36px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', padding: '0 8px', color: '#fff', boxSizing: 'border-box' }}
+                              style={{ width: '100%', height: '36px', fontSize: '12px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', padding: '0 8px', color: 'var(--text-primary)', boxSizing: 'border-box' }}
                             />
                           </div>
                           
@@ -2912,7 +2912,7 @@ function App() {
                           <Download size={14} style={{ marginRight: '6px' }} />
                           Tải Biên lai
                         </button>
-                        <button className="btn-outline" style={{ height: '44px', fontSize: '12px', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }} onClick={handlePrintReceipt}>
+                        <button className="btn-outline" style={{ height: '44px', fontSize: '12px' }} onClick={handlePrintReceipt}>
                           🖨️ In Biên lai
                         </button>
                       </div>

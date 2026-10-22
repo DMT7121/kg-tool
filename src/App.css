@@ -31,6 +31,9 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  align-self: flex-start;
+  overflow-y: auto;
   z-index: 900;
   transition: width 0.2s var(--ease-out), transform 0.22s var(--ease-out);
   user-select: none;
@@ -929,6 +932,18 @@ button.btn-ghost:hover:not(:disabled) {
   color: #ffffff !important;
 }
 
+[data-theme="light"] .pipeline-quick-btn {
+  background: rgba(5, 150, 105, 0.1) !important;
+  border-color: rgba(5, 150, 105, 0.35) !important;
+  color: #047857 !important;
+}
+
+[data-theme="light"] .pipeline-quick-btn:hover:not(:disabled) {
+  background: #059669 !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+}
+
 /* Filter Chips & Tags */
 .filter-tag {
   height: 30px !important;
@@ -1398,15 +1413,17 @@ button.btn-ghost:hover:not(:disabled) {
   color: var(--status-danger) !important;
 }
 
-/*Saved Accounts Grid in VietQR */
-.accounts-grid {
+/* Saved Accounts Grid in VietQR */
+.accounts-grid,
+.bank-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1.25rem;
 }
 
-.account-card {
+.account-card,
+.bank {
   padding: 0.85rem 1rem;
   border-radius: 10px;
   background: var(--bg-elevated);
@@ -1414,17 +1431,66 @@ button.btn-ghost:hover:not(:disabled) {
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.account-card:hover {
+.account-card:hover,
+.bank:hover {
   border-color: var(--border-strong);
   background: var(--bg-hover);
 }
 
-.account-card.selected {
+.account-card.selected,
+.bank.active {
   border-color: var(--accent-primary);
   background: var(--accent-primary-subtle);
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+.bank b {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bank p {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bank small {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bank .pill {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-primary-subtle);
+  color: var(--accent-primary);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.delete-account-btn {
+  color: var(--text-muted) !important;
+  height: auto !important;
+}
+
+.delete-account-btn:hover {
+  color: var(--status-danger) !important;
 }
 
 /* ==========================================================================

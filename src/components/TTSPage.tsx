@@ -1725,38 +1725,41 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             {/* COLUMN 1: TEMPLATE LIBRARY */}
             {(!isMobileScreen || mobileBroadcastTab === 'templates') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div className="card panel" style={{ background: 'var(--panel-bg)', height: isMobileScreen ? 'auto' : '650px', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-              <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <BookOpen size={18} style={{ color: 'var(--cyan)' }} />
+            <div className="card panel" style={{ background: 'var(--panel-bg)', height: 'auto', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
+              <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.85rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BookOpen size={18} style={{ color: 'var(--accent-primary)' }} />
                 <span>Thư viện mẫu câu</span>
               </h2>
 
               {/* Search template */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '6px 10px', marginBottom: '0.75rem' }}>
-                <Search size={14} style={{ opacity: 0.5 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-input)', border: '1px solid var(--border-default)', borderRadius: '8px', padding: '6px 10px', marginBottom: '0.75rem' }}>
+                <Search size={14} style={{ color: 'var(--text-muted)' }} />
                 <input 
                   type="text" 
                   placeholder="Tìm kiếm mẫu câu..." 
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', fontSize: '0.85rem', outline: 'none' }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', height: '24px', padding: 0, fontSize: '0.84rem', outline: 'none', boxShadow: 'none' }}
                 />
               </div>
 
               {/* Category tabs */}
-              <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '0.75rem' }}>
                 {categories.map(cat => (
                   <button 
                     key={cat} 
+                    type="button"
                     onClick={() => setActiveCategory(cat)}
                     style={{ 
+                      height: '28px',
                       whiteSpace: 'nowrap',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      background: activeCategory === cat ? 'var(--cyan-glow)' : 'rgba(255,255,255,0.05)',
-                      border: 'none',
-                      color: 'white',
+                      padding: '0 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      background: activeCategory === cat ? 'var(--accent-primary-subtle)' : 'var(--surface-subtle)',
+                      border: activeCategory === cat ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid var(--border-default)',
+                      color: activeCategory === cat ? 'var(--accent-primary)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1766,16 +1769,16 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
               </div>
 
               {/* Saved list */}
-              <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: isMobileScreen ? '250px' : '380px' }}>
+              <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: isMobileScreen ? '240px' : '320px' }}>
                 {filteredTemplates.map(tpl => (
                   <div 
                     key={tpl.id}
                     onClick={() => handleSelectTemplate(tpl)}
                     style={{ 
                       padding: '8px 10px', 
-                      borderRadius: '6px', 
-                      background: selectedTemplateId === tpl.id ? 'rgba(2, 132, 199, 0.15)' : 'rgba(255,255,255,0.02)', 
-                      border: selectedTemplateId === tpl.id ? '1px solid var(--cyan)' : '1px solid rgba(255,255,255,0.04)',
+                      borderRadius: '8px', 
+                      background: selectedTemplateId === tpl.id ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
+                      border: selectedTemplateId === tpl.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1783,32 +1786,33 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     }}
                   >
                     <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '8px' }}>
-                      <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.title}</span>
-                      <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.text}</span>
+                      <span style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.title}</span>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.text}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button 
                         type="button" 
                         onClick={(e) => toggleFavorite(tpl.id, e)}
-                        style={{ background: 'transparent', border: 'none', color: tpl.isFavorite ? '#fbbf24' : 'var(--muted)', cursor: 'pointer', padding: '4px' }}
+                        style={{ background: 'transparent', border: 'none', color: tpl.isFavorite ? '#fbbf24' : 'var(--text-muted)', cursor: 'pointer', padding: '4px', height: 'auto' }}
                       >
-                        <Star size={12} fill={tpl.isFavorite ? '#fbbf24' : 'none'} />
+                        <Star size={13} fill={tpl.isFavorite ? '#fbbf24' : 'none'} />
                       </button>
                       <button 
                         type="button" 
                         onClick={(e) => handleDeleteTemplate(tpl.id, e)}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: '4px' }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--status-danger)', cursor: 'pointer', padding: '4px', height: 'auto' }}
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
                 ))}
                 {filteredTemplates.length === 0 && (
                   <EmptyState 
-                    icon={<Volume2 size={32} />}
+                    icon={<Volume2 size={28} />}
                     title="Chưa có mẫu câu nào" 
                     description="Soạn và lưu mẫu câu bên cạnh hoặc thêm từ mục Gợi ý ở dưới." 
+                    style={{ padding: '1.5rem 1rem' }}
                   />
                 )}
               </div>
@@ -1817,15 +1821,15 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             {/* Suggestions Library */}
             <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <h3 style={{ fontSize: '0.95rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} style={{ color: 'var(--cyan)' }} />
+                <h3 style={{ fontSize: '0.95rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                  <Sparkles size={15} style={{ color: 'var(--accent-primary)' }} />
                   <span>Gợi ý mẫu câu phát nhanh</span>
                 </h3>
-                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{filteredSuggestions.length} mẫu</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>{filteredSuggestions.length} mẫu</span>
               </div>
 
               {/* Category Filter Chips */}
-              <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '10px' }}>
                 {[
                   { id: 'all', label: 'Tất cả' },
                   { id: 'Đặt bàn', label: '🍽️ Đặt bàn' },
@@ -1838,15 +1842,16 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     type="button"
                     onClick={() => setSuggestionCategory(cat.id)}
                     style={{
-                      padding: '3px 8px',
-                      borderRadius: '12px',
-                      fontSize: '11px',
+                      height: '28px',
+                      padding: '0 10px',
+                      borderRadius: '999px',
+                      fontSize: '11.5px',
                       whiteSpace: 'nowrap',
-                      border: 'none',
+                      border: suggestionCategory === cat.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       cursor: 'pointer',
-                      background: suggestionCategory === cat.id ? 'var(--cyan)' : 'rgba(255,255,255,0.06)',
-                      color: suggestionCategory === cat.id ? '#050c1e' : 'var(--text-muted)',
-                      fontWeight: suggestionCategory === cat.id ? 700 : 500,
+                      background: suggestionCategory === cat.id ? 'var(--accent-primary)' : 'var(--surface-subtle)',
+                      color: suggestionCategory === cat.id ? '#ffffff' : 'var(--text-secondary)',
+                      fontWeight: suggestionCategory === cat.id ? 600 : 500,
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -1855,29 +1860,30 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 ))}
               </div>
 
-              <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {filteredSuggestions.map((sug, i) => (
                   <div 
                     key={i}
                     style={{ 
-                      padding: '6px 8px', 
-                      background: 'rgba(255,255,255,0.01)', 
-                      border: '1px solid rgba(255,255,255,0.03)', 
-                      borderRadius: '6px',
+                      padding: '8px 10px', 
+                      background: 'var(--bg-elevated)', 
+                      border: '1px solid var(--border-default)', 
+                      borderRadius: '8px',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      gap: '8px',
                       fontSize: '0.8rem'
                     }}
                   >
-                    <div style={{ overflow: 'hidden', paddingRight: '8px' }}>
-                      <strong style={{ fontSize: '0.82rem' }}>{sug.title}</strong>
-                      <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sug.text}</span>
+                    <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                      <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)', display: 'block' }}>{sug.title}</strong>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: '1px' }}>{sug.text}</span>
                     </div>
                     <button 
                       type="button" 
                       onClick={() => handleLoadSuggestion(sug)}
-                      style={{ background: 'var(--cyan-glow)', border: 'none', color: 'white', borderRadius: '4px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
+                      style={{ height: '28px', background: 'var(--accent-primary-subtle)', border: '1px solid rgba(59, 130, 246, 0.3)', color: 'var(--accent-primary)', borderRadius: '6px', padding: '0 10px', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
                     >
                       + Thêm
                     </button>
@@ -1919,7 +1925,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       className="form-control"
                       value={composeCategory}
                       onChange={e => setComposeCategory(e.target.value)}
-                      style={{ background: '#0a101e', color: 'white' }}
+                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
                       <option value="Đặt bàn">Đặt bàn</option>
                       <option value="Nhà hàng/Vận hành">Vận hành</option>
@@ -1952,16 +1958,23 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                   />
                   
                   {/* Insert variable quick chips */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>Chèn biến nhanh:</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', marginRight: '4px' }}>Chèn biến nhanh:</span>
                     {["ten_khach", "so_khach", "gio_nhan_ban", "so_ban", "khu_vuc", "ten_nhan_vien", "so_tien"].map(v => (
                       <button 
                         key={v}
                         type="button"
                         onClick={() => setComposeText(prev => prev + ` {${v}}`)}
                         style={{ 
-                          fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', 
-                          border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', color: 'var(--cyan)', cursor: 'pointer' 
+                          height: '26px',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          padding: '0 8px',
+                          background: 'var(--accent-primary-subtle)', 
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          borderRadius: '6px',
+                          color: 'var(--accent-primary)',
+                          cursor: 'pointer' 
                         }}
                       >
                         +{v}
@@ -1972,8 +1985,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
                 {/* DYNAMIC VARIABLES INPUT FIELDS */}
                 {parsedVariables.length > 0 && (
-                  <div className="card" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', padding: '1rem', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '0.9rem', margin: '0 0 0.75rem 0', color: 'var(--cyan)' }}>📝 Nhập giá trị biến động</h3>
+                  <div className="card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', padding: '1rem', borderRadius: '10px' }}>
+                    <h3 style={{ fontSize: '0.88rem', margin: '0 0 0.75rem 0', color: 'var(--accent-primary)' }}>📝 Nhập giá trị biến động</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                       {parsedVariables.map(v => (
                         <div key={v} className="form-group">
@@ -1992,28 +2005,28 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 )}
 
                 {/* TRANSLATED & NORMALIZED PREVIEW CARD */}
-                <div className="card" style={{ background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <h3 style={{ fontSize: '0.9rem', margin: 0, color: 'var(--green)' }}>🔊 Xem trước câu nói thật</h3>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--cyan)', cursor: 'pointer' }}>
+                <div className="card" style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)', padding: '1rem', borderRadius: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '6px' }}>
+                    <h3 style={{ fontSize: '0.9rem', margin: 0, color: 'var(--status-success)' }}>🔊 Xem trước câu nói thật</h3>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.76rem', fontWeight: 600, color: 'var(--accent-primary)', cursor: 'pointer' }}>
                       <input 
                         type="checkbox" 
                         checked={providerSettings.autoOptimize}
                         onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoOptimize: e.target.checked }))}
-                        style={{ accentColor: 'var(--cyan)' }}
+                        style={{ accentColor: 'var(--accent-primary)' }}
                       />
                       <span>Tự động tối ưu câu đọc</span>
                     </label>
                   </div>
-                  <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'white', lineHeight: 1.4 }}>
+                  <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.45 }}>
                     {interpolatedText}
                   </p>
                   
                   {/* Speech normalization display */}
                   {providerSettings.autoOptimize && (
-                    <div style={{ borderTop: '1px dashed rgba(255,255,255,0.06)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                      <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '2px' }}>Dòng đọc chuẩn hóa phát ra loa:</span>
-                      <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--cyan)', fontStyle: 'italic' }}>
+                    <div style={{ borderTop: '1px dashed var(--border-strong)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                      <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Dòng đọc chuẩn hóa phát ra loa:</span>
+                      <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 500, color: 'var(--accent-primary)', fontStyle: 'italic' }}>
                         "{normalizedTextToSpeak}"
                       </span>
                     </div>
@@ -2211,7 +2224,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       className="form-control"
                       value={providerSettings.activeProvider}
                       onChange={e => setProviderSettings((prev: any) => ({ ...prev, activeProvider: e.target.value }))}
-                      style={{ background: '#0a101e', color: 'white' }}
+                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
                       <option value="browser">🌐 Browser Speech API (Miễn phí)</option>
                       <option value="fpt">⚡ FPT.AI Text to Speech (Cloud)</option>
@@ -2244,7 +2257,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control"
                           value={providerSettings.browserVoiceURI}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, browserVoiceURI: e.target.value }))}
-                          style={{ background: '#0a101e', color: 'white', fontSize: '0.85rem' }}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                         >
                           <option value="">-- Mặc định (Tự chọn vi-VN) --</option>
                           {voices.map(voice => (
@@ -2326,7 +2339,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control"
                           value={providerSettings.fptVoiceId}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptVoiceId: e.target.value }))}
-                          style={{ background: '#0a101e', color: 'white' }}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {FPT_VOICES.map(v => (
                             <option key={v.id} value={v.id}>{v.name}</option>
@@ -2357,7 +2370,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             className="form-control"
                             value={providerSettings.fptFormat}
                             onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptFormat: e.target.value }))}
-                            style={{ background: '#0a101e', color: 'white' }}
+                            style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                           >
                             <option value="mp3">MP3</option>
                             <option value="wav">WAV</option>
@@ -2432,7 +2445,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control"
                           value={providerSettings.viettelVoiceId}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelVoiceId: e.target.value }))}
-                          style={{ background: '#0a101e', color: 'white' }}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {VIETTEL_VOICES.map(v => (
                             <option key={v.id} value={v.id}>{v.name}</option>
@@ -2463,7 +2476,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             className="form-control"
                             value={providerSettings.viettelFormat}
                             onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelFormat: e.target.value }))}
-                            style={{ background: '#0a101e', color: 'white' }}
+                            style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                           >
                             <option value="mp3">MP3</option>
                             <option value="wav">WAV</option>
@@ -2538,7 +2551,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control"
                           value={providerSettings.zaloVoiceId}
                           onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloVoiceId: e.target.value }))}
-                          style={{ background: '#0a101e', color: 'white' }}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {ZALO_VOICES.map(v => (
                             <option key={v.id} value={v.id}>{v.name}</option>
@@ -2715,17 +2728,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 <div 
                   key={item.id} 
                   style={{ 
-                    padding: '8px 12px', 
-                    background: 'rgba(255,255,255,0.015)', 
-                    border: '1px solid rgba(255,255,255,0.04)', 
-                    borderRadius: '6px',
+                    padding: '10px 12px', 
+                    background: 'var(--bg-elevated)', 
+                    border: '1px solid var(--border-default)', 
+                    borderRadius: '8px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
                   }}
                 >
                   <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '12px' }}>
-                    <span style={{ display: 'block', fontSize: '0.85rem', color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {item.text}
                     </span>
                     <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginTop: '2px' }}>

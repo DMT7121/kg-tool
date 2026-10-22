@@ -134,7 +134,7 @@
   padding: 1.25rem;
   overflow: auto;
   max-height: calc(100vh - 220px);
-  min-height: 520px;
+  min-height: 340px;
 }
 
 .payroll-creator.fullscreen-preview-active .preview-pane {

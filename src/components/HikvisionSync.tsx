@@ -292,7 +292,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                   value={workerUrl}
                   onChange={(e) => setWorkerUrl(e.target.value)}
                   placeholder="https://kingsgrill-attendance-webhook.username.workers.dev"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
                 <button 
                   className="primary" 
@@ -304,15 +304,15 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-elevated)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-default)' }}>
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <code style={{ fontSize: '0.85rem', color: 'var(--cyan)', wordBreak: 'break-all' }}>{workerUrl}</code>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
+                  <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', wordBreak: 'break-all' }}>{workerUrl}</code>
                   <button 
                     type="button" 
                     onClick={() => handleCopy(workerUrl, 'url')}
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: copiedUrl ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
+                    style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedUrl ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
                     {copiedUrl ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
                   </button>
@@ -321,12 +321,12 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
 
               <div>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <code style={{ fontSize: '0.85rem', color: 'var(--cyan)' }}>{secretKey}</code>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
+                  <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>{secretKey}</code>
                   <button 
                     type="button" 
                     onClick={() => handleCopy(secretKey, 'secret')}
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: copiedSecret ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
+                    style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedSecret ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
                     {copiedSecret ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
                   </button>
@@ -358,7 +358,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                 onChange={(e) => setSyncDeviceUrl(e.target.value)}
                 placeholder="Ví dụ: http://192.168.1.3 hoặc https://xyz.trycloudflare.com"
                 required
-                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
               />
               <small style={{ color: 'var(--muted)', marginTop: '4px', display: 'block', fontSize: '0.75rem' }}>
                 Nhập IP nội bộ nếu chạy Web App cục bộ, hoặc URL Tunnel nếu chạy bat tạm thời.
@@ -375,7 +375,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                   onChange={(e) => setSyncUsername(e.target.value)}
                   placeholder="admin"
                   required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
               </div>
               <div className="field" style={{ flex: 1 }}>
@@ -387,7 +387,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                   onChange={(e) => setSyncPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
               </div>
             </div>
@@ -401,7 +401,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                   value={syncFromDate}
                   onChange={(e) => setSyncFromDate(e.target.value)}
                   required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
               </div>
               <div className="field" style={{ flex: 1 }}>
@@ -412,7 +412,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                   value={syncToDate}
                   onChange={(e) => setSyncToDate(e.target.value)}
                   required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px' }}
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
               </div>
             </div>
@@ -469,7 +469,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               placeholder="Tìm kiếm theo tên nhân viên, ngày hoặc ghi chú..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'white', padding: '0 12px 0 36px', fontSize: '0.9rem' }}
+              style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px 0 36px', fontSize: '0.9rem' }}
             />
           </div>
 
@@ -484,7 +484,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               description={searchQuery ? "Không tìm thấy dữ liệu phù hợp với tìm kiếm của bạn." : "Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets."} 
             />
           ) : (
-            <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px' }}>
+            <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: '10px' }}>
               <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-default)', color: 'var(--text-muted)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 2 }}>
@@ -513,7 +513,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
                         <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '11px' }}>#{idx + 1}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>{log.name}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{log.name}</td>
                         <td style={{ padding: '10px 14px', color: 'var(--muted)', fontFamily: 'monospace', fontSize: '12px' }}>{cleanDate}</td>
                         <td style={{ padding: '10px 14px' }}>
                           {cleanIn ? <Badge variant="success" dot>{cleanIn}</Badge> : <span style={{ color: 'var(--muted)' }}>—</span>}

@@ -1058,37 +1058,39 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       />
 
       {/* BANK TEMPLATE SELECTOR TABS */}
-      <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="card panel" style={{ marginBottom: '1.25rem', background: 'var(--bg-panel)', padding: '0.75rem', border: '1px solid var(--border-default)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
           <button 
             type="button" 
             onClick={() => setBankTemplate('vib')}
             style={{ 
+              height: 'auto',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'flex-start',
               gap: '12px',
               padding: '14px 18px', 
               borderRadius: '10px', 
               background: bankTemplate === 'vib' 
-                ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(3, 105, 161, 0.35))' 
-                : 'rgba(255,255,255,0.02)',
-              border: bankTemplate === 'vib' ? '1.5px solid #0284c7' : '1px solid rgba(255,255,255,0.07)',
-              color: 'white',
+                ? 'var(--accent-primary-subtle)' 
+                : 'var(--bg-elevated)',
+              border: bankTemplate === 'vib' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-default)',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.16s ease',
               textAlign: 'left',
-              boxShadow: bankTemplate === 'vib' ? '0 4px 16px rgba(2, 132, 199, 0.2)' : 'none'
+              boxShadow: bankTemplate === 'vib' ? '0 2px 10px rgba(59, 130, 246, 0.12)' : 'none'
             }}
           >
-            <div style={{ fontSize: '24px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 132, 199, 0.2)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 132, 199, 0.14)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '10px', flexShrink: 0 }}>
               🏦
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontWeight: 700, fontSize: '14px' }}>Mẫu MyVIB 2.0 (iVIB)</span>
-                {bankTemplate === 'vib' && <span className="badge badge-info" style={{ fontSize: '10px', padding: '2px 6px' }}>Đang chọn</span>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Mẫu MyVIB 2.0 (iVIB)</span>
+                {bankTemplate === 'vib' && <span className="badge badge-info" style={{ fontSize: '10px', padding: '2px 7px' }}>Đang chọn</span>}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: 500 }}>
                 Chuẩn hóa STK text, chi lương lô VIB Doanh Nghiệp
               </div>
             </div>
@@ -1098,31 +1100,33 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
             type="button" 
             onClick={() => setBankTemplate('vcb')}
             style={{ 
+              height: 'auto',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'flex-start',
               gap: '12px',
               padding: '14px 18px', 
               borderRadius: '10px', 
               background: bankTemplate === 'vcb' 
-                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35))' 
-                : 'rgba(255,255,255,0.02)',
-              border: bankTemplate === 'vcb' ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.07)',
-              color: 'white',
+                ? 'var(--status-success-bg)' 
+                : 'var(--bg-elevated)',
+              border: bankTemplate === 'vcb' ? '1.5px solid var(--status-success)' : '1px solid var(--border-default)',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.16s ease',
               textAlign: 'left',
-              boxShadow: bankTemplate === 'vcb' ? '0 4px 16px rgba(16, 185, 129, 0.2)' : 'none'
+              boxShadow: bankTemplate === 'vcb' ? '0 2px 10px rgba(16, 185, 129, 0.12)' : 'none'
             }}
           >
-            <div style={{ fontSize: '24px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.2)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.14)', border: '1px solid var(--status-success-border)', borderRadius: '10px', flexShrink: 0 }}>
               💚
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontWeight: 700, fontSize: '14px' }}>Mẫu Vietcombank (A222)</span>
-                {bankTemplate === 'vcb' && <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 6px' }}>Đang chọn</span>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Mẫu Vietcombank (A222)</span>
+                {bankTemplate === 'vcb' && <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 7px' }}>Đang chọn</span>}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: 500 }}>
                 Bắt buộc IN HOA KHÔNG DẤU, mã liên ngân hàng VCB
               </div>
             </div>
@@ -1219,8 +1223,8 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
           {/* Nhóm 1: Nạp nguồn */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>BƯỚC 1: NẠP DỮ LIỆU ĐẦU VÀO</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1276,8 +1280,8 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           </div>
 
           {/* Nhóm 2: Tinh chỉnh & Chuẩn hóa */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--status-warning)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>BƯỚC 2: CHUẨN HÓA & TINH CHỈNH</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1292,16 +1296,16 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   height: '38px', 
                   fontSize: '12px',
                   fontWeight: 600,
-                  borderColor: 'rgba(234, 179, 8, 0.4)', 
-                  background: 'rgba(234, 179, 8, 0.08)',
-                  color: '#fef08a',
+                  borderColor: 'var(--status-warning-border)', 
+                  background: 'var(--status-warning-bg)',
+                  color: 'var(--status-warning)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px'
                 }}
               >
-                <Sparkles size={15} style={{ color: 'var(--gold)' }} />
+                <Sparkles size={15} style={{ color: 'var(--status-warning)' }} />
                 <span>Chuẩn hóa Tên (IN HOA)</span>
               </button>
 
@@ -1331,7 +1335,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         </div>
 
         {/* MEMO CONFIGURATION ROW */}
-        <div className="form-group" style={{ marginTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem' }}>
+        <div className="form-group" style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border-default)', paddingTop: '1rem' }}>
           <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Nội dung chuyển khoản mặc định ({bankTemplate === 'vib' ? 'MyVIB' : 'Vietcombank'})</span>
             <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Các biến hỗ trợ: &#123;ten_nhan_vien&#125;, &#123;thang_luong&#125;, &#123;bo_phan&#125;</span>
@@ -1606,7 +1610,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                             placeholder="Tìm ngân hàng..."
                             value={bankSearchQuery}
                             onChange={e => setBankSearchQuery(e.target.value)}
-                            style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.75rem', outline: 'none' }}
                             autoFocus
                           />
                         </div>
@@ -1622,7 +1626,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                                 padding: '6px 8px', 
                                 background: 'transparent', 
                                 border: 'none', 
-                                color: 'white', 
+                                color: 'var(--text-primary)', 
                                 fontSize: '0.7rem',
                                 borderRadius: '4px',
                                 cursor: 'pointer'
@@ -1808,9 +1812,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                               left: '12px', 
                               right: '12px', 
                               zIndex: 1000, 
-                              background: '#111827', 
-                              border: '1px solid var(--glass-border)', 
-                              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)',
+                              background: 'var(--bg-elevated)', 
+                              border: '1px solid var(--border-strong)', 
+                              boxShadow: 'var(--shadow-lg)',
                               borderRadius: '8px',
                               padding: '8px',
                               maxHeight: '280px',
@@ -1826,7 +1830,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                                 placeholder="Tìm mã hoặc tên..."
                                 value={bankSearchQuery}
                                 onChange={e => setBankSearchQuery(e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', fontSize: '0.8rem', outline: 'none' }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none' }}
                                 autoFocus
                               />
                             </div>
@@ -2070,9 +2074,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                       left: 0, 
                       right: 0, 
                       zIndex: 3000, 
-                      background: '#111827', 
-                      border: '1px solid var(--glass-border)', 
-                      boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)',
+                      background: 'var(--bg-elevated)', 
+                      border: '1px solid var(--border-strong)', 
+                      boxShadow: 'var(--shadow-lg)',
                       borderRadius: '8px',
                       padding: '8px',
                       maxHeight: '220px',
@@ -2088,7 +2092,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                         placeholder="Tìm mã hoặc tên..."
                         value={bankSearchQuery}
                         onChange={e => setBankSearchQuery(e.target.value)}
-                        style={{ background: 'transparent', border: 'none', color: 'white', width: '100%', fontSize: '0.8rem', outline: 'none' }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none' }}
                         autoFocus
                       />
                     </div>
