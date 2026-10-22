@@ -1133,25 +1133,26 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       {/* STAT CARDS SECTION */}
       <div className="kpis" style={{ marginBottom: '1.5rem' }}>
         <StatCard 
-          icon="👥" 
+          icon={<FileSpreadsheet size={18} />} 
           label="Tổng tiền chuyển" 
           value={`${stats.totalAmount.toLocaleString('vi-VN')} đ`} 
           subtext={`Chuyển khoản cho ${stats.total} dòng nhân viên`}
           hasData={employees.length > 0} 
         />
         <StatCard 
-          icon="✅" 
+          icon={<CheckCircle size={18} />} 
           label="Người thụ hưởng hợp lệ" 
           value={`${stats.validCount} / ${stats.total}`} 
           subtext={`Đạt chuẩn mẫu ${bankTemplate.toUpperCase()}`}
           hasData={employees.length > 0} 
         />
         <StatCard 
-          icon="⚠️" 
+          icon={<AlertTriangle size={18} />} 
           label="Số dòng bị lỗi" 
           value={`${stats.invalidCount} dòng`} 
           subtext="Cần chỉnh sửa ngay"
-          hasData={employees.length > 0} 
+          hasData={employees.length > 0}
+          accentColor={stats.invalidCount > 0 ? 'var(--red)' : 'var(--green)'}
         />
       </div>
 

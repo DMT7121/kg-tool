@@ -1602,7 +1602,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       {/* OVERVIEW KPIS */}
       <div className="kpis" style={{ marginBottom: '1.5rem' }}>
         <StatCard 
-          icon="🔌" 
+          icon={<SlidersHorizontal size={18} />} 
           label="Provider chủ đạo" 
           value={
             providerSettings.activeProvider === 'browser' ? 'Browser Native' :
@@ -1621,7 +1621,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           hasData={true} 
         />
         <StatCard 
-          icon="📊" 
+          icon={<Database size={18} />} 
           label={
             providerSettings.activeProvider === 'browser' ? 'Browser Quota' :
             providerSettings.activeProvider === 'fpt' ? 'FPT.AI Quota' :
@@ -1645,14 +1645,14 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           } 
         />
         <StatCard 
-          icon="📈" 
+          icon={<Volume2 size={18} />} 
           label="Tổng phát hôm nay" 
           value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday} kí tự`} 
           subtext="Tổng lưu lượng các Cloud Provider"
           hasData={(fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday) > 0} 
         />
         <StatCard 
-          icon="📚" 
+          icon={<BookOpen size={18} />} 
           label="Mẫu câu đã lưu" 
           value={`${templates.length} mẫu`} 
           subtext="Lưu trong cơ sở dữ liệu"
@@ -1661,14 +1661,14 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       </div>
 
       {/* UNIVERSAL SUBTAB BAR */}
-      <div className="hub-subtab-bar" style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
+      <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
         <button 
           type="button" 
           className={`hub-subtab-btn ${mainTab === 'broadcast' ? 'active' : ''}`}
           onClick={() => setMainTab('broadcast')}
         >
-          <Volume2 size={16} />
-          <span>🎙️ Phát Thông Báo</span>
+          <Volume2 size={15} />
+          <span>Phát Thông Báo</span>
         </button>
 
         <button 
@@ -1676,8 +1676,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           className={`hub-subtab-btn ${mainTab === 'settings' ? 'active' : ''}`}
           onClick={() => setMainTab('settings')}
         >
-          <SlidersHorizontal size={16} />
-          <span>⚙️ Cấu Hình Giọng & Quota API</span>
+          <SlidersHorizontal size={15} />
+          <span>Cấu Hình Giọng & Quota API</span>
         </button>
 
         <button 
@@ -1685,8 +1685,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           className={`hub-subtab-btn ${mainTab === 'history' ? 'active' : ''}`}
           onClick={() => setMainTab('history')}
         >
-          <History size={16} />
-          <span>📜 Lịch Sử Phát ({history.length})</span>
+          <History size={15} />
+          <span>Lịch Sử Phát ({history.length})</span>
         </button>
       </div>
 

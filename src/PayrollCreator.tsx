@@ -17,7 +17,8 @@ import {
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import './PayrollCreator.css';
-import { StatCard, EmptyState, GuidePanel } from './components/Shared';
+import { StatCard, EmptyState, GuidePanel, PageHeader } from './components/Shared';
+import { Users, Calendar, Wallet, CreditCard, Sliders } from 'lucide-react';
 import { SlideOverDrawer } from './components/SlideOverDrawer';
 import ExcelJS from 'exceljs';
 
@@ -3042,34 +3043,52 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       </div>
 
       <div className="head">
-        <div className="title">
+        <PageHeader
+          icon={<CreditCard size={24} />}
+          title="Quản Lý Bảng Lương & Phiếu Lương"
+          subtitle="Tạo, tính toán thực nhận và xuất phiếu lương nhiệt K80, A4/A5 hoặc đồng bộ Google Sheets"
+          badgeText="Payroll Studio"
+          badgeVariant="info"
+          actions={
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => setIsConfigDrawerOpen(true)}
+              style={{ height: '38px', fontSize: '12.5px' }}
+            >
+              <Sliders size={15} />
+              <span>Cấu hình & Cloud Sync</span>
+            </button>
+          }
+        />
+        <div className="title" style={{ display: 'none' }}>
           <h1>Quản lý Phiếu Lương <span className="blue-dot"></span></h1>
           <p>Tạo, quản lý và xuất hóa đơn K80, A4 và lưu trữ Google Sheets</p>
         </div>
         <div className="kpis">
           <StatCard 
-            icon="👥" 
+            icon={<Users size={18} />} 
             label="Tổng số nhân viên" 
             value={employees.length.toLocaleString('vi-VN')} 
             subtext="Nhân viên tính lương thực tế"
             hasData={employees.length > 0} 
           />
           <StatCard 
-            icon="📅" 
+            icon={<Calendar size={18} />} 
             label="Tổng số công" 
             value={totalDays.toLocaleString('vi-VN')} 
             subtext={isHourly ? 'Tổng số giờ làm việc' : 'Tổng số công làm việc'}
             hasData={employees.length > 0} 
           />
           <StatCard 
-            icon="🛡" 
+            icon={<Wallet size={18} />} 
             label="Quỹ lương dự kiến" 
             value={`${formatMoney(totalSalary)}`} 
             subtext="Trước khi khấu trừ"
             hasData={employees.length > 0} 
           />
           <StatCard 
-            icon="💜" 
+            icon={<CreditCard size={18} />} 
             label="Thực nhận" 
             value={`${formatMoney(net)}`} 
             subtext="Sau khi trừ tạm ứng & khấu trừ"
@@ -3131,35 +3150,31 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             )}
             
             {/* Clean Dedicated Employee Master Panel */}
-            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(77, 134, 224, 0.32)', borderRadius: '14px', background: 'linear-gradient(145deg, rgba(12, 29, 65, 0.8), rgba(8, 19, 44, 0.75))' }}>
+            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', border: '1px solid var(--border-default)', borderRadius: '12px', background: 'var(--bg-panel)' }}>
               {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(15, 23, 42, 0.6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-default)', background: 'var(--bg-elevated)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>👥 Danh Sách Nhân Viên</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, background: 'rgba(59, 130, 246, 0.25)', color: '#60a5fa', padding: '2px 8px', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                  <Users size={16} style={{ color: 'var(--accent-primary)' }} />
+                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Danh Sách Nhân Viên</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', padding: '1px 8px', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
                     {employees.length}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <button
                     type="button"
+                    className="btn-outline"
                     onClick={() => setIsConfigDrawerOpen(true)}
                     style={{
-                      fontSize: '12px',
+                      height: '30px',
+                      fontSize: '11.5px',
                       fontWeight: 600,
-                      padding: '5px 12px',
-                      background: 'rgba(59, 130, 246, 0.15)',
-                      border: '1px solid rgba(59, 130, 246, 0.4)',
-                      borderRadius: '6px',
-                      color: '#93c5fd',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
+                      padding: '0 10px',
+                      borderRadius: '7px'
                     }}
                     title="Mở cấu hình tính lương và đồng bộ Cloud"
                   >
-                    <span>⚙️</span>
+                    <Sliders size={13} />
                     <span>Cài đặt Lương</span>
                   </button>
                 </div>
@@ -3747,66 +3762,69 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               justifyContent: 'space-between',
               gap: '10px',
               padding: '8px 12px',
-              background: 'rgba(15, 23, 42, 0.75)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border-default)',
               borderRadius: '12px',
               marginBottom: '10px',
-              backdropFilter: 'blur(12px)',
+              boxShadow: 'var(--shadow-sm)',
               flexWrap: 'wrap'
             }}>
               {/* Left group: View Switcher and Template Pill Switcher */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.35)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                   <button 
                     type="button"
                     style={{
-                      padding: '5px 12px',
+                      height: '28px',
+                      padding: '0 12px',
                       fontSize: '12px',
                       fontWeight: 600,
                       borderRadius: '6px',
                       border: 'none',
                       cursor: 'pointer',
-                      background: activeView === 'receipt' ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'transparent',
-                      color: activeView === 'receipt' ? '#fff' : '#94a3b8',
+                      background: activeView === 'receipt' ? 'var(--accent-primary)' : 'transparent',
+                      color: activeView === 'receipt' ? '#fff' : 'var(--text-muted)',
                       transition: 'all 0.15s ease'
                     }}
                     onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
                   >
-                    📄 Phiếu Lương
+                    Phiếu Lương
                   </button>
                   <button 
                     type="button"
                     style={{
-                      padding: '5px 12px',
+                      height: '28px',
+                      padding: '0 12px',
                       fontSize: '12px',
                       fontWeight: 600,
                       borderRadius: '6px',
                       border: 'none',
                       cursor: 'pointer',
-                      background: activeView === 'summary' ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'transparent',
-                      color: activeView === 'summary' ? '#fff' : '#94a3b8',
+                      background: activeView === 'summary' ? 'var(--accent-primary)' : 'transparent',
+                      color: activeView === 'summary' ? '#fff' : 'var(--text-muted)',
                       transition: 'all 0.15s ease'
                     }}
                     onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
                   >
-                    📊 Bảng Tổng Hợp
+                    Bảng Tổng Hợp
                   </button>
                 </div>
 
-                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                   {(['standard', 'modern', 'k80'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       style={{
-                        padding: '5px 10px',
-                        fontSize: '11px',
+                        height: '28px',
+                        padding: '0 10px',
+                        fontSize: '11.5px',
                         fontWeight: 600,
                         borderRadius: '6px',
                         border: 'none',
                         cursor: 'pointer',
-                        background: activeTemplate === t ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
-                        color: activeTemplate === t ? '#60a5fa' : '#94a3b8',
+                        background: activeTemplate === t ? 'var(--accent-primary-subtle)' : 'transparent',
+                        color: activeTemplate === t ? 'var(--accent-primary)' : 'var(--text-muted)',
                         transition: 'all 0.15s ease'
                       }}
                       onClick={() => setActiveTemplate(t)}
@@ -3817,7 +3835,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 </div>
 
                 {activeView === 'receipt' && (
-                  <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
                     {([
                       { id: 'single', label: '1 Phiếu' },
                       { id: 'list', label: 'Danh sách' },
@@ -3827,14 +3845,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         key={m.id}
                         type="button"
                         style={{
-                          padding: '5px 9px',
-                          fontSize: '11px',
+                          height: '28px',
+                          padding: '0 9px',
+                          fontSize: '11.5px',
                           fontWeight: 600,
                           borderRadius: '6px',
                           border: 'none',
                           cursor: 'pointer',
-                          background: previewMode === m.id ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
-                          color: previewMode === m.id ? 'var(--primary)' : '#94a3b8'
+                          background: previewMode === m.id ? 'var(--status-success-bg)' : 'transparent',
+                          color: previewMode === m.id ? 'var(--status-success)' : 'var(--text-muted)'
                         }}
                         onClick={() => setPreviewMode(m.id)}
                       >

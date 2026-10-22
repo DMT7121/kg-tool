@@ -210,14 +210,16 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
           className="hub-subtab-btn"
           onClick={() => onNavigate?.('attendance')}
         >
-          📊 Xử lý Chấm Công & Phân Ca
+          <Clock size={15} />
+          <span>Xử lý Chấm Công & Phân Ca</span>
         </button>
         <button 
           type="button" 
           className="hub-subtab-btn active"
           onClick={() => onNavigate?.('hikvision')}
         >
-          🔌 Máy Chấm Công Cloud (Hikvision)
+          <Cpu size={15} />
+          <span>Máy Chấm Công Cloud (Hikvision)</span>
         </button>
       </div>
       <div className="head" style={{ marginBottom: '1.5rem' }}>
@@ -485,7 +487,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
             <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px' }}>
               <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
-                  <tr style={{ background: '#091736', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 2 }}>
+                  <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-default)', color: 'var(--text-muted)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 2 }}>
                     <th style={{ padding: '10px 14px', width: '50px' }}>STT</th>
                     <th style={{ padding: '10px 14px' }}>Họ tên nhân viên</th>
                     <th style={{ padding: '10px 14px' }}>Ngày</th>

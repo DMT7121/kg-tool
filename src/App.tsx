@@ -23,7 +23,13 @@ import {
   Bell,
   Puzzle,
   Sparkles,
-  PanelRight
+  PanelRight,
+  Users,
+  Calendar,
+  Cpu,
+  Wallet,
+  Activity,
+  UploadCloud
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, summarizeAttendanceForPayroll, type ProcessedRecord, type TimeRecord } from './processor';
@@ -1513,41 +1519,43 @@ function App() {
                 className="hub-subtab-btn active"
                 onClick={() => setCurrentView('attendance')}
               >
-                📊 Xử lý Chấm Công & Phân Ca
+                <FileText size={15} />
+                <span>Xử lý Chấm Công & Phân Ca</span>
               </button>
               <button 
                 type="button" 
                 className="hub-subtab-btn"
                 onClick={() => setCurrentView('hikvision')}
               >
-                🔌 Máy Chấm Công Cloud (Hikvision)
+                <Cpu size={15} />
+                <span>Máy Chấm Công Cloud (Hikvision)</span>
               </button>
             </div>
             <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
                 <StatCard 
-                  icon="👥" 
+                  icon={<Users size={18} />} 
                   label="Nhân viên" 
                   value={empCount.toLocaleString('vi-VN')} 
                   subtext="Tổng số nhân viên thực tế"
                   hasData={hasAttendanceData} 
                 />
                 <StatCard 
-                  icon="📅" 
+                  icon={<Calendar size={18} />} 
                   label="Ngày công" 
                   value={daysCount.toLocaleString('vi-VN')} 
                   subtext="Tổng số dòng công ghi nhận"
                   hasData={hasAttendanceData} 
                 />
                 <StatCard 
-                  icon="✅" 
+                  icon={<CheckCircle size={18} />} 
                   label="Đã xử lý" 
                   value={processedCount.toLocaleString('vi-VN')} 
                   subtext={`${completionRate}% ca hoàn thành`}
                   hasData={hasAttendanceData} 
                 />
                 <StatCard 
-                  icon="🌙" 
+                  icon={<Moon size={18} />} 
                   label="Ca đêm" 
                   value={nightCount.toLocaleString('vi-VN')} 
                   subtext="Số ca đêm phát hiện"
@@ -1584,10 +1592,12 @@ function App() {
                 onDrop={handleDrop}
               >
                 <div className="upload-content" style={{ width: '100%' }}>
-                  <div className="file-icon">☁</div>
-                  <h2>Xử lý chấm công nhân viên</h2>
-                  <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--muted)', fontSize: '0.9rem' }}>
-                    Chọn tải tệp thô từ máy tính hoặc tải dữ liệu đồng bộ trực tuyến từ Google Sheets
+                  <div className="file-icon">
+                    <UploadCloud size={22} />
+                  </div>
+                  <h2 style={{ fontSize: '1.15rem', marginBottom: '0.25rem' }}>Xử lý chấm công nhân viên</h2>
+                  <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+                    Chọn tải tệp thô từ máy tính hoặc đồng bộ dữ liệu trực tuyến từ Google Sheets
                   </p>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', width: '100%', maxWidth: '640px', margin: '1rem auto 1.25rem', zIndex: 10 }}>
@@ -1598,21 +1608,24 @@ function App() {
                         flexDirection: 'column', 
                         alignItems: 'center', 
                         gap: '8px', 
-                        padding: '18px 16px', 
+                        padding: '20px 18px', 
                         borderRadius: '12px', 
-                        border: '1.5px dashed rgba(59, 130, 246, 0.4)', 
-                        background: 'rgba(59, 130, 246, 0.05)', 
+                        border: '1px solid var(--border-strong)', 
+                        background: 'var(--bg-panel)', 
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        textAlign: 'center'
+                        transition: 'all 0.16s ease',
+                        textAlign: 'center',
+                        boxShadow: 'var(--shadow-sm)'
                       }}
                       className="upload-source-card"
                     >
-                      <span style={{ fontSize: '24px' }}>📂</span>
-                      <strong style={{ fontSize: '13.5px', color: '#fff' }}>Tải file từ máy tính</strong>
-                      <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Nhận file thô Excel (.xlsx, .xls) hoặc CSV</span>
-                      <span className="btn-outline" style={{ marginTop: '6px', fontSize: '12px', padding: '6px 14px', pointerEvents: 'none' }}>
-                        Chọn tệp...
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileText size={20} />
+                      </div>
+                      <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Tải file từ máy tính</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Nhận file thô Excel (.xlsx, .xls) hoặc CSV</span>
+                      <span className="btn-outline" style={{ marginTop: '6px', fontSize: '12px', height: '32px', padding: '0 14px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', pointerEvents: 'none' }}>
+                        Chọn tệp máy tính...
                       </span>
                       <input 
                         type="file" 
@@ -1631,19 +1644,22 @@ function App() {
                         flexDirection: 'column', 
                         alignItems: 'center', 
                         gap: '8px', 
-                        padding: '18px 16px', 
+                        padding: '20px 18px', 
                         borderRadius: '12px', 
-                        border: '1.5px solid rgba(34, 211, 238, 0.3)', 
-                        background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.08), rgba(59, 130, 246, 0.08))', 
+                        border: '1px solid rgba(59, 130, 246, 0.3)', 
+                        background: 'linear-gradient(180deg, var(--accent-primary-subtle) 0%, var(--bg-panel) 100%)', 
                         cursor: isProcessing ? 'wait' : 'pointer',
-                        transition: 'all 0.2s ease',
-                        textAlign: 'center'
+                        transition: 'all 0.16s ease',
+                        textAlign: 'center',
+                        boxShadow: 'var(--shadow-sm)'
                       }}
                       className="upload-source-card"
                     >
-                      <span style={{ fontSize: '24px' }}>⚡</span>
-                      <strong style={{ fontSize: '13.5px', color: '#fff' }}>Đồng bộ từ Google Sheet</strong>
-                      <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Lấy trực tiếp dữ liệu chấm công đám mây</span>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Sparkles size={20} />
+                      </div>
+                      <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Đồng bộ từ Google Sheet</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Lấy trực tiếp dữ liệu chấm công đám mây</span>
                       <button 
                         type="button" 
                         className="primary" 
@@ -1656,7 +1672,7 @@ function App() {
                             Đang tải...
                           </>
                         ) : (
-                          '⚡ Nạp tự động'
+                          'Nạp tự động Cloud'
                         )}
                       </button>
                     </div>
@@ -1935,24 +1951,24 @@ function App() {
             )}
 
             <div className="feature-grid">
-              <div className="card feature" style={{ borderColor: 'rgba(124, 60, 255, 0.4)' }}>
-                <div className="ficon">🌙</div>
+              <div className="card feature">
+                <div className="ficon" style={{ color: 'var(--purple)' }}><Moon size={18} /></div>
                 <div>
                   <h3>Xử Lý Ca Đêm</h3>
                   <p>Tự động gán giờ trước 6h sáng về ca ngày hôm trước</p>
                 </div>
                 <div className="arrow">→</div>
               </div>
-              <div className="card feature" style={{ borderColor: 'rgba(22, 119, 255, 0.4)' }}>
-                <div className="ficon">📆</div>
+              <div className="card feature">
+                <div className="ficon" style={{ color: 'var(--accent-primary)' }}><Calendar size={18} /></div>
                 <div>
                   <h3>Nội Suy Lịch</h3>
                   <p>Khớp dữ liệu chấm công với dải ngày hành chính và phân ca</p>
                 </div>
                 <div className="arrow">→</div>
               </div>
-              <div className="card feature" style={{ borderColor: 'rgba(34, 211, 238, 0.4)' }}>
-                <div className="ficon">🪄</div>
+              <div className="card feature">
+                <div className="ficon" style={{ color: 'var(--cyan)' }}><Sparkles size={18} /></div>
                 <div>
                   <h3>Định Dạng Tự Động</h3>
                   <p>Chuẩn hóa dữ liệu thô xuất ra bảng báo cáo dễ theo dõi</p>
@@ -1992,28 +2008,28 @@ function App() {
             <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
                 <StatCard 
-                  icon="👤" 
+                  icon={<Users size={18} />} 
                   label="Tài khoản đã lưu" 
                   value={savedAccounts.length} 
                   subtext="Tài khoản đã được cấu hình"
                   hasData={savedAccounts.length > 0} 
                 />
                 <StatCard 
-                  icon="▦" 
+                  icon={<QrCode size={18} />} 
                   label="QR đã tạo hôm nay" 
                   value={qrCreatedToday} 
                   subtext="Mã QR tạo trong ngày"
                   hasData={totalTransactions > 0} 
                 />
                 <StatCard 
-                  icon="📈" 
+                  icon={<Activity size={18} />} 
                   label="Tổng giao dịch" 
                   value={totalTransactions} 
                   subtext="Số lần xuất/tạo mã QR"
                   hasData={totalTransactions > 0} 
                 />
                 <StatCard 
-                  icon="💼" 
+                  icon={<Wallet size={18} />} 
                   label="Tổng tiền nhận" 
                   value={`${totalAmountReceived.toLocaleString('vi-VN')}đ`} 
                   subtext="Tổng giá trị các mã QR"
@@ -2989,7 +3005,7 @@ function App() {
                 className="hub-subtab-btn active"
                 onClick={() => setCurrentView('payroll')}
               >
-                <span>📑</span>
+                <CreditCard size={15} />
                 <span>Bảng Lương & Phiếu Lương</span>
               </button>
               <button 
@@ -2997,7 +3013,7 @@ function App() {
                 className="hub-subtab-btn"
                 onClick={() => setCurrentView('transfer')}
               >
-                <span>📤</span>
+                <Send size={15} />
                 <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
               </button>
             </div>
@@ -3019,7 +3035,7 @@ function App() {
                 className="hub-subtab-btn"
                 onClick={() => setCurrentView('payroll')}
               >
-                <span>📑</span>
+                <CreditCard size={15} />
                 <span>Bảng Lương & Phiếu Lương</span>
               </button>
               <button 
@@ -3027,7 +3043,7 @@ function App() {
                 className="hub-subtab-btn active"
                 onClick={() => setCurrentView('transfer')}
               >
-                <span>📤</span>
+                <Send size={15} />
                 <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
               </button>
             </div>
