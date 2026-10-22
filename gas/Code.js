@@ -75,6 +75,12 @@ function doGet(e) {
   try {
     var action = e.parameter.action;
     var ssId = e.parameter.ssId;
+
+    // Proxy cho các nguồn Reverse-Engineered TTS (không yêu cầu mở Spreadsheet)
+    if (action === "tts_proxy") {
+      return ContentService.createTextOutput(JSON.stringify(handleGasTtsProxy(e.parameter)))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
     
     var sheets = getOrCreateSheets(ssId);
     var ss = sheets.ss;
@@ -117,6 +123,127 @@ function doGet(e) {
   
   return ContentService.createTextOutput(JSON.stringify(res))
                        .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Xử lý Reverse-Engineered TTS Proxy qua Google Apps Script (UrlFetchApp)
+ * Hỗ trợ: capcut_token (lấy token + app_key CapCut SAMI), google (Google TTS), openaifm (OpenAI.fm)
+ */
+function handleGasTtsProxy(params) {
+  try {
+    var provider = String(params.provider || "google").toLowerCase();
+    var text = String(params.text || "").trim();
+
+    if (provider === "capcut_token") {
+      var deviceTime = Math.floor(Date.now() / 1000).toString();
+      var rawSign = "9e2c|s/token|7|5.8.0|" + deviceTime + "||11ac";
+      var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, rawSign, Utilities.Charset.UTF_8);
+      var signHex = digest.map(function(b) {
+        var v = (b < 0 ? b + 256 : b).toString(16);
+        return v.length === 1 ? "0" + v : v;
+      }).join("");
+
+      var tokenRes = UrlFetchApp.fetch("https://edit-api-sg.capcut.com/lv/v1/common/tts/token", {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          "Appvr": "5.8.0",
+          "Device-Time": deviceTime,
+          "Pf": "7",
+          "Sign": signHex,
+          "Sign-Ver": "1",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        payload: JSON.stringify({ scenes: ["normal"] }),
+        muteHttpExceptions: true
+      });
+
+      var tokenJson = JSON.parse(tokenRes.getContentText());
+      if (tokenJson && tokenJson.data && tokenJson.data.token) {
+        return {
+          success: true,
+          token: tokenJson.data.token,
+          app_key: tokenJson.data.app_key
+        };
+      }
+      return { success: false, error: "Không lấy được CapCut SAMI token" };
+    }
+
+    if (!text) {
+      return { success: false, error: "Thiếu nội dung text" };
+    }
+
+    if (provider === "google" || provider === "edge") {
+      var chunks = text.match(/.{1,180}(\s|$)/g) || [text];
+      var combinedBytes = [];
+      for (var i = 0; i < chunks.length; i++) {
+        var c = chunks[i].trim();
+        if (!c) continue;
+        var gUrl = "https://translate.googleapis.com/translate_tts?ie=UTF-8&q=" + encodeURIComponent(c) + "&tl=vi&total=" + chunks.length + "&idx=" + i + "&textlen=" + c.length + "&client=tw-ob";
+        var gRes = UrlFetchApp.fetch(gUrl, {
+          method: "get",
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+          muteHttpExceptions: true
+        });
+        if (gRes.getResponseCode() === 200) {
+          var bytes = gRes.getContent();
+          for (var b = 0; b < bytes.length; b++) {
+            combinedBytes.push(bytes[b]);
+          }
+        }
+      }
+      if (combinedBytes.length === 0) {
+        return { success: false, error: "Google TTS không trả về dữ liệu âm thanh" };
+      }
+      return {
+        success: true,
+        mimeType: "audio/mpeg",
+        audioBase64: Utilities.base64Encode(combinedBytes)
+      };
+    }
+
+    if (provider === "openaifm") {
+      var voice = String(params.voice || "coral");
+      var prompt = String(params.prompt || "Voice: Warm, clear, natural Vietnamese announcer.");
+      var boundary = "----WebKitFormBoundary" + Utilities.getUuid().replace(/-/g, "").slice(0, 16);
+      var fields = [
+        ["input", text],
+        ["prompt", prompt],
+        ["voice", voice],
+        ["vibe", "custom"]
+      ];
+      var bodyStr = fields.map(function(kv) {
+        return "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + kv[0] + "\"\r\n\r\n" + kv[1] + "\r\n";
+      }).join("") + "--" + boundary + "--\r\n";
+
+      var oaRes = UrlFetchApp.fetch("https://www.openai.fm/api/generate", {
+        method: "post",
+        contentType: "multipart/form-data; boundary=" + boundary,
+        headers: {
+          "Accept": "*/*",
+          "Origin": "https://www.openai.fm",
+          "Referer": "https://www.openai.fm/",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        payload: Utilities.newBlob(bodyStr).getBytes(),
+        muteHttpExceptions: true
+      });
+      if (oaRes.getResponseCode() === 200) {
+        return {
+          success: true,
+          mimeType: "audio/mpeg",
+          audioBase64: Utilities.base64Encode(oaRes.getContent())
+        };
+      }
+      // Fallback sang Google TTS nếu bị chặn 429 Challenge
+      params.provider = "google";
+      return handleGasTtsProxy(params);
+    }
+
+    return { success: false, error: "Provider không hỗ trợ trên GAS: " + provider };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 /**

@@ -18,6 +18,13 @@ import {
   Info
 } from 'lucide-react';
 import { StatCard, EmptyState, PageHeader } from './Shared';
+import {
+  EDGE_VOICES,
+  CAPCUT_VOICES,
+  OPENAIFM_VOICES,
+  DEFAULT_OPENAIFM_PROMPT,
+  synthesizeReverseEngineeredTTS
+} from '../utils/ttsReverseEngineered';
 
 export interface TTSTemplate {
   id: string;
@@ -514,7 +521,23 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       zaloSpeed: 1.0,
       zaloEndpoint: 'https://api.zalo.ai/v1/tts/synthesize',
       zaloDailyLimit: 5000,
-      googleDailyLimit: 5000,
+      googleDailyLimit: 50000,
+      googleSpeed: 1.0,
+      edgeVoiceId: 'vi-VN-HoaiMyNeural',
+      edgeRate: 1.0,
+      edgePitch: 1.0,
+      edgeDailyLimit: 100000,
+      capcutVoiceId: 'BV074_streaming',
+      capcutSpeed: 10,
+      capcutPitch: 10,
+      capcutDailyLimit: 100000,
+      openaifmVoiceId: 'nova',
+      openaifmSpeed: 1.0,
+      openaifmPrompt: DEFAULT_OPENAIFM_PROMPT,
+      openaifmEndpoint: 'https://www.openai.fm/api/generate',
+      openaifmApiKey: '',
+      openaifmDailyLimit: 50000,
+      reverseProxyUrl: '',
       autoFallback: true,
       fptDailyLimit: 5000,
       viettelDailyLimit: 5000,
@@ -538,13 +561,19 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       localStorage.setItem('kg_tool_tts_quota_viettel_today', '0');
       localStorage.setItem('kg_tool_tts_quota_zalo_today', '0');
       localStorage.setItem('kg_tool_tts_quota_google_today', '0');
-      return { fpt: 0, viettel: 0, zalo: 0, google: 0 };
+      localStorage.setItem('kg_tool_tts_quota_edge_today', '0');
+      localStorage.setItem('kg_tool_tts_quota_capcut_today', '0');
+      localStorage.setItem('kg_tool_tts_quota_openaifm_today', '0');
+      return { fpt: 0, viettel: 0, zalo: 0, google: 0, edge: 0, capcut: 0, openaifm: 0 };
     }
     return {
       fpt: parseInt(localStorage.getItem('kg_tool_tts_quota_fpt_today') || '0', 10),
       viettel: parseInt(localStorage.getItem('kg_tool_tts_quota_viettel_today') || '0', 10),
       zalo: parseInt(localStorage.getItem('kg_tool_tts_quota_zalo_today') || '0', 10),
-      google: parseInt(localStorage.getItem('kg_tool_tts_quota_google_today') || '0', 10)
+      google: parseInt(localStorage.getItem('kg_tool_tts_quota_google_today') || '0', 10),
+      edge: parseInt(localStorage.getItem('kg_tool_tts_quota_edge_today') || '0', 10),
+      capcut: parseInt(localStorage.getItem('kg_tool_tts_quota_capcut_today') || '0', 10),
+      openaifm: parseInt(localStorage.getItem('kg_tool_tts_quota_openaifm_today') || '0', 10)
     };
   }, []);
 
@@ -553,8 +582,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   const [viettelUsedToday, setViettelUsedToday] = useState<number>(initialQuotas.viettel);
   const [zaloUsedToday, setZaloUsedToday] = useState<number>(initialQuotas.zalo);
   const [googleUsedToday, setGoogleUsedToday] = useState<number>(initialQuotas.google);
+  const [edgeUsedToday, setEdgeUsedToday] = useState<number>(initialQuotas.edge);
+  const [capcutUsedToday, setCapcutUsedToday] = useState<number>(initialQuotas.capcut);
+  const [openaifmUsedToday, setOpenaifmUsedToday] = useState<number>(initialQuotas.openaifm);
 
-  const addQuotaUsage = (provider: 'fpt' | 'viettel' | 'zalo' | 'google', charCount: number) => {
+  const addQuotaUsage = (provider: 'fpt' | 'viettel' | 'zalo' | 'google' | 'edge' | 'capcut' | 'openaifm', charCount: number) => {
     if (provider === 'fpt') {
       setFptUsedToday(prev => {
         const next = prev + charCount;
@@ -577,6 +609,24 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       setGoogleUsedToday(prev => {
         const next = prev + charCount;
         localStorage.setItem('kg_tool_tts_quota_google_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'edge') {
+      setEdgeUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_edge_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'capcut') {
+      setCapcutUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_capcut_today', next.toString());
+        return next;
+      });
+    } else if (provider === 'openaifm') {
+      setOpenaifmUsedToday(prev => {
+        const next = prev + charCount;
+        localStorage.setItem('kg_tool_tts_quota_openaifm_today', next.toString());
         return next;
       });
     }
@@ -1159,8 +1209,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
   };
 
-  // Play using Google Translate TTS
-  const speakGoogle = (textToSpeak: string) => {
+  // Play using Google Translate TTS (Upgraded gTTS / node-gtts chunking & proxy)
+  const speakGoogle = async (textToSpeak: string) => {
     const charCount = textToSpeak.length;
     if (googleUsedToday + charCount > providerSettings.googleDailyLimit) {
       if (providerSettings.autoFallback) {
@@ -1174,10 +1224,87 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
 
     setPlaybackState('playing');
-    showToast('Đang gửi văn bản tới Google TTS...', 'info');
+    showToast('Đang tải âm thanh từ Google TTS (gTTS)...', 'info');
 
     try {
-      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=${encodeURIComponent(textToSpeak)}`;
+      const result = await synthesizeReverseEngineeredTTS({
+        provider: 'google',
+        text: textToSpeak,
+        rate: providerSettings.googleSpeed || 1.0,
+        proxyUrl: providerSettings.reverseProxyUrl,
+        gasUrl,
+      });
+
+      const audioUrl = result.blob ? URL.createObjectURL(result.blob) : result.audioUrl!;
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+      if (providerSettings.googleSpeed && providerSettings.googleSpeed !== 1.0) {
+        audio.playbackRate = providerSettings.googleSpeed;
+      }
+
+      audio.onplay = () => {
+        setPlaybackState('playing');
+      };
+      audio.onended = () => {
+        setPlaybackState('idle');
+        if (result.blob) URL.revokeObjectURL(audioUrl);
+        addQuotaUsage('google', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        if (result.blob) URL.revokeObjectURL(audioUrl);
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Google TTS');
+        showToast('Lỗi phát âm thanh từ Google TTS.', 'error');
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      showToast(`Google TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      speakBrowser(textToSpeak);
+    }
+  };
+
+  // Play using Microsoft Edge Neural TTS (hass-edge-tts / rany2/edge-tts Sec-MS-GEC v2)
+  const speakEdge = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (edgeUsedToday + charCount > (providerSettings.edgeDailyLimit || 100000)) {
+      if (providerSettings.autoFallback) {
+        showToast('Edge Neural TTS đã vượt hạn mức ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của Edge Neural TTS.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    const voiceObj = EDGE_VOICES.find(v => v.id === providerSettings.edgeVoiceId);
+    showToast(`Đang tạo giọng đọc Edge Neural (${voiceObj ? voiceObj.name.split(' (')[0] : providerSettings.edgeVoiceId})...`, 'info');
+
+    try {
+      const result = await synthesizeReverseEngineeredTTS({
+        provider: 'edge',
+        text: textToSpeak,
+        voice: providerSettings.edgeVoiceId || 'vi-VN-HoaiMyNeural',
+        rate: providerSettings.edgeRate ?? 1.0,
+        pitch: providerSettings.edgePitch ?? 1.0,
+        volume: providerSettings.volume ?? 1.0,
+        proxyUrl: providerSettings.reverseProxyUrl,
+        gasUrl,
+      });
+
+      if (!result.blob) throw new Error('Không nhận được dữ liệu MP3 từ Edge TTS');
+      const audioUrl = URL.createObjectURL(result.blob);
 
       if (activeAudioRef.current) {
         activeAudioRef.current.pause();
@@ -1187,25 +1314,197 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       activeAudioRef.current = audio;
       audio.volume = providerSettings.volume;
 
-      audio.onplay = () => {
-        setPlaybackState('playing');
-      };
+      audio.onplay = () => setPlaybackState('playing');
       audio.onended = () => {
         setPlaybackState('idle');
-        addQuotaUsage('google', charCount);
+        URL.revokeObjectURL(audioUrl);
+        addQuotaUsage('edge', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
-        addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Google TTS');
-        showToast('Lỗi phát âm thanh từ Google TTS.', 'error');
+        URL.revokeObjectURL(audioUrl);
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã MP3 từ Edge TTS');
+        showToast('Lỗi phát âm thanh từ Edge Neural TTS.', 'error');
       };
 
-      audio.play();
+      await audio.play();
     } catch (err: any) {
       setPlaybackState('idle');
       addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`Google TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      if (providerSettings.autoFallback) {
+        showToast(`Edge TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        speakBrowser(textToSpeak);
+      } else {
+        showToast(`Edge TTS lỗi: ${err.message}`, 'error');
+      }
+    }
+  };
+
+  // Play using CapCut / ByteDance SAMI TTS (CapCut-TTS v1 WS & capcut-tts-api)
+  const speakCapCut = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (capcutUsedToday + charCount > (providerSettings.capcutDailyLimit || 100000)) {
+      if (providerSettings.autoFallback) {
+        showToast('CapCut TTS đã vượt hạn mức ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của CapCut TTS.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    const voiceObj = CAPCUT_VOICES.find(v => v.id === providerSettings.capcutVoiceId);
+    showToast(`Đang tạo giọng CapCut AI (${voiceObj ? voiceObj.name.split(' (')[0] : providerSettings.capcutVoiceId})...`, 'info');
+
+    try {
+      const result = await synthesizeReverseEngineeredTTS({
+        provider: 'capcut',
+        text: textToSpeak,
+        voice: providerSettings.capcutVoiceId || 'BV074_streaming',
+        rate: providerSettings.capcutSpeed ?? 10,
+        pitch: providerSettings.capcutPitch ?? 10,
+        volume: providerSettings.volume ?? 1.0,
+        proxyUrl: providerSettings.reverseProxyUrl,
+        gasUrl,
+      });
+
+      if (!result.blob) throw new Error('Không nhận được dữ liệu âm thanh từ CapCut TTS');
+      const audioUrl = URL.createObjectURL(result.blob);
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+
+      audio.onplay = () => setPlaybackState('playing');
+      audio.onended = () => {
+        setPlaybackState('idle');
+        URL.revokeObjectURL(audioUrl);
+        addQuotaUsage('capcut', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        URL.revokeObjectURL(audioUrl);
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã WAV từ CapCut TTS');
+        showToast('Lỗi phát âm thanh từ CapCut TTS.', 'error');
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      if (providerSettings.autoFallback) {
+        showToast(`CapCut TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        speakBrowser(textToSpeak);
+      } else {
+        showToast(`CapCut TTS lỗi: ${err.message}`, 'error');
+      }
+    }
+  };
+
+  // Play using OpenAI.fm / TTSFM (GPT-4o mini TTS)
+  const speakOpenAIFm = async (textToSpeak: string) => {
+    const charCount = textToSpeak.length;
+    if (openaifmUsedToday + charCount > (providerSettings.openaifmDailyLimit || 50000)) {
+      if (providerSettings.autoFallback) {
+        showToast('OpenAI.fm TTS đã vượt hạn mức ngày. Đang chuyển sang Web Speech API...', 'info');
+        speakBrowser(textToSpeak);
+        return;
+      } else {
+        showToast('Vượt quá hạn mức Quota trong ngày của OpenAI.fm TTS.', 'error');
+        return;
+      }
+    }
+
+    setPlaybackState('playing');
+    showToast(`Đang tạo giọng đọc AI từ OpenAI.fm (${providerSettings.openaifmVoiceId || 'nova'})...`, 'info');
+
+    try {
+      const result = await synthesizeReverseEngineeredTTS({
+        provider: 'openaifm',
+        text: textToSpeak,
+        voice: providerSettings.openaifmVoiceId || 'nova',
+        rate: providerSettings.openaifmSpeed ?? 1.0,
+        prompt: providerSettings.openaifmPrompt || DEFAULT_OPENAIFM_PROMPT,
+        apiKey: providerSettings.openaifmApiKey,
+        endpoint: providerSettings.openaifmEndpoint,
+        proxyUrl: providerSettings.reverseProxyUrl,
+        gasUrl,
+      });
+
+      if (!result.blob) throw new Error('Không nhận được dữ liệu âm thanh từ OpenAI.fm');
+      if (result.fallbackUsed) {
+        showToast(`OpenAI.fm đang bật chống bot, đã tự động chuyển tiếp sang giọng Neural (${result.fallbackUsed})`, 'info');
+      }
+      const audioUrl = URL.createObjectURL(result.blob);
+
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = providerSettings.volume;
+      if (providerSettings.openaifmSpeed && providerSettings.openaifmSpeed !== 1.0) {
+        audio.playbackRate = providerSettings.openaifmSpeed;
+      }
+
+      audio.onplay = () => setPlaybackState('playing');
+      audio.onended = () => {
+        setPlaybackState('idle');
+        URL.revokeObjectURL(audioUrl);
+        addQuotaUsage('openaifm', charCount);
+        addHistoryLog(interpolatedText, 'success');
+      };
+      audio.onerror = () => {
+        setPlaybackState('idle');
+        URL.revokeObjectURL(audioUrl);
+        addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã âm thanh từ OpenAI.fm');
+        showToast('Lỗi phát âm thanh từ OpenAI.fm.', 'error');
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      setPlaybackState('idle');
+      addHistoryLog(interpolatedText, 'failed', err.message);
+      if (providerSettings.autoFallback) {
+        showToast(`OpenAI.fm lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        speakBrowser(textToSpeak);
+      } else {
+        showToast(`OpenAI.fm lỗi: ${err.message}`, 'error');
+      }
+    }
+  };
+
+  // Unified dispatcher for all 9 TTS providers
+  const dispatchSpeak = async (textToSpeak: string, targetProvider?: string) => {
+    const provider = targetProvider || providerSettings.activeProvider;
+    if (provider === 'browser') {
+      speakBrowser(textToSpeak);
+    } else if (provider === 'edge') {
+      await speakEdge(textToSpeak);
+    } else if (provider === 'capcut') {
+      await speakCapCut(textToSpeak);
+    } else if (provider === 'openaifm') {
+      await speakOpenAIFm(textToSpeak);
+    } else if (provider === 'google') {
+      await speakGoogle(textToSpeak);
+    } else if (provider === 'fpt') {
+      await speakFpt(textToSpeak);
+    } else if (provider === 'viettel') {
+      await speakViettel(textToSpeak);
+    } else if (provider === 'zalo') {
+      await speakZalo(textToSpeak);
+    } else if (provider === 'custom') {
+      await speakCustom(textToSpeak);
+    } else {
       speakBrowser(textToSpeak);
     }
   };
@@ -1215,23 +1514,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       showToast('Vui lòng soạn câu nói trước khi nghe thử.', 'error');
       return;
     }
-
-    const provider = providerSettings.activeProvider;
-    const textToSpeak = normalizedTextToSpeak;
-
-    if (provider === 'browser') {
-      speakBrowser(textToSpeak);
-    } else if (provider === 'fpt') {
-      await speakFpt(textToSpeak);
-    } else if (provider === 'viettel') {
-      await speakViettel(textToSpeak);
-    } else if (provider === 'zalo') {
-      await speakZalo(textToSpeak);
-    } else if (provider === 'google') {
-      speakGoogle(textToSpeak);
-    } else if (provider === 'custom') {
-      await speakCustom(textToSpeak);
-    }
+    await dispatchSpeak(normalizedTextToSpeak);
   };
 
   const handleStop = () => {
@@ -1247,34 +1530,55 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
   // Helper to add history record
   const addHistoryLog = (text: string, status: 'success' | 'failed', errMsg?: string) => {
+    const p = providerSettings.activeProvider;
     const newItem: TTSHistoryItem = {
       id: 'hist-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       templateId: selectedTemplateId || undefined,
       text: text,
       normalizedText: normalizedTextToSpeak,
-      providerId: providerSettings.activeProvider,
-      voiceId: providerSettings.activeProvider === 'browser' 
+      providerId: p,
+      voiceId: p === 'browser'
         ? (providerSettings.browserVoiceURI || 'Default vi-VN')
-        : providerSettings.activeProvider === 'fpt' 
-        ? providerSettings.fptVoiceId 
-        : providerSettings.activeProvider === 'viettel' 
+        : p === 'edge'
+        ? providerSettings.edgeVoiceId
+        : p === 'capcut'
+        ? providerSettings.capcutVoiceId
+        : p === 'openaifm'
+        ? providerSettings.openaifmVoiceId
+        : p === 'fpt'
+        ? providerSettings.fptVoiceId
+        : p === 'viettel'
         ? providerSettings.viettelVoiceId
-        : providerSettings.activeProvider === 'zalo' 
-        ? providerSettings.zaloVoiceId 
-        : providerSettings.activeProvider === 'google' 
-        ? 'Google Voice' 
+        : p === 'zalo'
+        ? providerSettings.zaloVoiceId
+        : p === 'google'
+        ? 'Google Translate vi-VN'
         : 'Custom Voice',
-      gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
-      rate: providerSettings.activeProvider === 'browser' 
-        ? providerSettings.rate 
-        : providerSettings.activeProvider === 'fpt' 
-        ? providerSettings.fptSpeed 
-        : providerSettings.activeProvider === 'viettel' 
+      gender: p === 'browser' ? providerSettings.browserGender : 'auto',
+      rate: p === 'browser'
+        ? providerSettings.rate
+        : p === 'edge'
+        ? providerSettings.edgeRate
+        : p === 'capcut'
+        ? providerSettings.capcutSpeed
+        : p === 'openaifm'
+        ? providerSettings.openaifmSpeed
+        : p === 'google'
+        ? providerSettings.googleSpeed
+        : p === 'fpt'
+        ? providerSettings.fptSpeed
+        : p === 'viettel'
         ? providerSettings.viettelSpeed
-        : providerSettings.activeProvider === 'zalo' 
+        : p === 'zalo'
         ? providerSettings.zaloSpeed
         : 1.0,
-      pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
+      pitch: p === 'browser'
+        ? providerSettings.pitch
+        : p === 'edge'
+        ? providerSettings.edgePitch
+        : p === 'capcut'
+        ? providerSettings.capcutPitch
+        : 1.0,
       volume: providerSettings.volume,
       playedAt: new Date().toISOString(),
       status: status,
@@ -1297,6 +1601,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
     const title = composeTitle.trim() || `Mẫu câu #${templates.length + 1}`;
     const id = selectedTemplateId || 'tpl-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    const p = providerSettings.activeProvider;
 
     const newTpl: TTSTemplate = {
       id,
@@ -1304,28 +1609,48 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       category: composeCategory,
       text: composeText,
       variables: parsedVariables,
-      providerId: providerSettings.activeProvider,
-      voiceId: providerSettings.activeProvider === 'browser' 
-        ? providerSettings.browserVoiceURI 
-        : providerSettings.activeProvider === 'fpt' 
-        ? providerSettings.fptVoiceId 
-        : providerSettings.activeProvider === 'viettel' 
+      providerId: p,
+      voiceId: p === 'browser'
+        ? providerSettings.browserVoiceURI
+        : p === 'edge'
+        ? providerSettings.edgeVoiceId
+        : p === 'capcut'
+        ? providerSettings.capcutVoiceId
+        : p === 'openaifm'
+        ? providerSettings.openaifmVoiceId
+        : p === 'fpt'
+        ? providerSettings.fptVoiceId
+        : p === 'viettel'
         ? providerSettings.viettelVoiceId
-        : providerSettings.activeProvider === 'zalo' 
-        ? providerSettings.zaloVoiceId 
+        : p === 'zalo'
+        ? providerSettings.zaloVoiceId
         : '',
-      gender: providerSettings.activeProvider === 'browser' ? providerSettings.browserGender : 'auto',
+      gender: p === 'browser' ? providerSettings.browserGender : 'auto',
       lang: 'vi-VN',
-      rate: providerSettings.activeProvider === 'browser' 
-        ? providerSettings.rate 
-        : providerSettings.activeProvider === 'fpt' 
-        ? providerSettings.fptSpeed 
-        : providerSettings.activeProvider === 'viettel' 
+      rate: p === 'browser'
+        ? providerSettings.rate
+        : p === 'edge'
+        ? providerSettings.edgeRate
+        : p === 'capcut'
+        ? providerSettings.capcutSpeed
+        : p === 'openaifm'
+        ? providerSettings.openaifmSpeed
+        : p === 'google'
+        ? providerSettings.googleSpeed
+        : p === 'fpt'
+        ? providerSettings.fptSpeed
+        : p === 'viettel'
         ? providerSettings.viettelSpeed
-        : providerSettings.activeProvider === 'zalo' 
-        ? providerSettings.zaloSpeed 
+        : p === 'zalo'
+        ? providerSettings.zaloSpeed
         : 1.0,
-      pitch: providerSettings.activeProvider === 'browser' ? providerSettings.pitch : 1.0,
+      pitch: p === 'browser'
+        ? providerSettings.pitch
+        : p === 'edge'
+        ? providerSettings.edgePitch
+        : p === 'capcut'
+        ? providerSettings.capcutPitch
+        : 1.0,
       volume: providerSettings.volume,
       isFavorite: templates.find(t => t.id === id)?.isFavorite || false,
       createdAt: templates.find(t => t.id === id)?.createdAt || new Date().toISOString(),
@@ -1373,25 +1698,31 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     setComposeText(tpl.text);
     setComposeTitle(tpl.title);
     setComposeCategory(tpl.category);
-    
+
     // Apply preset synthesis settings if present
     setProviderSettings((prev: any) => {
-      const isCloudFpt = tpl.providerId === 'fpt';
-      const isCloudViettel = tpl.providerId === 'viettel';
-      const isCloudZalo = tpl.providerId === 'zalo';
-      const isCloudGoogle = tpl.providerId === 'google';
+      const p = tpl.providerId;
       return {
         ...prev,
-        activeProvider: tpl.providerId || prev.activeProvider,
-        volume: tpl.volume,
-        rate: !isCloudFpt && !isCloudViettel && !isCloudZalo && !isCloudGoogle ? tpl.rate : prev.rate,
-        browserVoiceURI: tpl.providerId === 'browser' ? tpl.voiceId : prev.browserVoiceURI,
-        fptVoiceId: isCloudFpt ? tpl.voiceId : prev.fptVoiceId,
-        fptSpeed: isCloudFpt ? tpl.rate : prev.fptSpeed,
-        viettelVoiceId: isCloudViettel ? tpl.voiceId : prev.viettelVoiceId,
-        viettelSpeed: isCloudViettel ? tpl.rate : prev.viettelSpeed,
-        zaloVoiceId: isCloudZalo ? tpl.voiceId : prev.zaloVoiceId,
-        zaloSpeed: isCloudZalo ? tpl.rate : prev.zaloSpeed
+        activeProvider: p || prev.activeProvider,
+        volume: tpl.volume ?? prev.volume,
+        rate: p === 'browser' ? tpl.rate : prev.rate,
+        browserVoiceURI: p === 'browser' ? tpl.voiceId : prev.browserVoiceURI,
+        edgeVoiceId: p === 'edge' && tpl.voiceId ? tpl.voiceId : prev.edgeVoiceId,
+        edgeRate: p === 'edge' && tpl.rate ? tpl.rate : prev.edgeRate,
+        edgePitch: p === 'edge' && tpl.pitch ? tpl.pitch : prev.edgePitch,
+        capcutVoiceId: p === 'capcut' && tpl.voiceId ? tpl.voiceId : prev.capcutVoiceId,
+        capcutSpeed: p === 'capcut' && tpl.rate ? tpl.rate : prev.capcutSpeed,
+        capcutPitch: p === 'capcut' && tpl.pitch ? tpl.pitch : prev.capcutPitch,
+        openaifmVoiceId: p === 'openaifm' && tpl.voiceId ? tpl.voiceId : prev.openaifmVoiceId,
+        openaifmSpeed: p === 'openaifm' && tpl.rate ? tpl.rate : prev.openaifmSpeed,
+        googleSpeed: p === 'google' && tpl.rate ? tpl.rate : prev.googleSpeed,
+        fptVoiceId: p === 'fpt' && tpl.voiceId ? tpl.voiceId : prev.fptVoiceId,
+        fptSpeed: p === 'fpt' ? tpl.rate : prev.fptSpeed,
+        viettelVoiceId: p === 'viettel' && tpl.voiceId ? tpl.voiceId : prev.viettelVoiceId,
+        viettelSpeed: p === 'viettel' ? tpl.rate : prev.viettelSpeed,
+        zaloVoiceId: p === 'zalo' && tpl.voiceId ? tpl.voiceId : prev.zaloVoiceId,
+        zaloSpeed: p === 'zalo' ? tpl.rate : prev.zaloSpeed
       };
     });
 
@@ -1606,17 +1937,23 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           label="Provider chủ đạo" 
           value={
             providerSettings.activeProvider === 'browser' ? 'Browser Native' :
+            providerSettings.activeProvider === 'edge' ? 'Edge Neural AI' :
+            providerSettings.activeProvider === 'capcut' ? 'CapCut SAMI TTS' :
+            providerSettings.activeProvider === 'openaifm' ? 'OpenAI.fm GPT-4o' :
+            providerSettings.activeProvider === 'google' ? 'Google TTS Free' :
             providerSettings.activeProvider === 'fpt' ? 'FPT.AI Cloud' :
             providerSettings.activeProvider === 'viettel' ? 'Viettel AI Cloud' :
-            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Cloud' :
-            providerSettings.activeProvider === 'google' ? 'Google TTS Free' : 'Custom Server'
+            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Cloud' : 'Custom Server'
           } 
           subtext={
             providerSettings.activeProvider === 'browser' ? 'Giọng đọc trình duyệt miễn phí' :
+            providerSettings.activeProvider === 'edge' ? `${providerSettings.edgeVoiceId || 'vi-VN-HoaiMyNeural'} (Miễn phí)` :
+            providerSettings.activeProvider === 'capcut' ? `CapCut (${providerSettings.capcutVoiceId || 'BV074_streaming'})` :
+            providerSettings.activeProvider === 'openaifm' ? `OpenAI.fm (${providerSettings.openaifmVoiceId || 'coral'})` :
+            providerSettings.activeProvider === 'google' ? 'Google Translate Multi-chunk TTS' :
             providerSettings.activeProvider === 'fpt' ? 'Đã kích hoạt FPT' :
             providerSettings.activeProvider === 'viettel' ? 'Đã kích hoạt Viettel' :
-            providerSettings.activeProvider === 'zalo' ? 'Đã kích hoạt Zalo' :
-            providerSettings.activeProvider === 'google' ? 'Google Translate TTS' : providerSettings.customEndpoint
+            providerSettings.activeProvider === 'zalo' ? 'Đã kích hoạt Zalo' : providerSettings.customEndpoint
           }
           hasData={true} 
         />
@@ -1624,32 +1961,41 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           icon={<Database size={18} />} 
           label={
             providerSettings.activeProvider === 'browser' ? 'Browser Quota' :
+            providerSettings.activeProvider === 'edge' ? 'Edge Neural Quota' :
+            providerSettings.activeProvider === 'capcut' ? 'CapCut TTS Quota' :
+            providerSettings.activeProvider === 'openaifm' ? 'OpenAI.fm Quota' :
+            providerSettings.activeProvider === 'google' ? 'Google TTS Quota' :
             providerSettings.activeProvider === 'fpt' ? 'FPT.AI Quota' :
             providerSettings.activeProvider === 'viettel' ? 'Viettel AI Quota' :
-            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Quota' :
-            providerSettings.activeProvider === 'google' ? 'Google TTS Quota' : 'Custom Server'
+            providerSettings.activeProvider === 'zalo' ? 'Zalo AI Quota' : 'Custom Server'
           } 
           value={
             providerSettings.activeProvider === 'browser' ? 'Không giới hạn' :
+            providerSettings.activeProvider === 'edge' ? `${edgeUsedToday} / ${providerSettings.edgeDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'capcut' ? `${capcutUsedToday} / ${providerSettings.capcutDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'openaifm' ? `${openaifmUsedToday} / ${providerSettings.openaifmDailyLimit} kí tự` :
+            providerSettings.activeProvider === 'google' ? `${googleUsedToday} / ${providerSettings.googleDailyLimit} kí tự` :
             providerSettings.activeProvider === 'fpt' ? `${fptUsedToday} / ${providerSettings.fptDailyLimit} kí tự` :
             providerSettings.activeProvider === 'viettel' ? `${viettelUsedToday} / ${providerSettings.viettelDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'zalo' ? `${zaloUsedToday} / ${providerSettings.zaloDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'google' ? `${googleUsedToday} / ${providerSettings.googleDailyLimit} kí tự` : 'Không giới hạn'
+            providerSettings.activeProvider === 'zalo' ? `${zaloUsedToday} / ${providerSettings.zaloDailyLimit} kí tự` : 'Không giới hạn'
           }
           subtext="Số kí tự đã gửi hôm nay"
           hasData={
+            providerSettings.activeProvider === 'edge' ? edgeUsedToday > 0 :
+            providerSettings.activeProvider === 'capcut' ? capcutUsedToday > 0 :
+            providerSettings.activeProvider === 'openaifm' ? openaifmUsedToday > 0 :
+            providerSettings.activeProvider === 'google' ? googleUsedToday > 0 :
             providerSettings.activeProvider === 'fpt' ? fptUsedToday > 0 :
             providerSettings.activeProvider === 'viettel' ? viettelUsedToday > 0 :
-            providerSettings.activeProvider === 'zalo' ? zaloUsedToday > 0 :
-            providerSettings.activeProvider === 'google' ? googleUsedToday > 0 : false
+            providerSettings.activeProvider === 'zalo' ? zaloUsedToday > 0 : false
           } 
         />
         <StatCard 
           icon={<Volume2 size={18} />} 
           label="Tổng phát hôm nay" 
-          value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday} kí tự`} 
-          subtext="Tổng lưu lượng các Cloud Provider"
-          hasData={(fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday) > 0} 
+          value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday + edgeUsedToday + capcutUsedToday + openaifmUsedToday} kí tự`} 
+          subtext="Tổng lưu lượng các Cloud & Neural Provider"
+          hasData={(fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday + edgeUsedToday + capcutUsedToday + openaifmUsedToday) > 0} 
         />
         <StatCard 
           icon={<BookOpen size={18} />} 
@@ -2090,12 +2436,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Đặt bàn");
                     setSelectedTemplateId(null);
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
-                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
-                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
-                    else speakCustom(normalized);
+                    dispatchSpeak(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -2112,12 +2453,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Thu ngân");
                     setSelectedTemplateId(null);
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
-                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
-                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
-                    else speakCustom(normalized);
+                    dispatchSpeak(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -2134,12 +2470,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Chấm công");
                     setSelectedTemplateId(null);
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
-                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
-                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
-                    else speakCustom(normalized);
+                    dispatchSpeak(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -2156,12 +2487,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     setComposeCategory("Lương/Nhân sự");
                     setSelectedTemplateId(null);
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
-                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
-                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
-                    else speakCustom(normalized);
+                    dispatchSpeak(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
                 >
@@ -2185,12 +2511,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
                     const text = textTpl.replace("{bien_so_xe}", cleanPlate);
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
-                    if (providerSettings.activeProvider === 'browser') speakBrowser(normalized);
-                    else if (providerSettings.activeProvider === 'fpt') speakFpt(normalized);
-                    else if (providerSettings.activeProvider === 'viettel') speakViettel(normalized);
-                    else if (providerSettings.activeProvider === 'zalo') speakZalo(normalized);
-                    else if (providerSettings.activeProvider === 'google') speakGoogle(normalized);
-                    else speakCustom(normalized);
+                    dispatchSpeak(normalized);
                   }}
                   style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px', gridColumn: isMobileScreen ? 'auto' : 'span 2' }}
                 >
@@ -2226,12 +2547,19 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       onChange={e => setProviderSettings((prev: any) => ({ ...prev, activeProvider: e.target.value }))}
                       style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
-                      <option value="browser">🌐 Browser Speech API (Miễn phí)</option>
-                      <option value="fpt">⚡ FPT.AI Text to Speech (Cloud)</option>
-                      <option value="viettel">🎖️ Viettel AI Text to Speech (Cloud)</option>
-                      <option value="zalo">💬 Zalo AI Text to Speech (Cloud)</option>
-                      <option value="google">🔍 Google TTS (Miễn phí, Không Key)</option>
-                      <option value="custom">🛠️ Custom Endpoint Server (Tự host)</option>
+                      <optgroup label="🌟 Nguồn Reverse-Engineered (Miễn phí, Không cần API Key)">
+                        <option value="edge">🧠 Microsoft Edge Neural TTS (Hoài My / Nam Minh - Khuyên dùng)</option>
+                        <option value="capcut">🎬 CapCut / ByteDance SAMI TTS (18 Giọng Việt TikTok/CapCut)</option>
+                        <option value="openaifm">🤖 OpenAI.fm / TTSFM (GPT-4o-mini-tts + Prompt Cảm xúc)</option>
+                        <option value="google">🔍 Google Translate TTS (Multi-chunk Nâng cao, Không Key)</option>
+                      </optgroup>
+                      <optgroup label="☁️ Nguồn Trình duyệt & Cloud API Chính thức">
+                        <option value="browser">🌐 Browser Speech API (Nội bộ trình duyệt)</option>
+                        <option value="fpt">⚡ FPT.AI Text to Speech (Cloud API Key)</option>
+                        <option value="viettel">🎖️ Viettel AI Text to Speech (Cloud Token)</option>
+                        <option value="zalo">💬 Zalo AI Text to Speech (Cloud API Key)</option>
+                        <option value="custom">🛠️ Custom Endpoint Server (Tự host)</option>
+                      </optgroup>
                     </select>
                   </div>
 
@@ -2244,9 +2572,236 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoFallback: e.target.checked }))}
                         style={{ accentColor: 'var(--cyan)' }}
                       />
-                      <span>Tự động Fallback sang Browser khi cloud lỗi</span>
+                      <span>Tự động Fallback sang nguồn dự phòng (Google/Browser) khi lỗi</span>
                     </label>
                   </div>
+
+                  {/* 1. Microsoft Edge Read-Aloud Neural TTS */}
+                  {providerSettings.activeProvider === 'edge' && (
+                    <>
+                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.76rem', display: 'flex', gap: '8px', color: '#60a5fa', lineHeight: 1.45 }}>
+                        <Sparkles size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>
+                          <strong>Microsoft Edge Read-Aloud Neural TTS (DRM Sec-MS-GEC v2):</strong> Sử dụng trực tiếp giọng đọc Neural chất lượng cao nhất của Microsoft Azure (Hoài My & Nam Minh) hoàn toàn miễn phí, không cần tài khoản Azure.
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Chọn giọng đọc (Edge Neural Voices)</label>
+                        <select 
+                          className="form-control"
+                          value={providerSettings.edgeVoiceId || 'vi-VN-HoaiMyNeural'}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeVoiceId: e.target.value }))}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                        >
+                          {EDGE_VOICES.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">
+                            Tốc độ đọc (Rate): {providerSettings.edgeRate >= 0 ? `+${providerSettings.edgeRate}%` : `${providerSettings.edgeRate}%`}
+                          </label>
+                          <input 
+                            type="range" 
+                            min="-50" 
+                            max="50" 
+                            step="5"
+                            value={providerSettings.edgeRate || 0} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeRate: parseInt(e.target.value, 10) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">
+                            Cao độ (Pitch): {providerSettings.edgePitch >= 0 ? `+${providerSettings.edgePitch}Hz` : `${providerSettings.edgePitch}Hz`}
+                          </label>
+                          <input 
+                            type="range" 
+                            min="-30" 
+                            max="30" 
+                            step="2"
+                            value={providerSettings.edgePitch || 0} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgePitch: parseInt(e.target.value, 10) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Hạn mức an toàn hàng ngày (Kí tự)</label>
+                        <input 
+                          type="number" 
+                          className="form-control"
+                          value={providerSettings.edgeDailyLimit || 100000}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeDailyLimit: parseInt(e.target.value, 10) || 100000 }))}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* 2. CapCut / ByteDance SAMI TTS */}
+                  {providerSettings.activeProvider === 'capcut' && (
+                    <>
+                      <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.25)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.76rem', display: 'flex', gap: '8px', color: '#c084fc', lineHeight: 1.45 }}>
+                        <Sparkles size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>
+                          <strong>CapCut / ByteDance SAMI WebSocket TTS:</strong> Tổng hợp 18 giọng tiếng Việt độc quyền của CapCut & TikTok (Cô gái Hoạt ngôn, Anh Dũng, Cute Girl, Giọng Bắc/Nam/Huế Uranus BigTTS) qua kết nối WebSocket 24kHz WAV, không cần tài khoản.
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Chọn giọng đọc (CapCut / TikTok Voices)</label>
+                        <select 
+                          className="form-control"
+                          value={providerSettings.capcutVoiceId || 'BV074_streaming'}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutVoiceId: e.target.value }))}
+                          style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                        >
+                          {Array.from(new Set(CAPCUT_VOICES.map(v => v.group))).map(groupName => (
+                            <optgroup key={groupName} label={groupName}>
+                              {CAPCUT_VOICES.filter(v => v.group === groupName).map(v => (
+                                <option key={v.id} value={v.id}>{v.name}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">
+                            Tốc độ đọc (Speech Rate): {((providerSettings.capcutSpeed || 10) / 10).toFixed(1)}x ({providerSettings.capcutSpeed || 10}/20)
+                          </label>
+                          <input 
+                            type="range" 
+                            min="5" 
+                            max="20" 
+                            step="1"
+                            value={providerSettings.capcutSpeed || 10} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutSpeed: parseInt(e.target.value, 10) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">
+                            Cao độ (Pitch Rate): {((providerSettings.capcutPitch || 10) / 10).toFixed(1)}x ({providerSettings.capcutPitch || 10}/20)
+                          </label>
+                          <input 
+                            type="range" 
+                            min="5" 
+                            max="20" 
+                            step="1"
+                            value={providerSettings.capcutPitch || 10} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutPitch: parseInt(e.target.value, 10) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Hạn mức an toàn hàng ngày (Kí tự)</label>
+                        <input 
+                          type="number" 
+                          className="form-control"
+                          value={providerSettings.capcutDailyLimit || 50000}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutDailyLimit: parseInt(e.target.value, 10) || 50000 }))}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* 3. OpenAI.fm / TTSFM (gpt-4o-mini-tts) */}
+                  {providerSettings.activeProvider === 'openaifm' && (
+                    <>
+                      <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.76rem', display: 'flex', gap: '8px', color: '#34d399', lineHeight: 1.45 }}>
+                        <Sparkles size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>
+                          <strong>OpenAI.fm / TTSFM (GPT-4o-mini-tts):</strong> Cho phép điều khiển ngữ điệu và cảm xúc qua Prompt (Vibe). Tự động chuyển mạch liền mạch sang Edge Neural TTS nếu máy chủ công cộng `openai.fm` bật chống bot (HTTP 429 Challenge).
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Chọn giọng (OpenAI Voices)</label>
+                          <select 
+                            className="form-control"
+                            value={providerSettings.openaifmVoiceId || 'coral'}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmVoiceId: e.target.value }))}
+                            style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                          >
+                            {OPENAIFM_VOICES.map(v => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Tốc độ đọc: {providerSettings.openaifmSpeed || 1.0}x</label>
+                          <input 
+                            type="range" 
+                            min="0.7" 
+                            max="1.5" 
+                            step="0.05"
+                            value={providerSettings.openaifmSpeed || 1.0} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmSpeed: parseFloat(e.target.value) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)', marginTop: '8px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Prompt chỉ dẫn cảm xúc & ngữ điệu (Vibe / Instructions)</label>
+                        <textarea 
+                          className="form-control"
+                          rows={2}
+                          value={providerSettings.openaifmPrompt || DEFAULT_OPENAIFM_PROMPT}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmPrompt: e.target.value }))}
+                          placeholder="Mô tả phong cách giọng đọc tiếng Việt..."
+                          style={{ fontSize: '0.82rem', lineHeight: 1.4 }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Endpoint (OpenAI.fm hoặc TTSFM Docker)</label>
+                          <input 
+                            type="text" 
+                            className="form-control"
+                            value={providerSettings.openaifmEndpoint || 'https://www.openai.fm/api/generate'}
+                            placeholder="https://www.openai.fm/api/generate hoặc http://localhost:8000/v1/audio/speech"
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmEndpoint: e.target.value }))}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">API Key (Tùy chọn nếu dùng OpenAI/TTSFM)</label>
+                          <input 
+                            type="password" 
+                            className="form-control"
+                            value={providerSettings.openaifmApiKey || ''}
+                            placeholder="Không bắt buộc với openai.fm"
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmApiKey: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Hạn mức an toàn hàng ngày (Kí tự)</label>
+                        <input 
+                          type="number" 
+                          className="form-control"
+                          value={providerSettings.openaifmDailyLimit || 30000}
+                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmDailyLimit: parseInt(e.target.value, 10) || 30000 }))}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   {/* Browser settings */}
                   {providerSettings.activeProvider === 'browser' && (
@@ -2616,17 +3171,32 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     <>
                       <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#34d399' }}>
                         <Info size={16} style={{ flexShrink: 0 }} />
-                        <span>💡 Google TTS hoàn toàn miễn phí, sử dụng giọng nói tiếng Việt chuẩn mà không cần API Key hay cấu hình tài khoản.</span>
+                        <span>💡 Google Translate TTS (Multi-chunk Nâng cao): Tự động tách câu dài (&gt;180 ký tự) theo dấu câu, hỗ trợ chỉnh tốc độ phát và tự động dự phòng qua Proxy / No-Referer.</span>
                       </div>
 
-                      <div className="form-group">
-                        <label className="form-label">Hạn mức hàng ngày (Kí tự)</label>
-                        <input 
-                          type="number" 
-                          className="form-control"
-                          value={providerSettings.googleDailyLimit}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
-                        />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Tốc độ đọc (Playback Speed): {providerSettings.googleSpeed || 1.0}x</label>
+                          <input 
+                            type="range" 
+                            min="0.6" 
+                            max="1.5" 
+                            step="0.05"
+                            value={providerSettings.googleSpeed || 1.0} 
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleSpeed: parseFloat(e.target.value) }))}
+                            style={{ width: '100%', accentColor: 'var(--cyan)', marginTop: '8px' }}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Hạn mức hàng ngày (Kí tự)</label>
+                          <input 
+                            type="number" 
+                            className="form-control"
+                            value={providerSettings.googleDailyLimit}
+                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleDailyLimit: parseInt(e.target.value, 10) || 20000 }))}
+                          />
+                        </div>
                       </div>
                     </>
                   )}
@@ -2644,6 +3214,23 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       />
                       <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '4px', lineHeight: 1.3 }}>
                         Endpoint nhận tham số `?text=` và trả về luồng âm thanh trực tiếp (WAV/MP3).
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Reverse Proxy URL (for Edge / CapCut / OpenAI.fm / Google when deployed on static hosting) */}
+                  {(['edge', 'capcut', 'openaifm', 'google'].includes(providerSettings.activeProvider)) && (
+                    <div className="form-group">
+                      <label className="form-label">Reverse Proxy URL (Tùy chọn - Mặc định dùng `/api/tts-proxy` hoặc GAS)</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={providerSettings.reverseProxyUrl || ''}
+                        placeholder="Để trống để dùng Vite Proxy (/api/tts-proxy) hoặc nhập Cloudflare Worker URL"
+                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, reverseProxyUrl: e.target.value }))}
+                      />
+                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '4px', lineHeight: 1.3 }}>
+                        Mặc định hệ thống tự động kết nối qua `/api/tts-proxy` (Vite server) hoặc `CloudflareWorkerHikvision.js` / `gas_backend.gs`.
                       </span>
                     </div>
                   )}
@@ -2682,7 +3269,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         ...prev,
                         fptApiKey: '',
                         viettelToken: '',
-                        zaloApiKey: ''
+                        zaloApiKey: '',
+                        openaifmApiKey: ''
                       }));
                       showToast('Đã xóa toàn bộ API Key khỏi bộ nhớ trình duyệt!', 'info');
                     }}
@@ -2751,12 +3339,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       setComposeText(item.text);
                       setSelectedTemplateId(item.templateId || null);
                       setMainTab('broadcast');
-                      if (item.providerId === 'browser') speakBrowser(item.normalizedText);
-                      else if (item.providerId === 'google') speakGoogle(item.normalizedText);
-                      else if (item.providerId === 'fpt') speakFpt(item.normalizedText);
-                      else if (item.providerId === 'viettel') speakViettel(item.normalizedText);
-                      else if (item.providerId === 'zalo') speakZalo(item.normalizedText);
-                      else speakCustom(item.normalizedText);
+                      dispatchSpeak(item.normalizedText, item.providerId);
                     }}
                     className="primary"
                     style={{ 
@@ -2795,9 +3378,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         <ol style={{ fontSize: '0.85rem', color: 'var(--muted)', paddingLeft: '1.25rem', lineHeight: 1.6, margin: 0 }}>
           <li>Nhập nội dung mẫu câu cần nói ở khung soạn thảo hoặc chọn nhanh từ thư viện bên trái.</li>
           <li>Bạn có thể chèn biến động dạng <code style={{ color: 'var(--cyan)' }}>&#123;ten_khach&#125;</code> để điền nhanh nội dung động cho khách hàng.</li>
-          <li>Chọn provider phát âm mong muốn: <strong>Web Speech API</strong> (Miễn phí, chạy nội bộ), <strong>FPT.AI Cloud</strong>, hoặc <strong>Viettel AI Cloud</strong>.</li>
+          <li>Chọn provider phát âm mong muốn: <strong>Edge Neural TTS</strong> (Hoài My / Nam Minh), <strong>CapCut SAMI TTS</strong> (18 giọng TikTok/CapCut), <strong>OpenAI.fm GPT-4o</strong>, <strong>Google Multi-chunk TTS</strong>, hoặc các Cloud API (FPT.AI / Viettel / Zalo).</li>
           <li>Điều chỉnh tốc độ và cao độ giọng đọc phù hợp với không gian nhà hàng của bạn.</li>
-          <li>Bấm <strong>"Nghe thử giọng"</strong> để bắt đầu phát âm thanh. Trình duyệt sẽ tự động fallback sang nguồn miễn phí nếu FPT/Viettel bị lỗi hoặc hết Quota.</li>
+          <li>Bấm <strong>"Nghe thử giọng"</strong> để bắt đầu phát âm thanh. Hệ thống tự động fallback sang nguồn miễn phí nếu Cloud bị lỗi hoặc hết Quota.</li>
           <li>Bấm <strong>"Lưu lại"</strong> để lưu mẫu câu vào cơ sở dữ liệu local và đồng bộ lên Spreadsheet.</li>
         </ol>
       </div>
