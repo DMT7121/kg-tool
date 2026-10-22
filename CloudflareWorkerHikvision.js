@@ -669,13 +669,15 @@ async function handleTtsProxy(data) {
         method: "POST",
         headers: {
           "Appvr": "5.8.0",
+          "Content-Type": "application/json",
           "Device-Time": deviceTime,
           "Origin": "https://www.capcut.com",
           "Pf": "7",
           "Sign": sign,
           "Sign-Ver": "1",
-          "User-Agent": "Mozilla/5.0"
-        }
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        body: JSON.stringify({ scenes: ["normal"] })
       });
       const tokenJson = await tokenRes.json();
       const token = tokenJson?.data?.token;
@@ -683,7 +685,11 @@ async function handleTtsProxy(data) {
       if (!token || !appKey) throw new Error("Không lấy được token CapCut");
 
       const wsResp = await fetch("https://sami-sg1.byteintlapi.com/internal/api/v1/ws", {
-        headers: { Upgrade: "websocket" }
+        headers: {
+          Upgrade: "websocket",
+          Origin: "https://www.capcut.com",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
       });
       const ws = wsResp.webSocket;
       if (!ws) throw new Error("Không mở được WebSocket tới CapCut SAMI");
@@ -691,23 +697,55 @@ async function handleTtsProxy(data) {
 
       const audioBuffer = await new Promise((resolve, reject) => {
         const chunks = [];
+        const timer = setTimeout(() => {
+          try { ws.close(); } catch {}
+          chunks.length > 0 ? resolve(chunks) : reject(new Error("CapCut WS timeout"));
+        }, 15000);
+
         ws.addEventListener("message", (ev) => {
           if (typeof ev.data === "string") {
             try {
               const p = JSON.parse(ev.data);
               if (p.event === "TaskFinished") {
+                clearTimeout(timer);
                 ws.close();
                 resolve(chunks);
-              } else if (p.event === "TaskFailed") {
+              } else if (p.event === "TaskFailed" || (p.status_code && p.status_code >= 400)) {
+                clearTimeout(timer);
                 ws.close();
                 reject(new Error(p.status_text || "CapCut TaskFailed"));
               }
             } catch {}
-          } else if (ev.data instanceof ArrayBuffer) {
-            chunks.push(new Uint8Array(ev.data));
+          } else if (ev.data) {
+            const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
+            if (u8.byteLength > 0 && u8[0] === 0x7b && u8[u8.byteLength - 1] === 0x7d) {
+              try {
+                const txt = new TextDecoder().decode(u8);
+                const p = JSON.parse(txt);
+                if (p.event === "TaskFinished") {
+                  clearTimeout(timer);
+                  ws.close();
+                  resolve(chunks);
+                  return;
+                } else if (p.event === "TaskFailed" || (p.status_code && p.status_code >= 400)) {
+                  clearTimeout(timer);
+                  ws.close();
+                  reject(new Error(p.status_text || "CapCut TaskFailed"));
+                  return;
+                }
+              } catch {}
+            }
+            chunks.push(u8);
           }
         });
-        ws.addEventListener("error", (e) => reject(new Error(e.message || "WS Error")));
+        ws.addEventListener("close", () => {
+          clearTimeout(timer);
+          if (chunks.length > 0) resolve(chunks);
+        });
+        ws.addEventListener("error", (e) => {
+          clearTimeout(timer);
+          reject(new Error(e.message || "WS Error"));
+        });
         ws.send(JSON.stringify({
           token,
           appkey: appKey,
@@ -756,39 +794,56 @@ async function handleTtsProxy(data) {
       }
     });
     const ws = wsResp.webSocket;
-    if (!ws) throw new Error("Edge TTS WebSocket upgrade failed");
+    if (!ws) throw new Error(`Edge TTS WebSocket upgrade failed (HTTP ${wsResp.status})`);
     ws.accept();
 
-    const ratePct = Math.round((Number(data.rate ?? 1.0) - 1.0) * 100);
+    const rateVal = Number(data.rate ?? 0);
+    const ratePct = Math.abs(rateVal) <= 3 && rateVal !== 0 ? Math.round((rateVal - 1.0) * 100) : Math.round(rateVal);
     const rateStr = `${ratePct >= 0 ? "+" : ""}${ratePct}%`;
-    const pitchHz = Math.round((Number(data.pitch ?? 1.0) - 1.0) * 50);
+    const pitchVal = Number(data.pitch ?? 0);
+    const pitchHz = Math.abs(pitchVal) <= 2 && pitchVal !== 0 ? Math.round((pitchVal - 1.0) * 50) : Math.round(pitchVal);
     const pitchStr = `${pitchHz >= 0 ? "+" : ""}${pitchHz}Hz`;
 
     const mp3Chunks = await new Promise((resolve, reject) => {
       const chunks = [];
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch {}
+        chunks.length > 0 ? resolve(chunks) : reject(new Error("Edge TTS WS timeout"));
+      }, 15000);
+
       ws.addEventListener("message", (ev) => {
         if (typeof ev.data === "string") {
           if (ev.data.includes("Path:turn.end")) {
+            clearTimeout(timer);
             ws.close();
             resolve(chunks);
           }
-        } else if (ev.data instanceof ArrayBuffer) {
-          const view = new DataView(ev.data);
-          if (ev.data.byteLength > 2) {
-            const hLen = view.getUint16(0, false);
-            if (ev.data.byteLength > 2 + hLen) {
-              chunks.push(new Uint8Array(ev.data, 2 + hLen));
+        } else if (ev.data) {
+          const buf = ev.data instanceof ArrayBuffer ? ev.data : ev.data.buffer;
+          const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(buf);
+          if (u8.byteLength > 2) {
+            const hLen = (u8[0] << 8) | u8[1];
+            if (u8.byteLength > 2 + hLen) {
+              chunks.push(u8.subarray(2 + hLen));
             }
           }
         }
       });
-      ws.addEventListener("error", (e) => reject(new Error(e.message || "Edge WS Error")));
+      ws.addEventListener("close", () => {
+        clearTimeout(timer);
+        if (chunks.length > 0) resolve(chunks);
+      });
+      ws.addEventListener("error", (e) => {
+        clearTimeout(timer);
+        reject(new Error(e.message || "Edge WS Error"));
+      });
 
-      ws.send(`X-Timestamp:${new Date().toString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+      const ts = new Date().toUTCString();
+      ws.send(`X-Timestamp:${ts}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
       const reqId = crypto.randomUUID().replace(/-/g, "");
       const safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='vi-VN'><voice name='${voice}'><prosody pitch='${pitchStr}' rate='${rateStr}' volume='+0%'>${safeText}</prosody></voice></speak>`;
-      ws.send(`X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${new Date().toString()}Z\r\nPath:ssml\r\n\r\n${ssml}`);
+      ws.send(`X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${ts}Z\r\nPath:ssml\r\n\r\n${ssml}`);
     });
 
     const totalLen = mp3Chunks.reduce((s, c) => s + c.byteLength, 0);
