@@ -312,8 +312,10 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     return () => window.removeEventListener('kg_open_payroll_config', handleOpenConfig);
   }, []);
   
-  const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>('current');
-  const [paperSize, setPaperSize] = useState<'a4' | 'k80'>('a4');
+  const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>(() => (localStorage.getItem('kg_tool_print_scope') as 'current' | 'all' | 'selected') || 'current');
+  const [paperSize, setPaperSize] = useState<'a4' | 'k80'>(() => (localStorage.getItem('kg_tool_paper_size') as 'a4' | 'k80') || 'a4');
+  const [activeQuickPreset, setActiveQuickPreset] = useState<'full' | 'compact' | 'internal' | 'k80'>(() => (localStorage.getItem('kg_tool_quick_preset') as 'full' | 'compact' | 'internal' | 'k80') || 'full');
+  const [activeTypoPreset, setActiveTypoPreset] = useState<'modern' | 'admin' | 'minimalist' | 'luxury' | 'k80'>(() => (localStorage.getItem('kg_tool_typo_preset') as 'modern' | 'admin' | 'minimalist' | 'luxury' | 'k80') || 'admin');
 
   const [thermalOptions, setThermalOptions] = useState(() => {
     const saved = localStorage.getItem('kg_tool_thermal_options');
@@ -416,9 +418,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         setDefaultPosition(data.defaultPosition || 'Nhân viên');
         setDefaultDept(data.defaultDept || 'Nhân sự');
         setAdvance(Number(data.advance) || 0);
-        setEmployees(data.employees || []);
+        const loadedEmployees: Employee[] = data.employees || [];
+        setEmployees(loadedEmployees);
+        setSelectedEmployeeIds(new Set(loadedEmployees.map(e => e.id)));
         setDeductions(data.deductions || []);
-        setActiveTemplate(data.activeTemplate || 'standard');
+        const tpl = data.activeTemplate || 'standard';
+        setActiveTemplate(tpl);
+        if (tpl === 'k80') {
+          setPaperSize('k80');
+        }
       } catch (e) {
         console.error(e);
         setEmployees([]);
@@ -426,6 +434,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       }
     }
   }, []);
+
+  // Sync paperSize with activeTemplate
+  useEffect(() => {
+    if (activeTemplate === 'k80' && paperSize !== 'k80') {
+      setPaperSize('k80');
+    } else if (activeTemplate !== 'k80' && paperSize === 'k80') {
+      setPaperSize('a4');
+    }
+  }, [activeTemplate]);
 
   // Save changes to local draft on state adjustment
   useEffect(() => {
@@ -456,7 +473,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     localStorage.setItem('kg_tool_currency_separator', currencySeparator);
     localStorage.setItem('kg_tool_round_mode', roundMode);
     localStorage.setItem('kg_tool_preview_mode', previewMode);
-  }, [selectedFont, fontSizeTitle, fontSizeContent, fontSizeTable, titleWeight, visibility, currencySymbol, currencySeparator, roundMode, previewMode]);
+    localStorage.setItem('kg_tool_print_scope', printScope);
+    localStorage.setItem('kg_tool_paper_size', paperSize);
+    localStorage.setItem('kg_tool_quick_preset', activeQuickPreset);
+    localStorage.setItem('kg_tool_typo_preset', activeTypoPreset);
+  }, [selectedFont, fontSizeTitle, fontSizeContent, fontSizeTable, titleWeight, visibility, currencySymbol, currencySeparator, roundMode, previewMode, printScope, paperSize, activeQuickPreset, activeTypoPreset]);
 
   // Dynamic Google Font Injection in the Browser Head
   const getGoogleFontsImport = () => {
@@ -1346,6 +1367,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
   // Preset apply helpers
   const applyPreset = (preset: 'full' | 'compact' | 'internal' | 'k80') => {
+    setActiveQuickPreset(preset);
     if (preset === 'full') {
       setVisibility({
         showLogo: true,
@@ -1398,6 +1420,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         showNotes: true
       });
     } else if (preset === 'k80') {
+      setPaperSize('k80');
+      setActiveTemplate('k80');
       setVisibility({
         showLogo: false,
         showUnitInfo: false,
@@ -1418,6 +1442,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   };
 
   const applyTypographyPreset = (preset: 'modern' | 'admin' | 'minimalist' | 'luxury' | 'k80') => {
+    setActiveTypoPreset(preset);
     if (preset === 'modern') {
       setSelectedFont('Inter');
       setFontSizeTitle(28);
@@ -1861,38 +1886,58 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (salaryMode === 'restaurant') {
       const details = getRestaurantDetails(emp);
       const elements: string[] = [];
-      let currentY = 10;
+      let currentY = 8;
+
+      if (visibility.showUnitInfo) {
+        elements.push(`
+          <text x="160" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000000" text-anchor="middle">NHÀ HÀNG KINGS GRILL</text>
+        `);
+        currentY += 18;
+      }
 
       // Header Banner
-      elements.push(`
-        <rect x="10" y="${currentY}" width="300" height="35" fill="#3b82f6" rx="4"/>
-        <text x="160" y="${currentY + 22}" font-family="'${selectedFont}', sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">PHIẾU LƯƠNG NHÂN VIÊN</text>
-      `);
-      currentY += 45;
+      if (visibility.showTitle) {
+        const bannerHeight = visibility.showMetaInfo ? 40 : 32;
+        elements.push(`
+          <rect x="8" y="${currentY}" width="304" height="${bannerHeight}" fill="#2563eb" rx="4" stroke="#1e3a8a" stroke-width="1"/>
+          <text x="160" y="${currentY + (visibility.showMetaInfo ? 17 : 20)}" font-family="'${selectedFont}', sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">PHIẾU LƯƠNG NHÂN VIÊN</text>
+          ${visibility.showMetaInfo ? `<text x="160" y="${currentY + 32}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-weight="600" fill="#dbeafe" text-anchor="middle">${escapeHtml(mLabel)}</text>` : ''}
+        `);
+        currentY += bannerHeight + 8;
+      }
 
       // Employee Info Row
-      elements.push(`
-        <text x="10" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11.5" font-weight="bold" fill="#000000">Họ và tên nhân viên:</text>
-        <text x="310" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11.5" font-weight="bold" fill="#dc2626" text-anchor="end">${escapeHtml(emp.name)}</text>
-      `);
-      currentY += 22;
+      if (visibility.showEmpName) {
+        elements.push(`
+          <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11" font-weight="bold" fill="#000000">Họ và tên NV:</text>
+          <text x="312" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11.5" font-weight="bold" fill="#dc2626" text-anchor="end">${escapeHtml(emp.name)}</text>
+        `);
+        currentY += 20;
+      }
 
       // Dashed Line
       elements.push(`
-        <line x1="10" y1="${currentY}" x2="310" y2="${currentY}" stroke="#000000" stroke-width="1" stroke-dasharray="4, 3" />
+        <line x1="8" y1="${currentY}" x2="312" y2="${currentY}" stroke="#000000" stroke-width="1" stroke-dasharray="4, 3" />
       `);
-      currentY += 10;
+      currentY += 8;
 
       // Table Rows
-      const tableRows: { label: string; val: string; isBold?: boolean }[] = [
-        { label: "Ngày cộng thêm (lễ, bù ngày off)", val: String(emp.addedDays !== undefined ? emp.addedDays : 0) },
-        { label: "Tổng giờ làm/tháng", val: String(emp.totalHours !== undefined ? emp.totalHours : 0) },
-        { label: "Số ngày làm/tháng", val: String(emp.workedDays !== undefined ? emp.workedDays : emp.days) },
-        { label: "Mức lương hiện tại", val: formatMoney(emp.salary) },
+      const tableRows: { label: string; val: string; isBold?: boolean }[] = [];
+      if (visibility.showTime) {
+        tableRows.push(
+          { label: "Ngày cộng thêm (lễ, bù ngày off)", val: String(emp.addedDays !== undefined ? emp.addedDays : 0) },
+          { label: "Tổng giờ làm/tháng", val: String(emp.totalHours !== undefined ? emp.totalHours : 0) },
+          { label: "Số ngày làm/tháng", val: String(emp.workedDays !== undefined ? emp.workedDays : emp.days) }
+        );
+      }
+      if (visibility.showBaseSalary) {
+        tableRows.push({ label: "Mức lương hiện tại", val: formatMoney(emp.salary) });
+      }
+      tableRows.push(
         { label: "QUY ĐỔI (LƯƠNG/GIỜ)", val: formatMoney(details.quyDoi) },
-        { label: "LƯƠNG  THEO GIỜ", val: formatMoney(details.luongTheoGio) },
-        { label: "TIỀN CƠM (  + )", val: formatMoney(details.tienCom) }
-      ];
+        { label: "LƯƠNG THEO GIỜ", val: formatMoney(details.luongTheoGio) },
+        { label: "TIỀN CƠM ( + )", val: formatMoney(details.tienCom) }
+      );
 
       // Add optional THƯỞNG
       if (details.thuong > 0) {
@@ -1900,7 +1945,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       }
 
       // Add TĂNG CA, ĐỔ BỂ, TỔNG NHẬN
-      tableRows.push({ label: "TĂNG CA ( +)", val: formatMoney(details.tangCa) });
+      tableRows.push({ label: "TĂNG CA ( + )", val: formatMoney(details.tangCa) });
       if (details.tamUng > 0) {
         tableRows.push({ label: "TẠM ỨNG ( - )", val: `-${formatMoney(details.tamUng)}` });
       }
@@ -1908,84 +1953,91 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       tableRows.push({ label: "TỔNG NHẬN", val: formatMoney(details.tongNhan), isBold: true });
 
       const tableStartY = currentY;
-      const rowHeight = 25;
+      const rowHeight = 24;
       
       tableRows.forEach((r, idx) => {
         const rowY = tableStartY + idx * rowHeight;
         
+        if (r.isBold) {
+          elements.push(`<rect x="8" y="${rowY}" width="304" height="${rowHeight}" fill="#f1f5f9" />`);
+        }
+
         // top line of cell
-        elements.push(`<line x1="10" y1="${rowY}" x2="310" y2="${rowY}" stroke="#000000" stroke-width="0.8" />`);
+        elements.push(`<line x1="8" y1="${rowY}" x2="312" y2="${rowY}" stroke="#000000" stroke-width="0.8" />`);
         
         // Label
-        const fontW = r.isBold ? "bold" : "normal";
-        const textCol = r.isBold ? "#000000" : "#334155";
+        const fontW = r.isBold ? "bold" : "600";
+        const textCol = r.isBold ? "#000000" : "#1e293b";
         elements.push(`
-          <text x="16" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="${fontW}" fill="${textCol}">${escapeHtml(r.label)}</text>
+          <text x="13" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="10.2" font-weight="${fontW}" fill="${textCol}">${escapeHtml(r.label)}</text>
         `);
         
         // Value
         elements.push(`
-          <text x="304" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="11" font-weight="${fontW}" fill="#000000" text-anchor="end">${escapeHtml(r.val)}</text>
+          <text x="307" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="${r.isBold ? '11.5' : '10.8'}" font-weight="bold" fill="${r.isBold ? '#dc2626' : '#000000'}" text-anchor="end">${escapeHtml(r.val)}</text>
         `);
       });
 
       const tableEndY = tableStartY + tableRows.length * rowHeight;
       // bottom line of table
-      elements.push(`<line x1="10" y1="${tableEndY}" x2="310" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
+      elements.push(`<line x1="8" y1="${tableEndY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
 
-      // Vertical lines
-      elements.push(`<line x1="10" y1="${tableStartY}" x2="10" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
-      elements.push(`<line x1="235" y1="${tableStartY}" x2="235" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
-      elements.push(`<line x1="310" y1="${tableStartY}" x2="310" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
+      // Vertical lines (col divider at x=216 gives 96px for currency amounts)
+      elements.push(`<line x1="8" y1="${tableStartY}" x2="8" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
+      elements.push(`<line x1="216" y1="${tableStartY}" x2="216" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
+      elements.push(`<line x1="312" y1="${tableStartY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
 
-      currentY = tableEndY + 15;
+      currentY = tableEndY + 12;
 
       // Optional signatures/notes
       const wordsText = numberToVietnamese(details.tongNhan);
       const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
       if (hasNotes) {
         elements.push(`
-          <text x="10" y="${currentY + 10}" font-family="'${selectedFont}', sans-serif" font-size="10" font-style="italic" fill="#000000">Bằng chữ:</text>
-          <rect x="10" y="${currentY + 18}" width="300" height="38" fill="#f8fafc" rx="4" stroke="#e2e8f0" stroke-width="1"/>
-          <text x="15" y="${currentY + 31}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569">
+          <text x="8" y="${currentY + 10}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-style="italic" fill="#000000">Bằng chữ:</text>
+          <rect x="8" y="${currentY + 16}" width="304" height="36" fill="#f8fafc" rx="4" stroke="#cbd5e1" stroke-width="0.8"/>
+          <text x="13" y="${currentY + 29}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">
             ${escapeHtml(wordsText.substring(0, 48))}
           </text>
-          <text x="15" y="${currentY + 44}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569">
+          <text x="13" y="${currentY + 42}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">
             ${escapeHtml(wordsText.substring(48))}
           </text>
         `);
-        currentY += 65;
+        currentY += 58;
       }
 
       const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
       if (showSignatures) {
         elements.push(`
-          <text x="160" y="${currentY + 12}" text-anchor="middle" font-size="9.5" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
+          <text x="160" y="${currentY + 10}" text-anchor="middle" font-size="9.5" font-family="'${selectedFont}', sans-serif" fill="#475569">${escapeHtml(vDate)}</text>
           
-          <text x="80" y="${currentY + 32}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận</text>
-          <text x="80" y="${currentY + 45}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
+          <text x="80" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận</text>
+          <text x="80" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
           
-          <text x="240" y="${currentY + 32}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người lập</text>
-          <text x="240" y="${currentY + 45}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
+          <text x="240" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người lập</text>
+          <text x="240" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
         `);
-        currentY += 65;
+        currentY += 62;
       } else if (visibility.showSignatures && thermalOptions.hideSignature) {
         elements.push(`
-          <text x="10" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11" font-weight="bold" fill="#000">Người nhận: ________________________</text>
+          <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận: ________________________</text>
         `);
-        currentY += 22;
+        currentY += 20;
       }
 
       // Cut line
       if (thermalOptions.showCutLine) {
         elements.push(`
-          <line x1="10" y1="${currentY + 8}" x2="310" y2="${currentY + 8}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8, 5" />
-          <text x="160" y="${currentY + 20}" font-size="8.5" font-family="sans-serif" fill="#94a3b8" text-anchor="middle">✂--- Đường cắt ---✂</text>
+          <line x1="8" y1="${currentY + 8}" x2="312" y2="${currentY + 8}" stroke="#64748b" stroke-width="1" stroke-dasharray="6, 4" />
+          <text x="160" y="${currentY + 20}" font-size="8.5" font-family="sans-serif" fill="#64748b" text-anchor="middle">✂--- Đường cắt ---✂</text>
         `);
-        currentY += 28;
+        currentY += 26;
       }
 
-      currentY += (thermalOptions.bottomFeedMm || 6) * 4;
+      if (!thermalOptions.compactCut) {
+        currentY += 32;
+      }
+      currentY += (thermalOptions.bottomFeedMm || 4) * 3;
 
       return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
@@ -2877,7 +2929,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   };
 
   const handlePrint = () => {
-    if (activeTemplate === 'k80') {
+    if (employees.length === 0) {
+      showToast('Chưa có dữ liệu nhân viên để in phiếu!', 'error');
+      return;
+    }
+    if (activeTemplate === 'k80' || paperSize === 'k80') {
       document.body.classList.add('print-k80-mode');
       if (!thermalOptions.splitEachSlip) {
         document.body.classList.add('print-k80-no-split');
@@ -2954,10 +3010,10 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const isHourly = salaryMode === 'hourly';
 
   const [showMobileEmpList, setShowMobileEmpList] = useState(false);
-  const paperBaseWidthPx = activeTemplate === 'k80' ? 320 : 1000;
-    const getZoomWidthStyle = () => {
+  const paperBaseWidthPx = activeTemplate === 'k80' ? 380 : 1000;
+  const getZoomWidthStyle = () => {
     if (zoomLevel === 'fit') {
-      const avail = viewportWidth ? Math.max(260, viewportWidth - (activeTemplate === 'k80' ? 16 : 32)) : paperBaseWidthPx;
+      const avail = viewportWidth ? Math.max(280, viewportWidth - (activeTemplate === 'k80' ? 16 : 32)) : paperBaseWidthPx;
       const effectiveWidth = Math.min(paperBaseWidthPx, avail);
       return { 
         width: `${effectiveWidth}px`, 
@@ -2969,9 +3025,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
     const zoomVal = Number(zoomLevel) || 100;
     const scaleVal = zoomVal / 100;
+    const computedPx = Math.round(paperBaseWidthPx * scaleVal);
+    const minPx = activeTemplate === 'k80' ? Math.max(300, computedPx) : computedPx;
     return { 
-      width: `${Math.round(paperBaseWidthPx * scaleVal)}px`, 
-      minWidth: `${Math.round(paperBaseWidthPx * scaleVal)}px`,
+      width: `${minPx}px`, 
+      minWidth: `${minPx}px`,
       maxWidth: 'none', 
       margin: '0 auto',
       transform: 'none',
@@ -3025,18 +3083,17 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       
       {/* Hidden Print only container */}
       <div className="print-only-container">
-        {printScope === 'current' && activeEmployee && (
-          <div className="print-page" dangerouslySetInnerHTML={{ __html: getActiveSvgText(activeEmployee) }} />
-        )}
-        
-        {printScope === 'all' && (
-          employees.map(emp => (
-            <div key={emp.id} className="print-page" dangerouslySetInnerHTML={{ __html: getActiveSvgText(emp) }} />
-          ))
-        )}
-
-        {printScope === 'selected' && (
-          employees.filter(emp => selectedEmployeeIds.has(emp.id)).map(emp => (
+        {activeView === 'summary' ? (
+          <div className="print-page" dangerouslySetInnerHTML={{ __html: getActiveSvgText() }} />
+        ) : (
+          (printScope === 'all'
+            ? employees
+            : printScope === 'selected'
+              ? (selectedEmployeeIds.size > 0
+                  ? employees.filter(emp => selectedEmployeeIds.has(emp.id))
+                  : (activeEmployee ? [activeEmployee] : employees))
+              : (activeEmployee ? [activeEmployee] : [])
+          ).map(emp => (
             <div key={emp.id} className="print-page" dangerouslySetInnerHTML={{ __html: getActiveSvgText(emp) }} />
           ))
         )}
@@ -3161,6 +3218,29 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {employees.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => {
+                        if (selectedEmployeeIds.size === employees.length) {
+                          setSelectedEmployeeIds(new Set());
+                        } else {
+                          setSelectedEmployeeIds(new Set(employees.map(e => e.id)));
+                        }
+                      }}
+                      style={{
+                        height: '30px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '0 8px',
+                        borderRadius: '7px'
+                      }}
+                      title="Chọn / Bỏ chọn tất cả nhân viên để in"
+                    >
+                      <span>{selectedEmployeeIds.size === employees.length ? 'Bỏ chọn' : 'Chọn hết'} ({selectedEmployeeIds.size}/{employees.length})</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-outline"
@@ -3356,6 +3436,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployeeIds.has(emp.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => handleToggleEmployeeSelection(emp.id)}
+                            title="Chọn nhân viên này để in"
+                            style={{ cursor: 'pointer', flexShrink: 0 }}
+                          />
                           <span style={{ 
                             fontSize: '11px', 
                             fontWeight: 700, 
@@ -3824,11 +3912,20 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         borderRadius: '6px',
                         border: 'none',
                         cursor: 'pointer',
-                        background: activeTemplate === t ? 'var(--accent-primary-subtle)' : 'transparent',
-                        color: activeTemplate === t ? 'var(--accent-primary)' : 'var(--text-muted)',
+                        background: activeTemplate === t ? 'var(--accent-primary)' : 'transparent',
+                        color: activeTemplate === t ? '#ffffff' : 'var(--text-muted)',
                         transition: 'all 0.15s ease'
                       }}
-                      onClick={() => setActiveTemplate(t)}
+                      onClick={() => {
+                        setActiveTemplate(t);
+                        if (t === 'k80') {
+                          setPaperSize('k80');
+                          setActiveQuickPreset('k80');
+                        } else {
+                          setPaperSize('a4');
+                          if (activeQuickPreset === 'k80') setActiveQuickPreset('full');
+                        }
+                      }}
                     >
                       {t === 'standard' ? 'Chuẩn' : t === 'modern' ? 'Modern' : 'K80 Nhiệt'}
                     </button>
@@ -4446,54 +4543,88 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         {configDrawerTab === 'print' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="form-group">
-              <label className="form-label">Chọn Preset nhanh</label>
-              <div className="preset-toggle-container">
-                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('full')}>Đầy đủ</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('compact')}>Rút gọn</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('internal')}>Nội bộ</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyPreset('k80')}>In nhiệt</button>
-              </div>
-            </div>
-
-            <div className="grid2">
-              <div className="form-group">
-                <label className="form-label">Chọn khổ giấy</label>
-                <select 
-                  className="form-control" 
-                  value={paperSize} 
-                  onChange={e => {
-                    const val = e.target.value as 'a4' | 'k80';
-                    setPaperSize(val);
-                    if (val === 'k80') setActiveTemplate('k80');
-                    else setActiveTemplate('standard');
+              <label className="form-label">Khổ giấy xuất bản</label>
+              <div className="paper-size-grid">
+                <button
+                  type="button"
+                  className={`paper-size-btn ${paperSize === 'a4' && activeTemplate !== 'k80' ? 'active' : ''}`}
+                  onClick={() => {
+                    setPaperSize('a4');
+                    if (activeTemplate === 'k80') setActiveTemplate('standard');
+                    if (activeQuickPreset === 'k80') setActiveQuickPreset('full');
                   }}
                 >
-                  <option value="a4">Khổ chuẩn A4 / A5</option>
-                  <option value="k80">Khổ in nhiệt K80 (80mm)</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Phạm vi in ấn</label>
-                <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
-                  <option value="current">Chỉ phiếu đang xem</option>
-                  <option value="all">In tất cả nhân viên</option>
-                  <option value="selected">In nhân viên được chọn</option>
-                </select>
+                  <span>📄 Khổ chuẩn A4 / A5</span>
+                </button>
+                <button
+                  type="button"
+                  className={`paper-size-btn ${paperSize === 'k80' || activeTemplate === 'k80' ? 'active' : ''}`}
+                  onClick={() => {
+                    setPaperSize('k80');
+                    setActiveTemplate('k80');
+                    setActiveQuickPreset('k80');
+                  }}
+                >
+                  <span>🧾 Cuộn in nhiệt K80</span>
+                </button>
               </div>
             </div>
 
-                        <div className="form-group">
+            <div className="form-group">
+              <label className="form-label">Chọn Preset nhanh</label>
+              <div className="preset-toggle-container">
+                {([
+                  { id: 'full', label: 'Đầy đủ' },
+                  { id: 'compact', label: 'Rút gọn' },
+                  { id: 'internal', label: 'Nội bộ' },
+                  { id: 'k80', label: 'In nhiệt' }
+                ] as const).map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`preset-chip ${activeQuickPreset === p.id ? 'active' : ''}`}
+                    onClick={() => applyPreset(p.id)}
+                  >
+                    {activeQuickPreset === p.id && <span>✓</span>}
+                    <span>{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Phạm vi in ấn</label>
+              <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
+                <option value="current">Chỉ phiếu đang xem (1 NV)</option>
+                <option value="all">In tất cả nhân viên ({employees.length} NV)</option>
+                <option value="selected">In nhân viên được chọn ({selectedEmployeeIds.size}/{employees.length} NV)</option>
+              </select>
+            </div>
+
+            <div className="form-group">
               <label className="form-label">Phong cách chữ nhanh</label>
-              <div className="preset-toggle-container" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('modern')} style={{ fontSize: '11px', padding: '3px 8px' }}>Hiện đại</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('admin')} style={{ fontSize: '11px', padding: '3px 8px' }}>Hành chính</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('minimalist')} style={{ fontSize: '11px', padding: '3px 8px' }}>Tối giản</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('luxury')} style={{ fontSize: '11px', padding: '3px 8px' }}>Trang trọng</button>
-                <button type="button" className="btn-outline small-btn" onClick={() => applyTypographyPreset('k80')} style={{ fontSize: '11px', padding: '3px 8px' }}>Nhiệt K80</button>
+              <div className="preset-toggle-container">
+                {([
+                  { id: 'modern', label: 'Hiện đại' },
+                  { id: 'admin', label: 'Hành chính' },
+                  { id: 'minimalist', label: 'Tối giản' },
+                  { id: 'luxury', label: 'Trang trọng' },
+                  { id: 'k80', label: 'Nhiệt K80' }
+                ] as const).map(tp => (
+                  <button
+                    key={tp.id}
+                    type="button"
+                    className={`preset-chip ${activeTypoPreset === tp.id ? 'active' : ''}`}
+                    onClick={() => applyTypographyPreset(tp.id)}
+                  >
+                    {activeTypoPreset === tp.id && <span>✓</span>}
+                    <span>{tp.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
-<div className="form-group">
+            <div className="form-group">
               <label className="form-label">Font chữ tiếng Việt</label>
               <select className="form-control" value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
                 {AVAILABLE_FONTS.map(f => (
@@ -4502,7 +4633,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               </select>
             </div>
 
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+            <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '10px' }}>
               <span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
                 HIỂN THỊ PHẦN TỬ PHIẾU
               </span>
@@ -4535,22 +4666,26 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             </div>
 
             {(paperSize === 'k80' || activeTemplate === 'k80') && (
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+              <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '10px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
                   ⚙️ TÙY CHỌN MÁY IN NHIỆT K80
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={thermalOptions.splitEachSlip} onChange={e => setThermalOptions((prev: any) => ({ ...prev, splitEachSlip: e.target.checked }))} />
-                    <span>Tách từng phiếu khi in hàng loạt</span>
+                    <span>Tách từng phiếu khi in hàng loạt (Auto-cut)</span>
                   </label>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={thermalOptions.compactCut} onChange={e => setThermalOptions((prev: any) => ({ ...prev, compactCut: e.target.checked }))} />
-                    <span>Cắt gọn cuối phiếu (co theo nội dung)</span>
+                    <span>Cắt gọn cuối phiếu (co sát theo nội dung)</span>
                   </label>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={thermalOptions.hideSignature} onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideSignature: e.target.checked }))} />
                     <span>Ẩn phần ký tên trên phiếu nhiệt</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={thermalOptions.showCutLine} onChange={e => setThermalOptions((prev: any) => ({ ...prev, showCutLine: e.target.checked }))} />
+                    <span>Hiện đường kẻ cắt giấy ✂ cuối phiếu</span>
                   </label>
                 </div>
               </div>
