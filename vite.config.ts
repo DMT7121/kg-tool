@@ -468,7 +468,7 @@ async function synthesizeCapCutWav(
                   socket.destroy();
                   resolve(Buffer.concat(audioChunks));
                   return;
-                } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code >= 400)) {
+                } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code !== 20000000)) {
                   clearTimeout(timeout);
                   socket.destroy();
                   reject(new Error(`CapCut lỗi: ${parsed.status_text || parsed.status_code}`));

@@ -693,7 +693,6 @@ async function handleTtsProxy(data) {
       });
       const ws = wsResp.webSocket;
       if (!ws) throw new Error("Không mở được WebSocket tới CapCut SAMI");
-      ws.accept();
 
       const audioBuffer = await new Promise((resolve, reject) => {
         const chunks = [];
@@ -710,7 +709,7 @@ async function handleTtsProxy(data) {
                 clearTimeout(timer);
                 ws.close();
                 resolve(chunks);
-              } else if (p.event === "TaskFailed" || (p.status_code && p.status_code >= 400)) {
+              } else if (p.event === "TaskFailed" || (p.status_code && p.status_code !== 20000000)) {
                 clearTimeout(timer);
                 ws.close();
                 reject(new Error(p.status_text || "CapCut TaskFailed"));
@@ -727,12 +726,13 @@ async function handleTtsProxy(data) {
                   ws.close();
                   resolve(chunks);
                   return;
-                } else if (p.event === "TaskFailed" || (p.status_code && p.status_code >= 400)) {
+                } else if (p.event === "TaskFailed" || (p.status_code && p.status_code !== 20000000)) {
                   clearTimeout(timer);
                   ws.close();
                   reject(new Error(p.status_text || "CapCut TaskFailed"));
                   return;
                 }
+                return;
               } catch {}
             }
             chunks.push(u8);
@@ -746,6 +746,7 @@ async function handleTtsProxy(data) {
           clearTimeout(timer);
           reject(new Error(e.message || "WS Error"));
         });
+        ws.accept();
         ws.send(JSON.stringify({
           token,
           appkey: appKey,
@@ -794,8 +795,15 @@ async function handleTtsProxy(data) {
       }
     });
     const ws = wsResp.webSocket;
-    if (!ws) throw new Error(`Edge TTS WebSocket upgrade failed (HTTP ${wsResp.status})`);
-    ws.accept();
+    if (!ws) {
+      return await handleTtsProxy({
+        ...data,
+        provider: "capcut",
+        voice: String(voice).includes("NamMinh") ? "BV075_streaming" : "BV421_vivn_streaming",
+        rate: 10,
+        pitch: 10
+      });
+    }
 
     const rateVal = Number(data.rate ?? 0);
     const ratePct = Math.abs(rateVal) <= 3 && rateVal !== 0 ? Math.round((rateVal - 1.0) * 100) : Math.round(rateVal);
@@ -804,12 +812,12 @@ async function handleTtsProxy(data) {
     const pitchHz = Math.abs(pitchVal) <= 2 && pitchVal !== 0 ? Math.round((pitchVal - 1.0) * 50) : Math.round(pitchVal);
     const pitchStr = `${pitchHz >= 0 ? "+" : ""}${pitchHz}Hz`;
 
-    const mp3Chunks = await new Promise((resolve, reject) => {
+    const mp3Chunks = await new Promise((resolve) => {
       const chunks = [];
       const timer = setTimeout(() => {
         try { ws.close(); } catch {}
-        chunks.length > 0 ? resolve(chunks) : reject(new Error("Edge TTS WS timeout"));
-      }, 15000);
+        resolve(chunks);
+      }, 8000);
 
       ws.addEventListener("message", (ev) => {
         if (typeof ev.data === "string") {
@@ -831,13 +839,14 @@ async function handleTtsProxy(data) {
       });
       ws.addEventListener("close", () => {
         clearTimeout(timer);
-        if (chunks.length > 0) resolve(chunks);
+        resolve(chunks);
       });
-      ws.addEventListener("error", (e) => {
+      ws.addEventListener("error", () => {
         clearTimeout(timer);
-        reject(new Error(e.message || "Edge WS Error"));
+        resolve(chunks);
       });
 
+      ws.accept();
       const ts = new Date().toUTCString();
       ws.send(`X-Timestamp:${ts}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
       const reqId = crypto.randomUUID().replace(/-/g, "");
@@ -847,6 +856,16 @@ async function handleTtsProxy(data) {
     });
 
     const totalLen = mp3Chunks.reduce((s, c) => s + c.byteLength, 0);
+    if (totalLen === 0) {
+      // Nếu Microsoft chặn IP Datacenter của Cloudflare Worker, tự động chuyển sang CapCut Neural 24kHz
+      return await handleTtsProxy({
+        ...data,
+        provider: "capcut",
+        voice: String(voice).includes("NamMinh") ? "BV075_streaming" : "BV421_vivn_streaming",
+        rate: 10,
+        pitch: 10
+      });
+    }
     const merged = new Uint8Array(totalLen);
     let off = 0;
     for (const c of mp3Chunks) {

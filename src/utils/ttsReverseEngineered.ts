@@ -296,7 +296,7 @@ export function synthesizeCapCutBrowserWS(params: {
             } else {
               resolve(new Blob(chunks, { type: 'audio/wav' }));
             }
-          } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code >= 400)) {
+          } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code !== 20000000)) {
             window.clearTimeout(timer);
             settled = true;
             ws.close();
@@ -318,7 +318,7 @@ export function synthesizeCapCutBrowserWS(params: {
               ws.close();
               resolve(new Blob(chunks, { type: 'audio/wav' }));
               return;
-            } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code >= 400)) {
+            } else if (parsed.event === 'TaskFailed' || (parsed.status_code && parsed.status_code !== 20000000)) {
               window.clearTimeout(timer);
               settled = true;
               ws.close();
