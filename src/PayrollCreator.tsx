@@ -1868,9 +1868,10 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
       if (visibility.showUnitInfo) {
         elements.push(`
-          <text x="160" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000000" text-anchor="middle">NHÀ HÀNG KINGS GRILL</text>
+          <text x="160" y="${currentY + 12}" font-family="'JetBrains Mono', '${selectedFont}', monospace" font-size="11.5" font-weight="800" fill="#000000" text-anchor="middle">*** KINGS GRILL F&amp;B ***</text>
+          <text x="160" y="${currentY + 24}" font-family="'${selectedFont}', sans-serif" font-size="8.2" font-weight="600" fill="#475569" text-anchor="middle">HỆ THỐNG NƯỚNG &amp; LẨU CAO CẤP TP.HCM</text>
         `);
-        currentY += 18;
+        currentY += 30;
       }
 
       // Header Banner
@@ -3015,11 +3016,16 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       </div>
 
       <div className="head">
+        <div className="stitch-breadcrumb">
+          <span>F&amp;B HR SUITE</span>
+          <span>/</span>
+          <b>QUẢN LÝ BẢNG LƯƠNG &amp; PHIẾU LƯƠNG K80</b>
+        </div>
         <PageHeader
           icon={<CreditCard size={24} />}
           title="Quản Lý Bảng Lương & Phiếu Lương"
-          subtitle="Tạo, tính toán thực nhận và xuất phiếu lương nhiệt K80, A4/A5 hoặc đồng bộ Google Sheets"
-          badgeText="Payroll Studio"
+          subtitle="Tạo, tính toán thực nhận và xuất phiếu lương nhiệt K80, A4/A5 hoặc đồng bộ tự động Google Sheets chi nhánh Kings Grill."
+          badgeText="Payroll Studio Pro v3.0"
           badgeVariant="info"
           actions={
             <button
@@ -4072,10 +4078,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         )}
                       </div>
                       
+                      {activeTemplate === 'k80' && <div className="receipt-edge top-edge print-hidden" />}
                       <div 
                         className="receipt-svg-holder" 
                         dangerouslySetInnerHTML={{ __html: getActiveSvgText(activeView === 'receipt' ? activeEmployee : undefined) }} 
                       />
+                      {activeTemplate === 'k80' && <div className="receipt-edge bottom-edge print-hidden" />}
                     </div>
                   )}
 

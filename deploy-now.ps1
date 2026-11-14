@@ -18,7 +18,7 @@ npm run build:extension
 
 # 3. Commit & Push lên GitHub (tự động kích hoạt CI/CD Deploy)
 Write-Host "[3/4] Dang dong bo ma nguon len GitHub (origin/main)..." -ForegroundColor Yellow
-git add .design-dna/dna.json src/index.css src/App.css src/App.tsx src/PayrollCreator.tsx src/PayrollCreator.css src/components/Shared.tsx src/components/TransferFileTool.tsx src/components/TTSPage.tsx src/components/HikvisionSync.tsx src/components/CommandPalette.tsx src/components/SlideOverDrawer.tsx public/KG-Studio-Extension-v2.5.0.zip deploy-now.ps1
+git add index.html .design-dna/dna.json src/index.css src/App.css src/App.tsx src/PayrollCreator.tsx src/PayrollCreator.css src/components/Shared.tsx src/components/TransferFileTool.tsx src/components/TTSPage.tsx src/components/HikvisionSync.tsx src/components/CommandPalette.tsx src/components/SlideOverDrawer.tsx public/KG-Studio-Extension-v2.5.0.zip deploy-now.ps1
 
 $status = git status --porcelain
 if ($status) {
@@ -31,5 +31,7 @@ if ($status) {
 }
 
 Write-Host "====================================================" -ForegroundColor Green
-Write-Host "  HOAN TAT DEPLOY GIAO DIEN MOI KG STUDIO v3.0!" -ForegroundColor Green
+Write-Host "  HOAN TAT BUILD & DEPLOY GIAO DIEN MOI KG STUDIO v3.0!" -ForegroundColor Green
+Write-Host "  Dang mo trinh duyet xem ban Build moi nhat (http://localhost:4173)..." -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Green
+npx vite preview --port 4173 --open

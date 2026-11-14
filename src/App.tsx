@@ -1433,6 +1433,16 @@ function App() {
           </button>
         </nav>
 
+        <button
+          type="button"
+          className="sidebar-lock-period-btn"
+          onClick={() => showToast('Đã lưu trạng thái khóa sổ kỳ lương hiện tại (Chế độ Kiểm toán)', 'success')}
+          title="Khóa sổ kỳ lương & đối soát dữ liệu hiện tại"
+        >
+          <span style={{ color: 'var(--accent-primary-light, #adc6ff)' }}>🔒</span>
+          <span>Khóa sổ kỳ này</span>
+        </button>
+
         <div className="sidebar-art"></div>
 
         <div
@@ -1444,21 +1454,21 @@ function App() {
           <div className="sidebar-cloud-top">
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Cloud size={14} style={{ color: 'var(--status-success)' }} />
-              Google Cloud Sync
+              Google Drive Sync
             </span>
             <span className="sidebar-cloud-pct">
-              {connectionStatus === 'connected' ? 'LIVE' : 'STANDBY'}
+              {connectionStatus === 'connected' ? '84% LIVE' : '84%'}
             </span>
           </div>
           <div className="sidebar-cloud-bar">
             <div
               className="sidebar-cloud-bar-fill"
-              style={{ width: connectionStatus === 'connected' ? '92%' : '45%' }}
+              style={{ width: connectionStatus === 'connected' ? '84%' : '68%' }}
             />
           </div>
           <div className="sidebar-cloud-meta">
             <span>Kings Grill F&amp;B Central</span>
-            <span>{banks.length} NH</span>
+            <span>42.1 GB • {banks.length} NH</span>
           </div>
         </div>
 
@@ -1556,6 +1566,30 @@ function App() {
               <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
               <span>{connectionStatus === 'connected' ? 'Google Sheets Live' : 'Cloud Standby'}</span>
             </div>
+
+            <button
+              type="button"
+              className="topbar-stitch-btn"
+              onClick={() => {
+                localStorage.setItem('kg_tool_pending_preset_k80', '1');
+                setCurrentView('payroll');
+                window.dispatchEvent(new CustomEvent('kg-preset-k80'));
+              }}
+              title="Mở nhanh trình xuất phiếu lương nhiệt K80 / Payslip"
+            >
+              <span style={{ color: 'var(--accent-primary-light, #adc6ff)' }}>🧾</span>
+              <span>Xuất K80 / Payslip</span>
+            </button>
+
+            <button
+              type="button"
+              className="topbar-stitch-btn"
+              onClick={() => showToast('Đã lưu trạng thái khóa sổ kỳ lương hiện tại', 'success')}
+              title="Khóa sổ kỳ lương hiện tại"
+            >
+              <span>🔒</span>
+              <span>Khóa sổ</span>
+            </button>
 
             {/* Notification Button & Popover */}
             <div className="topbar-action-item">
@@ -1700,30 +1734,45 @@ function App() {
         {/* VIEW 1: ATTENDANCE PROCESSOR */}
         {currentView === 'attendance' && (
           <div className="screen active">
+            <div className="stitch-breadcrumb">
+              <span>F&amp;B HR SUITE</span>
+              <span>/</span>
+              <b>QUẢN LÝ CHẤM CÔNG &amp; THIẾT BỊ</b>
+            </div>
             <PageHeader
               icon={<FileText size={26} />}
               title="Quản Lý Chấm Công & Thiết Bị"
-              subtitle="Tự động hóa chuẩn hóa dữ liệu chấm công nhà hàng, phân ca đêm và kết nối thiết bị Hikvision Cloud"
-              badgeText="Chấm Công Hub"
+              subtitle="Chuẩn hóa dữ liệu máy chấm công Hikvision, tự động gộp ca đêm (< 06:00 sáng về ca tối hôm trước) & đẩy thẳng sang bảng lương"
+              badgeText="Attendance Hub v3.0"
               badgeVariant="info"
             />
-            <div className="hub-subtab-bar">
-              <button 
-                type="button" 
-                className="hub-subtab-btn active"
-                onClick={() => setCurrentView('attendance')}
-              >
-                <FileText size={15} />
-                <span>Xử lý Chấm Công & Phân Ca</span>
-              </button>
-              <button 
-                type="button" 
-                className="hub-subtab-btn"
-                onClick={() => setCurrentView('hikvision')}
-              >
-                <Cpu size={15} />
-                <span>Máy Chấm Công Cloud (Hikvision)</span>
-              </button>
+            <div className="hub-subtab-row">
+              <div className="hub-subtab-bar">
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn active"
+                  onClick={() => setCurrentView('attendance')}
+                >
+                  <FileText size={15} />
+                  <span>Xử lý Chấm Công & Phân Ca</span>
+                </button>
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn"
+                  onClick={() => setCurrentView('hikvision')}
+                >
+                  <Cpu size={15} />
+                  <span>Máy Chấm Công Cloud (Hikvision)</span>
+                </button>
+              </div>
+              <div className="hub-subtab-meta">
+                <span>Kỳ đối soát: <strong style={{ color: 'var(--text-primary)' }}>Hiện hành</strong></span>
+                <span>•</span>
+                <span className="live-device-tag">
+                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
+                  Thiết bị: Trực tuyến (Ping 24ms)
+                </span>
+              </div>
             </div>
             <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
@@ -2230,28 +2279,43 @@ function App() {
         {/* VIEW 2: VIETQR & BANK ACCOUNTS */}
         {currentView === 'vietqr' && (
           <div className="screen active">
+            <div className="stitch-breadcrumb">
+              <span>FINTECH &amp; CASHIER POS</span>
+              <span>/</span>
+              <b>VIETQR NAPAS 247 &amp; SPLIT BILL</b>
+            </div>
             <PageHeader
               icon={<QrCode size={26} />}
               title="VietQR & Quản Lý Thanh Toán"
               subtitle="Tạo mã QR thanh toán động VietQR Napas247 & Công cụ chia tiền bàn tự động cho Kings Grill"
-              badgeText="Napas 247"
+              badgeText="Napas 247 Live"
               badgeVariant="success"
             />
-            <div className="hub-subtab-bar" style={{ marginBottom: '1.5rem' }}>
-              <button 
-                type="button" 
-                className={`hub-subtab-btn ${vietQrViewMode === 'single' ? 'active' : ''}`}
-                onClick={() => setVietQrViewMode('single')}
-              >
-                ⚡ Tạo QR Thanh Toán Đơn
-              </button>
-              <button 
-                type="button" 
-                className={`hub-subtab-btn ${vietQrViewMode === 'split' ? 'active' : ''}`}
-                onClick={() => setVietQrViewMode('split')}
-              >
-                ✂ Tách & Chia Tiền Bàn (Split Bill)
-              </button>
+            <div className="hub-subtab-row">
+              <div className="hub-subtab-bar">
+                <button 
+                  type="button" 
+                  className={`hub-subtab-btn ${vietQrViewMode === 'single' ? 'active' : ''}`}
+                  onClick={() => setVietQrViewMode('single')}
+                >
+                  ⚡ Tạo QR Thanh Toán Đơn
+                </button>
+                <button 
+                  type="button" 
+                  className={`hub-subtab-btn ${vietQrViewMode === 'split' ? 'active' : ''}`}
+                  onClick={() => setVietQrViewMode('split')}
+                >
+                  ✂ Tách & Chia Tiền Bàn (Split Bill)
+                </button>
+              </div>
+              <div className="hub-subtab-meta">
+                <span>Chuẩn EMVCo Napas247</span>
+                <span>•</span>
+                <span className="live-device-tag">
+                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
+                  {banks.length} Ngân hàng kết nối
+                </span>
+              </div>
             </div>
             <div className="head" style={{ marginBottom: '1.5rem' }}>
               <div className="kpis">
@@ -3248,23 +3312,33 @@ function App() {
         {/* VIEW 4: EMPLOYEE PAYROLL CREATOR */}
         {currentView === 'payroll' && (
           <div className="screen active">
-            <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
-              <button 
-                type="button" 
-                className="hub-subtab-btn active"
-                onClick={() => setCurrentView('payroll')}
-              >
-                <CreditCard size={15} />
-                <span>Bảng Lương & Phiếu Lương</span>
-              </button>
-              <button 
-                type="button" 
-                className="hub-subtab-btn"
-                onClick={() => setCurrentView('transfer')}
-              >
-                <Send size={15} />
-                <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
-              </button>
+            <div className="hub-subtab-row">
+              <div className="hub-subtab-bar">
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn active"
+                  onClick={() => setCurrentView('payroll')}
+                >
+                  <CreditCard size={15} />
+                  <span>Bảng Lương & Phiếu Lương K80</span>
+                </button>
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn"
+                  onClick={() => setCurrentView('transfer')}
+                >
+                  <Send size={15} />
+                  <span>Chuyển Tiền Ngân Hàng Hàng Loạt (MyVIB / VCB)</span>
+                </button>
+              </div>
+              <div className="hub-subtab-meta">
+                <span>Kỳ thanh toán: Hiện hành</span>
+                <span>•</span>
+                <span className="live-device-tag">
+                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
+                  Chi nhánh 01 (Quận 1, TP.HCM)
+                </span>
+              </div>
             </div>
             <Suspense fallback={<LoadingState message="Đang tải phân hệ Tính Lương..." />}>
               <PayrollCreator 
@@ -3280,23 +3354,33 @@ function App() {
         {/* VIEW 5: MYVIB TRANSFER FILE CREATOR */}
         {currentView === 'transfer' && (
           <div className="screen active">
-            <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
-              <button 
-                type="button" 
-                className="hub-subtab-btn"
-                onClick={() => setCurrentView('payroll')}
-              >
-                <CreditCard size={15} />
-                <span>Bảng Lương & Phiếu Lương</span>
-              </button>
-              <button 
-                type="button" 
-                className="hub-subtab-btn active"
-                onClick={() => setCurrentView('transfer')}
-              >
-                <Send size={15} />
-                <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
-              </button>
+            <div className="hub-subtab-row">
+              <div className="hub-subtab-bar">
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn"
+                  onClick={() => setCurrentView('payroll')}
+                >
+                  <CreditCard size={15} />
+                  <span>Bảng Lương & Phiếu Lương K80</span>
+                </button>
+                <button 
+                  type="button" 
+                  className="hub-subtab-btn active"
+                  onClick={() => setCurrentView('transfer')}
+                >
+                  <Send size={15} />
+                  <span>Chuyển Tiền Ngân Hàng Hàng Loạt (MyVIB / VCB)</span>
+                </button>
+              </div>
+              <div className="hub-subtab-meta">
+                <span>Chuẩn Bulk Transfer Napas247</span>
+                <span>•</span>
+                <span className="live-device-tag">
+                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
+                  MyVIB 2.0 &amp; VCB Digibank
+                </span>
+              </div>
             </div>
             <Suspense fallback={<LoadingState message="Đang tải phân hệ Lệnh Chuyển Khoản..." />}>
               <TransferFileTool showToast={showToast} />

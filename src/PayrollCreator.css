@@ -128,13 +128,30 @@
 
 /* Preview Canvas Viewport */
 .preview-scroll-container {
-  background: var(--surface-subtle);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 1.25rem;
+  background: var(--bg-lowest, #0a0e17);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
   overflow: auto;
   max-height: calc(100vh - 220px);
-  min-height: 340px;
+  min-height: 360px;
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.receipt-edge {
+  height: 10px;
+  width: 100%;
+  background: radial-gradient(circle, transparent, transparent 3px, #ffffff 3.5px, #ffffff 4px);
+  background-size: 8px 8px;
+}
+
+.receipt-edge.top-edge {
+  transform: rotate(180deg);
+  margin-bottom: -2px;
+}
+
+.receipt-edge.bottom-edge {
+  margin-top: -2px;
 }
 
 .payroll-creator.fullscreen-preview-active .preview-pane {
