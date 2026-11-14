@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -16,11 +16,15 @@ import {
   Edit2,
   Info
 } from 'lucide-react';
-import ExcelJS from 'exceljs';
-import Papa from 'papaparse';
 import { VIB_BANKS } from '../constants/vibBanks';
 import { VCB_BANKS } from '../constants/vcbBanks';
 import { StatCard, GuidePanel, EmptyState, PageHeader } from './Shared';
+import {
+  removeVietnameseAccents,
+  normalizeVietnameseName,
+  parseSmartCurrency,
+  unwrapExcelCellValue
+} from '../utils/numberUtils';
 
 export interface TransferEmployee {
   id: string;
@@ -51,24 +55,20 @@ interface TransferFileToolProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-// Accent removal utility
-export function removeVietnameseAccents(str: string): string {
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
+interface PayrollDraftEmployee {
+  id?: string;
+  name?: string;
+  amount?: number;
+  advance?: number;
+  deduction?: number;
 }
 
-// Strict name normalization for Vietcombank
-export function normalizeVietnameseName(name: string): string {
-  if (!name) return '';
-  const noAccents = removeVietnameseAccents(name);
-  return noAccents
-    .toUpperCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^A-Z0-9\s]/g, ''); // strip any strange non-alpha characters for bank safety
+interface SavedBankAccountItem {
+  accountHolder?: string;
+  label?: string;
+  accountNo?: string;
+  bankName?: string;
+  bankCode?: string;
 }
 
 export default function TransferFileTool({ showToast }: TransferFileToolProps) {
@@ -145,9 +145,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   }, []);
 
   // Strip Vietnamese tones for search filter queries
-  const stripTones = (str: string): string => {
+  const stripTones = useCallback((str: string): string => {
     return removeVietnameseAccents(str).toLowerCase();
-  };
+  }, []);
 
   // Filter banks for selection
   const filteredBanks = useMemo(() => {
@@ -158,10 +158,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       stripTones(b.codeName).includes(q) || 
       stripTones(b.fullName).includes(q)
     );
-  }, [bankSearchQuery, bankTemplate]);
+  }, [bankSearchQuery, bankTemplate, stripTones]);
 
   // Map arbitrary bank name to VIB codeName
-  const resolveVibBankName = (rawBank: string): string => {
+  const resolveVibBankName = useCallback((rawBank: string): string => {
     if (!rawBank) return '';
     const cleanRaw = rawBank.trim();
     const direct = VIB_BANKS.find(b => b.codeName.toLowerCase() === cleanRaw.toLowerCase() || b.fullName.toLowerCase() === cleanRaw.toLowerCase());
@@ -195,10 +195,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     if (queryClean.includes('vp') || queryClean.includes('vpb')) return '309 - VPBank';
     
     return cleanRaw;
-  };
+  }, [stripTones]);
 
   // Map arbitrary bank name to Vietcombank format (e.g. "(ACB) Á Châu")
-  const resolveVcbBankName = (rawBank: string): string => {
+  const resolveVcbBankName = useCallback((rawBank: string): string => {
     if (!rawBank) return '';
     const cleanRaw = rawBank.trim();
     const direct = VCB_BANKS.find(b => b.codeName.toLowerCase() === cleanRaw.toLowerCase() || b.fullName.toLowerCase() === cleanRaw.toLowerCase());
@@ -227,10 +227,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     if (queryClean.includes('sacom') || queryClean.includes('stb')) return '(SACOMBANK) Sài Gòn Thương Tín';
 
     return cleanRaw;
-  };
+  }, [stripTones]);
 
   // Validation function
-  const validateRecord = (emp: Partial<TransferEmployee>, activeBank: 'vib' | 'vcb' = bankTemplate): { isValid: boolean; errors: string[] } => {
+  const validateRecord = useCallback((emp: Partial<TransferEmployee>, activeBank: 'vib' | 'vcb' = bankTemplate): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
     // 1. Name Check
@@ -252,7 +252,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         if (nameVal.length > 35) {
           errors.push('Tên không được vượt quá 35 ký tự.');
         }
-        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
+        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+():_&?]*$/;
         if (!allowedRegex.test(nameVal)) {
           errors.push('Tên chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
         }
@@ -300,12 +300,12 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       }
       // VCB usually expects uppercase unaccented contents
       if (activeBank === 'vcb') {
-        const vcbMemoRegex = /^[A-Z0-9\s,\.\-+\(\):_&?]*$/;
+        const vcbMemoRegex = /^[A-Z0-9\s,.\-+():_&?]*$/;
         if (!vcbMemoRegex.test(memoText.toUpperCase())) {
           errors.push('Nội dung chuyển khoản chứa ký tự lạ không được Vietcombank hỗ trợ.');
         }
       } else {
-        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+\(\):_&?]*$/;
+        const allowedRegex = /^[a-zA-Z0-9aAàÀảẢãÃáÁạẠăĂằẰẳẲẵẴắẮặẶâÂầẦẩẨẫẪấẤậẬeEèÈẻẺẽẼéÉẹẸêÊềỀểỂễỄếẾệỆiIìÌỉỈĩĨíÍịỊoOòÒỏỎõÕóÓọỌôÔồỒổỔỗỖốỐộỘơƠờỜởỞỡỠớỚợỢuUùÙủỦũŨúÚụỤưƯừỪửỬữỮứỨựỰyYỳỲỷỶỹỸýÝỵYđĐ\s,.\-+():_&?]*$/;
         if (!allowedRegex.test(memoText)) {
           errors.push('Nội dung chứa ký tự lạ. Chỉ cho phép chữ, số và ,.-+():_&?');
         }
@@ -327,10 +327,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       isValid: errors.length === 0,
       errors
     };
-  };
+  }, [bankTemplate]);
 
   // Run validation on all records
-  const revalidateAll = (list: TransferEmployee[], activeBank: 'vib' | 'vcb' = bankTemplate): TransferEmployee[] => {
+  const revalidateAll = useCallback((list: TransferEmployee[], activeBank: 'vib' | 'vcb' = bankTemplate): TransferEmployee[] => {
     return list.map(item => {
       const res = validateRecord(item, activeBank);
       return {
@@ -339,28 +339,22 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         errors: res.errors
       };
     });
-  };
+  }, [bankTemplate, validateRecord]);
 
-  // Trigger validation immediately when template bank changes
-  useEffect(() => {
-    if (employees.length > 0) {
-      // Map banks and validate
-      const converted = employees.map(emp => {
-        let bankCodeName = emp.bankCodeName;
-        // Re-resolve bank format
-        if (bankTemplate === 'vcb') {
-          bankCodeName = resolveVcbBankName(emp.bankCodeName);
-        } else {
-          bankCodeName = resolveVibBankName(emp.bankCodeName);
-        }
-        return {
-          ...emp,
-          bankCodeName
-        };
-      });
-      setEmployees(revalidateAll(converted, bankTemplate));
-    }
-  }, [bankTemplate]);
+  const handleSwitchBankTemplate = useCallback((nextBank: 'vib' | 'vcb') => {
+    setBankTemplate(nextBank);
+    setEmployees(prev => {
+      if (prev.length === 0) return prev;
+      const converted = prev.map(emp => ({
+        ...emp,
+        bankCodeName:
+          nextBank === 'vcb'
+            ? resolveVcbBankName(emp.bankCodeName)
+            : resolveVibBankName(emp.bankCodeName)
+      }));
+      return revalidateAll(converted, nextBank);
+    });
+  }, [resolveVcbBankName, resolveVibBankName, revalidateAll]);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -372,7 +366,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   }, [employees]);
 
   // Helper to compile transaction memo with variables
-  const compileMemo = (template: string, name: string, month: string, dept: string = ''): string => {
+  const compileMemo = useCallback((template: string, name: string, month: string, dept: string = ''): string => {
     let result = template
       .replace(/{ten_nhan_vien}/gi, removeVietnameseAccents(name).toUpperCase())
       .replace(/{thang_luong}/gi, month)
@@ -384,10 +378,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       result = result.substring(0, 120);
     }
     return result;
-  };
+  }, []);
 
   // 1. LOAD FROM PAYROLL (Accent-insensitive & preserves existing account numbers)
-  const handleLoadFromPayroll = () => {
+  const handleLoadFromPayroll = useCallback(() => {
     const rawPayroll = localStorage.getItem('kg_tool_payroll_state');
     if (!rawPayroll) {
       showToast('Không tìm thấy dữ liệu Phiếu Lương nháp nào trong hệ thống.', 'error');
@@ -395,9 +389,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     }
 
     try {
-      const payrollData = JSON.parse(rawPayroll);
+      const payrollData = JSON.parse(rawPayroll) as {
+        employees?: PayrollDraftEmployee[];
+        payMonth?: string;
+        salaryMode?: 'monthly' | 'hourly' | 'restaurant';
+      };
       const payrollEmployees = payrollData.employees || [];
       const payMonth = payrollData.payMonth || '06-2026';
+      const isRestaurantMode = (payrollData.salaryMode || 'restaurant') === 'restaurant';
       
       if (payrollEmployees.length === 0) {
         showToast('Module Phiếu Lương hiện tại đang trống. Vui lòng nhập dữ liệu tính lương trước.', 'info');
@@ -405,56 +404,88 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       }
 
       const rawAccounts = localStorage.getItem('kg_tool_saved_accounts');
-      const savedAccountsList = rawAccounts ? JSON.parse(rawAccounts) : [];
+      const savedAccountsList: SavedBankAccountItem[] = rawAccounts ? JSON.parse(rawAccounts) : [];
 
       const cleanMatchKey = (str: string) =>
         normalizeVietnameseName(String(str || '').replace(/\(.*?\)/g, ''));
 
-      const newEntries: TransferEmployee[] = payrollEmployees.map((pe: any, idx: number) => {
-        const cleanPeName = cleanMatchKey(pe.name);
-        const accountMatch = savedAccountsList.find((acc: any) => {
-          const holderKey = cleanMatchKey(acc.accountHolder || '');
-          const labelKey = cleanMatchKey(acc.label || '');
-          return (holderKey && holderKey === cleanPeName) || (labelKey && labelKey.includes(cleanPeName));
+      setEmployees(prevEmployees => {
+        const newEntries: TransferEmployee[] = payrollEmployees.map((pe: PayrollDraftEmployee, idx: number) => {
+          const rawName = String(pe.name || '').trim().replace(/\s+/g, ' ');
+          const cleanPeName = cleanMatchKey(rawName);
+          const accountMatch = savedAccountsList.find((acc: SavedBankAccountItem) => {
+            const holderKey = cleanMatchKey(acc.accountHolder || '');
+            const labelKey = cleanMatchKey(acc.label || '');
+            return (holderKey && holderKey === cleanPeName) || (labelKey && cleanPeName && labelKey.includes(cleanPeName));
+          });
+
+          const existingEmp = prevEmployees.find(e => cleanMatchKey(e.name) === cleanPeName);
+
+          let bankCodeName = existingEmp?.bankCodeName || '';
+          let accountNo = existingEmp?.accountNo || '';
+          if (accountMatch) {
+            accountNo = accountMatch.accountNo || accountNo;
+            bankCodeName = bankTemplate === 'vib' 
+              ? resolveVibBankName(accountMatch.bankName || accountMatch.bankCode || '')
+              : resolveVcbBankName(accountMatch.bankName || accountMatch.bankCode || '');
+          }
+
+          const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
+          const compiled = compileMemo(templateToUse, rawName, payMonth);
+          const finalMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
+
+          // In restaurant mode, `pe.amount` already has `advance` and `deduction` subtracted;
+          // in monthly/hourly mode, `pe.amount` is gross before per-employee `advance` / `deduction`.
+          const grossOrNet = parseSmartCurrency(pe.amount);
+          const netPayout = isRestaurantMode
+            ? Math.max(0, grossOrNet)
+            : Math.max(0, grossOrNet - parseSmartCurrency(pe.advance) - parseSmartCurrency(pe.deduction));
+
+          return {
+            id: 'payroll-' + (pe.id || idx) + '-' + Date.now(),
+            name: rawName,
+            accountNo: accountNo,
+            bankCodeName: bankCodeName,
+            amount: netPayout,
+            memo: finalMemo,
+            payMonth: payMonth,
+            source: 'payroll',
+            isValid: false,
+            errors: []
+          };
         });
 
-        const existingEmp = employees.find(e => cleanMatchKey(e.name) === cleanPeName);
-
-        let bankCodeName = existingEmp?.bankCodeName || '';
-        let accountNo = existingEmp?.accountNo || '';
-        if (accountMatch) {
-          accountNo = accountMatch.accountNo || accountNo;
-          bankCodeName = bankTemplate === 'vib' 
-            ? resolveVibBankName(accountMatch.bankName || accountMatch.bankCode || '')
-            : resolveVcbBankName(accountMatch.bankName || accountMatch.bankCode || '');
-        }
-
-        const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
-        const compiled = compileMemo(templateToUse, pe.name, payMonth);
-        const finalMemo = bankTemplate === 'vcb' ? compiled.toUpperCase() : compiled;
-
-        return {
-          id: 'payroll-' + (pe.id || idx) + '-' + Date.now(),
-          name: pe.name.trim().replace(/\s+/g, ' '),
-          accountNo: accountNo,
-          bankCodeName: bankCodeName,
-          amount: Math.round(pe.amount || 0),
-          memo: finalMemo,
-          payMonth: payMonth,
-          source: 'payroll',
-          isValid: false,
-          errors: []
-        };
+        const validated = revalidateAll(newEntries, bankTemplate);
+        showToast(`Đã đồng bộ ${validated.length} nhân viên từ Bảng Lương sang Lệnh Chuyển Khoản!`, 'success');
+        return validated;
       });
-
-      const validated = revalidateAll(newEntries, bankTemplate);
-      setEmployees(validated);
-      showToast(`Đã đồng bộ ${validated.length} nhân viên từ Bảng Lương sang Lệnh Chuyển Khoản!`, 'success');
     } catch (e) {
       console.error(e);
       showToast('Lỗi phân tích dữ liệu Bảng Lương.', 'error');
     }
-  };
+  }, [bankTemplate, compileMemo, defaultMemoTemplate, revalidateAll, resolveVcbBankName, resolveVibBankName, showToast, vcbMemoTemplate]);
+
+  // Normalize all names to uppercase non-accented
+  const handleNormalizeAllNames = useCallback(() => {
+    setEmployees(prev => {
+      if (prev.length === 0) {
+        showToast('Chưa có nhân viên nào trong danh sách để chuẩn hóa.', 'info');
+        return prev;
+      }
+      const updated = prev.map(emp => {
+        const normalizedName = normalizeVietnameseName(emp.name);
+        const updatedEmp = { ...emp, name: normalizedName };
+        const validation = validateRecord(updatedEmp);
+        return {
+          ...updatedEmp,
+          isValid: validation.isValid,
+          errors: validation.errors
+        };
+      });
+      showToast(`Đã tự động chuẩn hóa ${updated.length} tên nhân viên sang IN HOA KHÔNG DẤU!`, 'success');
+      return updated;
+    });
+  }, [showToast, validateRecord]);
 
   // Inline table cell update helper (zero-modal fast editing)
   const [tableSearch, setTableSearch] = useState('');
@@ -517,19 +548,32 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
   // Listen for cross-module pipeline triggers (from PayrollCreator & CommandPalette)
   useEffect(() => {
-    if (localStorage.getItem('kg_tool_pending_payroll_transfer') === '1') {
+    const timer = window.setTimeout(() => {
+      if (localStorage.getItem('kg_tool_pending_payroll_transfer') === '1') {
+        localStorage.removeItem('kg_tool_pending_payroll_transfer');
+        handleLoadFromPayroll();
+      }
+      if (localStorage.getItem('kg_tool_pending_normalize_transfer') === '1') {
+        localStorage.removeItem('kg_tool_pending_normalize_transfer');
+        handleNormalizeAllNames();
+      }
+    }, 0);
+    const onImportEvent = () => {
       localStorage.removeItem('kg_tool_pending_payroll_transfer');
       handleLoadFromPayroll();
-    }
-    const onImportEvent = () => handleLoadFromPayroll();
-    const onNormalizeEvent = () => handleNormalizeAllNames();
+    };
+    const onNormalizeEvent = () => {
+      localStorage.removeItem('kg_tool_pending_normalize_transfer');
+      handleNormalizeAllNames();
+    };
     window.addEventListener('kg-import-payroll-to-transfer', onImportEvent);
     window.addEventListener('kg-normalize-transfer-names', onNormalizeEvent);
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener('kg-import-payroll-to-transfer', onImportEvent);
       window.removeEventListener('kg-normalize-transfer-names', onNormalizeEvent);
     };
-  }, [bankTemplate, employees.length]);
+  }, [handleLoadFromPayroll, handleNormalizeAllNames]);
 
   // 2. PARSE EXCEL/CSV IMPORT
   const handleTriggerFileInput = () => {
@@ -547,9 +591,11 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
     try {
       if (extension === 'csv') {
-        Papa.parse(file, {
+        const PapaMod = await import('papaparse');
+        const Papa = PapaMod.default ?? PapaMod;
+        Papa.parse<unknown[]>(file, {
           complete: (results) => {
-            processParsedData(results.data);
+            processParsedData(results.data || []);
           },
           error: (err) => {
             showToast(`Lỗi đọc file CSV: ${err.message}`, 'error');
@@ -559,39 +605,38 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           skipEmptyLines: true
         });
       } else if (extension === 'xlsx') {
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-          try {
-            const buffer = evt.target?.result as ArrayBuffer;
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.load(buffer);
-            const sheet = workbook.worksheets[0];
-            const rowsData: any[] = [];
-            sheet.eachRow({ includeEmpty: false }, (row) => {
-              const vals: any[] = [];
-              row.eachCell({ includeEmpty: true }, (cell) => {
-                vals.push(cell.value);
-              });
-              rowsData.push(vals);
-            });
-            processParsedData(rowsData);
-          } catch (ex: any) {
-            showToast(`Lỗi phân tích Excel: ${ex.message}`, 'error');
-            setIsImporting(false);
+        const buffer = await file.arrayBuffer();
+        const ExcelJSMod = await import('exceljs');
+        const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) {
+          throw new Error('Không tìm thấy trang tính trong file Excel.');
+        }
+        const maxCols = Math.max(sheet.columnCount || 0, 12);
+        const rowsData: unknown[][] = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+          const vals: unknown[] = [];
+          const count = Math.max(maxCols, row.cellCount);
+          for (let c = 1; c <= count; c++) {
+            vals.push(unwrapExcelCellValue(row.getCell(c).value));
           }
-        };
-        reader.readAsArrayBuffer(file);
+          rowsData.push(vals);
+        });
+        processParsedData(rowsData);
       } else {
         showToast('Định dạng tệp không được hỗ trợ. Chỉ nhận file .xlsx hoặc .csv', 'error');
         setIsImporting(false);
       }
-    } catch (err: any) {
-      showToast(`Không thể đọc file: ${err.message}`, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+      showToast(`Không thể đọc file: ${message}`, 'error');
       setIsImporting(false);
     }
   };
 
-  const processParsedData = (rows: any[]) => {
+  const processParsedData = (rows: unknown[][]) => {
     if (rows.length === 0) {
       showToast('Tệp rỗng hoặc không đọc được dữ liệu.', 'error');
       setIsImporting(false);
@@ -599,15 +644,15 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     }
 
     let startIdx = 0;
-    const headerSample = String(rows[0][0] || '').toLowerCase();
-    if (headerSample.includes('stt') || headerSample.includes('họ tên') || headerSample.includes('tên') || isNaN(Number(rows[0][0]))) {
+    const headerSample = String(unwrapExcelCellValue(rows[0][0]) || '').toLowerCase();
+    if (headerSample.includes('stt') || headerSample.includes('họ tên') || headerSample.includes('tên') || isNaN(Number(unwrapExcelCellValue(rows[0][0])))) {
       startIdx = 1;
     }
 
     const importedEntries: TransferEmployee[] = [];
     for (let i = startIdx; i < rows.length; i++) {
       const row = rows[i];
-      if (row.length < 3) continue;
+      if (!row || row.length < 3) continue;
 
       let name = '';
       let accountNo = '';
@@ -621,42 +666,43 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       let refNo = '';
       let address = '';
 
+      const col0Val = unwrapExcelCellValue(row[0]);
+      const col0IsNum = !isNaN(Number(col0Val)) && String(col0Val).trim() !== '';
+
       if (bankTemplate === 'vcb') {
         // VCB template layout mapping:
         // Col A: STT, Col B: Ref, Col C: Account, Col D: CMND, Col E: Issued Date, Col F: Issued Place, Col G: Name, Col H: Address, Col I: Bank, Col J: Amount, Col K: Currency, Col L: Content
-        const col0IsNum = !isNaN(Number(row[0])) && String(row[0]).trim() !== '';
         if (col0IsNum && row.length >= 10) {
-          refNo = String(row[1] || '').trim();
-          accountNo = String(row[2] || '').trim();
-          idNo = String(row[3] || '').trim();
-          issuedDate = String(row[4] || '').trim();
-          issuedPlace = String(row[5] || '').trim();
-          name = String(row[6] || '').trim();
-          address = String(row[7] || '').trim();
-          bankCodeName = resolveVcbBankName(String(row[8] || ''));
-          amount = Math.round(Number(String(row[9] || '').replace(/[^0-9.-]+/g, '')) || 0);
-          memo = String(row[11] || '').trim();
+          refNo = String(unwrapExcelCellValue(row[1]) || '').trim();
+          accountNo = String(unwrapExcelCellValue(row[2]) || '').trim();
+          idNo = String(unwrapExcelCellValue(row[3]) || '').trim();
+          issuedDate = String(unwrapExcelCellValue(row[4]) || '').trim();
+          issuedPlace = String(unwrapExcelCellValue(row[5]) || '').trim();
+          name = String(unwrapExcelCellValue(row[6]) || '').trim();
+          address = String(unwrapExcelCellValue(row[7]) || '').trim();
+          bankCodeName = resolveVcbBankName(String(unwrapExcelCellValue(row[8]) || ''));
+          amount = parseSmartCurrency(row[9]);
+          memo = String(unwrapExcelCellValue(row[11]) || '').trim();
         } else {
-          name = String(row[0] || '').trim();
-          accountNo = String(row[1] || '').trim();
-          amount = Math.round(Number(String(row[2] || '').replace(/[^0-9.-]+/g, '')) || 0);
-          memo = String(row[3] || '').trim();
+          name = String(col0Val || '').trim();
+          accountNo = String(unwrapExcelCellValue(row[1]) || '').trim();
+          amount = parseSmartCurrency(row[2]);
+          memo = String(unwrapExcelCellValue(row[3]) || '').trim();
         }
       } else {
         // VIB template layout
-        const col0IsNum = !isNaN(Number(row[0])) && String(row[0]).trim() !== '';
         if (col0IsNum && row.length >= 6) {
-          name = String(row[1] || '').trim();
-          accountNo = String(row[2] || '').trim();
-          amount = Math.round(Number(String(row[3] || '').replace(/[^0-9.-]+/g, '')) || 0);
-          memo = String(row[4] || '').trim();
-          bankCodeName = resolveVibBankName(String(row[5] || ''));
+          name = String(unwrapExcelCellValue(row[1]) || '').trim();
+          accountNo = String(unwrapExcelCellValue(row[2]) || '').trim();
+          amount = parseSmartCurrency(row[3]);
+          memo = String(unwrapExcelCellValue(row[4]) || '').trim();
+          bankCodeName = resolveVibBankName(String(unwrapExcelCellValue(row[5]) || ''));
         } else {
-          name = String(row[0] || '').trim();
-          accountNo = String(row[1] || '').trim();
-          amount = Math.round(Number(String(row[2] || '').replace(/[^0-9.-]+/g, '')) || 0);
-          memo = String(row[3] || '').trim();
-          bankCodeName = resolveVibBankName(String(row[4] || ''));
+          name = String(col0Val || '').trim();
+          accountNo = String(unwrapExcelCellValue(row[1]) || '').trim();
+          amount = parseSmartCurrency(row[2]);
+          memo = String(unwrapExcelCellValue(row[3]) || '').trim();
+          bankCodeName = resolveVibBankName(String(unwrapExcelCellValue(row[4]) || ''));
         }
       }
 
@@ -709,7 +755,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       const name = cleanRow[0];
       const accountNo = cleanRow[1];
-      const amount = Math.round(Number(cleanRow[2].replace(/[^0-9.-]+/g, '')) || 0);
+      const amount = parseSmartCurrency(cleanRow[2]);
       
       const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
       const compiled = compileMemo(templateToUse, name, '06-2026');
@@ -770,15 +816,17 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
   const handleSaveActiveEdit = () => {
     if (!activeEmployeeEdit) return;
 
-    // Capitalize name if VCB
-    if (bankTemplate === 'vcb') {
-      activeEmployeeEdit.name = normalizeVietnameseName(activeEmployeeEdit.name);
-      activeEmployeeEdit.memo = activeEmployeeEdit.memo.toUpperCase();
-    }
+    const candidate: TransferEmployee = bankTemplate === 'vcb'
+      ? {
+          ...activeEmployeeEdit,
+          name: normalizeVietnameseName(activeEmployeeEdit.name),
+          memo: activeEmployeeEdit.memo.toUpperCase()
+        }
+      : { ...activeEmployeeEdit };
 
-    const validated = validateRecord(activeEmployeeEdit, bankTemplate);
+    const validated = validateRecord(candidate, bankTemplate);
     const updated: TransferEmployee = {
-      ...activeEmployeeEdit,
+      ...candidate,
       isValid: validated.isValid,
       errors: validated.errors
     };
@@ -814,6 +862,8 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       }
 
       const arrayBuffer = await response.arrayBuffer();
+      const ExcelJSMod = await import('exceljs');
+      const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
@@ -866,17 +916,20 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       const cleanMonth = (employees[0]?.payMonth || '06-2026').replace(/\//g, '-');
       const filename = `myvib-chuyen-tien-luong-kings-grill-${cleanMonth}.xlsx`;
       
+      const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = objectUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 
       showToast('Đã xuất file chuyển tiền MyVIB thành công!', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Lỗi xuất file Excel: ${err.message}`, 'error');
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+      showToast(`Lỗi xuất file Excel: ${message}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -895,6 +948,8 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       }
 
       const arrayBuffer = await response.arrayBuffer();
+      const ExcelJSMod = await import('exceljs');
+      const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
@@ -954,17 +1009,20 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
       const cleanMonth = (employees[0]?.payMonth || '06-2026').replace(/\//g, '-');
       const filename = `vcb-chuyen-tien-kings-grill-${cleanMonth}.xlsx`;
       
+      const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = objectUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 
       showToast('Đã xuất file chuyển tiền Vietcombank thành công! (Tải tệp .xlsx, tự đổi đuôi thành .xls nếu cổng VCB yêu cầu định dạng cũ)', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Lỗi xuất file Vietcombank: ${err.message}`, 'error');
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+      showToast(`Lỗi xuất file Vietcombank: ${message}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -1014,26 +1072,6 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     setBankSearchQuery('');
   };
 
-  // Normalize all names to uppercase non-accented
-  const handleNormalizeAllNames = () => {
-    if (employees.length === 0) {
-      showToast('Chưa có nhân viên nào trong danh sách để chuẩn hóa.', 'info');
-      return;
-    }
-    const updated = employees.map(emp => {
-      const normalizedName = normalizeVietnameseName(emp.name);
-      const updatedEmp = { ...emp, name: normalizedName };
-      const validation = validateRecord(updatedEmp);
-      return {
-        ...updatedEmp,
-        isValid: validation.isValid,
-        errors: validation.errors
-      };
-    });
-    setEmployees(updated);
-    showToast(`Đã tự động chuẩn hóa ${updated.length} tên nhân viên sang IN HOA KHÔNG DẤU!`, 'success');
-  };
-
   return (
     <div className="transfer-file-tool">
       
@@ -1062,7 +1100,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
           <button 
             type="button" 
-            onClick={() => setBankTemplate('vib')}
+            onClick={() => handleSwitchBankTemplate('vib')}
             style={{ 
               height: 'auto',
               display: 'flex',
@@ -1098,7 +1136,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
           <button 
             type="button" 
-            onClick={() => setBankTemplate('vcb')}
+            onClick={() => handleSwitchBankTemplate('vcb')}
             style={{ 
               height: 'auto',
               display: 'flex',

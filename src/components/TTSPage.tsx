@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Volume2, 
   Square, 
@@ -25,6 +25,7 @@ import {
   DEFAULT_OPENAIFM_PROMPT,
   synthesizeReverseEngineeredTTS
 } from '../utils/ttsReverseEngineered';
+import { normalizeTextForVietnameseTTS } from '../utils/numberUtils';
 
 export interface TTSTemplate {
   id: string;
@@ -365,121 +366,56 @@ const ZALO_VOICES = [
   { id: '6', name: 'Nữ miền Nam 2' }
 ];
 
-// Helper to normalize numbers to words for natural Vietnamese speech
-export function normalizeTextForVietnameseTTS(text: string): string {
-  if (!text) return '';
-  let str = text.trim().replace(/\s+/g, ' ');
-
-  // 1. Convert currencies, e.g. "12000000đ" or "10.000 đ"
-  str = str.replace(/(\d+[\d.,]*)\s*(đ|vnd|VND|đồng)/gi, (_match, amount) => {
-    const cleanAmount = amount.replace(/[.,]/g, '');
-    const num = parseInt(cleanAmount, 10);
-    if (!isNaN(num)) {
-      return numToVietnameseWords(num) + " đồng";
-    }
-    return _match;
-  });
-
-  // 2. Convert times, e.g. "18h30" or "18:30"
-  str = str.replace(/(\d{1,2})[h:](\d{2})/gi, (_match, hour, minute) => {
-    const h = parseInt(hour, 10);
-    const m = parseInt(minute, 10);
-    if (!isNaN(h) && !isNaN(m)) {
-      return `${h} giờ ${m} phút`;
-    }
-    return _match;
-  });
-  str = str.replace(/(\d{1,2})h/gi, (_match, hour) => {
-    const h = parseInt(hour, 10);
-    if (!isNaN(h)) return `${h} giờ`;
-    return _match;
-  });
-
-  // 3. Convert dates, e.g. "28/06/2026"
-  str = str.replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g, (_match, d, m, y) => {
-    return `ngày ${d} tháng ${m} năm ${y}`;
-  });
-
-  // 4. Common abbreviations
-  const abbrevs: { [key: string]: string } = {
-    "QR": "kiu rờ",
-    "TTS": "ti ti ét",
-    "STT": "số thứ tự",
-    "CMND": "chứng minh nhân dân",
-    "CCCD": "căn cước công dân",
-    "VIB": "vi ai bi",
-    "VCB": "vi ét xi bi",
-    "VIP": "víp",
-    "NV": "nhân viên",
-    "KH": "khách hàng",
-    "GP": "giờ phát",
-    "VD": "ví dụ"
-  };
-
-  Object.keys(abbrevs).forEach(key => {
-    const regex = new RegExp(`\\b${key}\\b`, 'g');
-    str = str.replace(regex, abbrevs[key]);
-  });
-
-  return str;
+function createTtsRecordId(prefix: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID().slice(0, 12)}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
-// Convert small/medium integers to Vietnamese words
-function numToVietnameseWords(num: number): string {
-  if (num === 0) return 'không';
-  const units = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
-  
-  if (num < 10) return units[num];
-  if (num === 10) return 'mười';
-  if (num < 20) return 'mười ' + (num % 10 === 5 ? 'lăm' : units[num % 10]);
-  
-  const tram = Math.floor(num / 100);
-  const chuc = Math.floor((num % 100) / 10);
-  const dv = num % 10;
-  
-  if (num < 100) {
-    let str = units[chuc] + ' mươi';
-    if (dv === 1) str += ' mốt';
-    else if (dv === 5) str += ' lăm';
-    else if (dv > 0) str += ' ' + units[dv];
-    return str;
-  }
+function getCurrentIsoTimestamp(): string {
+  return new Date().toISOString();
+}
 
-  // Handle larger values roughly
-  if (num < 1000) {
-    let str = units[tram] + ' trăm';
-    if (chuc === 0 && dv > 0) str += ' lẻ ' + units[dv];
-    else if (chuc > 0) {
-      str += ' ' + units[chuc] + ' mươi';
-      if (dv === 1) str += ' mốt';
-      else if (dv === 5) str += ' lăm';
-      else if (dv > 0) str += ' ' + units[dv];
-    }
-    return str;
-  }
+interface DailyQuotaCounts {
+  fpt: number;
+  viettel: number;
+  zalo: number;
+  google: number;
+  edge: number;
+  capcut: number;
+  openaifm: number;
+}
 
-  if (num < 1000000) {
-    const nghin = Math.floor(num / 1000);
-    const du = num % 1000;
-    let str = numToVietnameseWords(nghin) + ' nghìn';
-    if (du > 0) {
-      if (du < 100) str += ' không trăm';
-      str += ' ' + numToVietnameseWords(du);
-    }
-    return str;
+function loadInitialDailyQuotas(): DailyQuotaCounts {
+  const today = new Date().toDateString();
+  const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
+  if (savedDate !== today) {
+    localStorage.setItem('kg_tool_tts_quota_date', today);
+    localStorage.setItem('kg_tool_tts_quota_fpt_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_viettel_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_zalo_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_google_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_edge_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_capcut_today', '0');
+    localStorage.setItem('kg_tool_tts_quota_openaifm_today', '0');
+    return { fpt: 0, viettel: 0, zalo: 0, google: 0, edge: 0, capcut: 0, openaifm: 0 };
   }
+  return {
+    fpt: parseInt(localStorage.getItem('kg_tool_tts_quota_fpt_today') || '0', 10),
+    viettel: parseInt(localStorage.getItem('kg_tool_tts_quota_viettel_today') || '0', 10),
+    zalo: parseInt(localStorage.getItem('kg_tool_tts_quota_zalo_today') || '0', 10),
+    google: parseInt(localStorage.getItem('kg_tool_tts_quota_google_today') || '0', 10),
+    edge: parseInt(localStorage.getItem('kg_tool_tts_quota_edge_today') || '0', 10),
+    capcut: parseInt(localStorage.getItem('kg_tool_tts_quota_capcut_today') || '0', 10),
+    openaifm: parseInt(localStorage.getItem('kg_tool_tts_quota_openaifm_today') || '0', 10)
+  };
+}
 
-  if (num < 1000000000) {
-    const trieu = Math.floor(num / 1000000);
-    const du = num % 1000000;
-    let str = numToVietnameseWords(trieu) + ' triệu';
-    if (du > 0) {
-      str += ' ' + numToVietnameseWords(du);
-    }
-    return str;
-  }
-
-  return num.toLocaleString('vi-VN');
+function getExtensionUrlText(): string | null {
+  if (typeof window === 'undefined') return null;
+  const extText = new URLSearchParams(window.location.search).get('text');
+  return extText && extText.trim() ? extText.trim() : null;
 }
 
 export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPageProps) {
@@ -500,7 +436,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     const defaultSettings = {
       activeProvider: 'browser',
       browserVoiceURI: '',
-      browserGender: 'auto',
+      browserGender: 'auto' as TTSTemplate['gender'],
       rate: 1.0,
       pitch: 1.0,
       volume: 1.0,
@@ -545,37 +481,14 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     };
     if (!saved) return defaultSettings;
     try {
-      return { ...defaultSettings, ...JSON.parse(saved) };
-    } catch (e) {
+      return { ...defaultSettings, ...(JSON.parse(saved) as Partial<typeof defaultSettings>) };
+    } catch {
       return defaultSettings;
     }
   });
 
   // Consolidated Quota Initialization
-  const initialQuotas = useMemo(() => {
-    const today = new Date().toDateString();
-    const savedDate = localStorage.getItem('kg_tool_tts_quota_date');
-    if (savedDate !== today) {
-      localStorage.setItem('kg_tool_tts_quota_date', today);
-      localStorage.setItem('kg_tool_tts_quota_fpt_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_viettel_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_zalo_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_google_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_edge_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_capcut_today', '0');
-      localStorage.setItem('kg_tool_tts_quota_openaifm_today', '0');
-      return { fpt: 0, viettel: 0, zalo: 0, google: 0, edge: 0, capcut: 0, openaifm: 0 };
-    }
-    return {
-      fpt: parseInt(localStorage.getItem('kg_tool_tts_quota_fpt_today') || '0', 10),
-      viettel: parseInt(localStorage.getItem('kg_tool_tts_quota_viettel_today') || '0', 10),
-      zalo: parseInt(localStorage.getItem('kg_tool_tts_quota_zalo_today') || '0', 10),
-      google: parseInt(localStorage.getItem('kg_tool_tts_quota_google_today') || '0', 10),
-      edge: parseInt(localStorage.getItem('kg_tool_tts_quota_edge_today') || '0', 10),
-      capcut: parseInt(localStorage.getItem('kg_tool_tts_quota_capcut_today') || '0', 10),
-      openaifm: parseInt(localStorage.getItem('kg_tool_tts_quota_openaifm_today') || '0', 10)
-    };
-  }, []);
+  const [initialQuotas] = useState<DailyQuotaCounts>(loadInitialDailyQuotas);
 
   // Quota usage states
   const [fptUsedToday, setFptUsedToday] = useState<number>(initialQuotas.fpt);
@@ -634,9 +547,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
-  // Text composer states
-  const [composeText, setComposeText] = useState("Có khách đặt bàn mới. Khách tên {ten_khach}, {so_khach} khách, nhận bàn lúc {gio_nhan_ban}.");
-  const [composeTitle, setComposeTitle] = useState("");
+  // Text composer states (pre-populated if opened from Extension context menu ?tab=tts&text=...)
+  const [composeText, setComposeText] = useState(
+    () => getExtensionUrlText() || "Có khách đặt bàn mới. Khách tên {ten_khach}, {so_khach} khách, nhận bàn lúc {gio_nhan_ban}."
+  );
+  const [composeTitle, setComposeTitle] = useState(
+    () => (getExtensionUrlText() ? 'Phát nhanh từ Tiện ích mở rộng' : '')
+  );
   const [composeCategory, setComposeCategory] = useState("Đặt bàn");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
@@ -656,7 +573,12 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   });
 
   // System voices list
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      return window.speechSynthesis.getVoices();
+    }
+    return [];
+  });
   const [playbackState, setPlaybackState] = useState<'idle' | 'playing' | 'paused'>('idle');
 
   // Sidebar search & category filter
@@ -669,24 +591,15 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   const [mobileBroadcastTab, setMobileBroadcastTab] = useState<'compose' | 'templates'>('compose');
 
   // Mobile layout state listener
-  const [isMobileScreen, setIsMobileScreen] = useState(false);
+  const [isMobileScreen, setIsMobileScreen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   useEffect(() => {
     const handleResize = () => {
       setIsMobileScreen(window.innerWidth < 768);
     };
-    handleResize();
     window.addEventListener('resize', handleResize);
-
-    // Support incoming text from Browser Extension context menu (?tab=tts&text=...)
-    const params = new URLSearchParams(window.location.search);
-    const extText = params.get('text');
-    if (extText && extText.trim()) {
-      setComposeText(extText.trim());
-      setSelectedTemplateId(null);
-      setComposeTitle('Phát nhanh từ Tiện ích mở rộng');
-    }
-
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -703,36 +616,54 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     localStorage.setItem('kg_tool_tts_provider_settings', JSON.stringify(providerSettings));
   }, [providerSettings]);
 
-  // Load voices for Web Speech API
-  const loadVoices = () => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      let speechVoices = window.speechSynthesis.getVoices();
-      setVoices(speechVoices);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activeObjectUrlRef = useRef<string | null>(null);
+
+  const cleanupActiveAudio = useCallback(() => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.onended = null;
+      activeAudioRef.current.onerror = null;
+      activeAudioRef.current.pause();
+      activeAudioRef.current.src = '';
+      activeAudioRef.current = null;
     }
-  };
+    if (activeObjectUrlRef.current) {
+      URL.revokeObjectURL(activeObjectUrlRef.current);
+      activeObjectUrlRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
-    loadVoices();
+    const handleVoicesChanged = () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const speechVoices = window.speechSynthesis.getVoices();
+        setVoices(speechVoices);
+      }
+    };
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+      window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
     }
     return () => {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      cleanupActiveAudio();
     };
-  }, []);
+  }, [cleanupActiveAudio]);
 
   // Load settings from spreadsheet automatically on mount if connected
-  const loadSettingsFromSpreadsheet = async () => {
+  const loadSettingsFromSpreadsheet = useCallback(async (signal?: AbortSignal) => {
     if (!gasUrl || !spreadsheetId) return;
     try {
-      const getUrl = `${gasUrl}?action=get_tts_settings&ssId=${spreadsheetId}`;
-      const response = await fetch(getUrl);
-      const result = await response.json();
-      if (result.success && result.data) {
+      const getUrl = `${gasUrl}?action=get_tts_settings&ssId=${encodeURIComponent(spreadsheetId)}`;
+      const response = await fetch(getUrl, { signal });
+      const result = (await response.json()) as {
+        success?: boolean;
+        data?: { fptApiKey?: string; viettelToken?: string; zaloApiKey?: string };
+      };
+      if (!signal?.aborted && result.success && result.data) {
         const cloudSettings = result.data;
-        setProviderSettings((prev: any) => ({
+        setProviderSettings(prev => ({
           ...prev,
           fptApiKey: cloudSettings.fptApiKey !== undefined ? cloudSettings.fptApiKey : prev.fptApiKey,
           viettelToken: cloudSettings.viettelToken !== undefined ? cloudSettings.viettelToken : prev.viettelToken,
@@ -740,15 +671,22 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         }));
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       console.warn("Failed to load settings from spreadsheet:", e);
     }
-  };
+  }, [gasUrl, spreadsheetId]);
 
   useEffect(() => {
-    if (gasUrl && spreadsheetId) {
-      loadSettingsFromSpreadsheet();
-    }
-  }, [gasUrl, spreadsheetId]);
+    if (!gasUrl || !spreadsheetId) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void loadSettingsFromSpreadsheet(controller.signal);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [gasUrl, spreadsheetId, loadSettingsFromSpreadsheet]);
 
   const handleSaveSettingsToCloud = async () => {
     if (!gasUrl || !spreadsheetId) {
@@ -757,9 +695,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
     showToast('Đang lưu và đồng bộ cấu hình lên Google Sheets...', 'info');
     try {
-      await fetch(gasUrl, {
+      const response = await fetch(gasUrl, {
         method: 'POST',
-        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'save_tts_settings',
           spreadsheetId: spreadsheetId,
@@ -770,10 +708,18 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           ]
         })
       });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const resData = (await response.json().catch(() => null)) as { success?: boolean; error?: string } | null;
+      if (resData && resData.success === false) {
+        throw new Error(resData.error || 'Google Apps Script từ chối lưu cấu hình');
+      }
       showToast('Đã lưu cấu hình lên Google Sheets thành công!', 'success');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      showToast(`Không thể đồng bộ cấu hình: ${e.message}`, 'error');
+      const message = e instanceof Error ? e.message : 'Lỗi kết nối mạng';
+      showToast(`Không thể đồng bộ cấu hình: ${message}`, 'error');
     }
   };
 
@@ -873,8 +819,6 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     window.speechSynthesis.speak(utterance);
   };
 
-  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
-
   // Play using FPT.AI
   const speakFpt = async (textToSpeak: string) => {
     const charCount = textToSpeak.length;
@@ -941,7 +885,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           if (check.ok) {
             ready = true;
           }
-        } catch (e) {
+        } catch {
           // Retry
         }
         retries--;
@@ -951,9 +895,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         throw new Error('Thời gian tạo file audio của FPT.AI quá lâu, vui lòng phát lại.');
       }
 
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      cleanupActiveAudio();
 
       const audio = new Audio(asyncUrl);
       activeAudioRef.current = audio;
@@ -973,12 +915,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         showToast('Lỗi phát âm thanh từ FPT.AI.', 'error');
       };
 
-      audio.play();
+      await audio.play();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`FPT.AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      addHistoryLog(interpolatedText, 'failed', message);
+      showToast(`FPT.AI lỗi: ${message}. Tự động fallback về Browser...`, 'error');
       speakBrowser(textToSpeak);
     }
   };
@@ -1033,6 +976,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
       const contentType = response.headers.get('content-type') || '';
       let audioUrl = '';
+      let isBlobUrl = false;
 
       if (contentType.includes('json')) {
         const result = await response.json();
@@ -1043,10 +987,12 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       } else {
         const blob = await response.blob();
         audioUrl = URL.createObjectURL(blob);
+        isBlobUrl = true;
       }
 
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
+      cleanupActiveAudio();
+      if (isBlobUrl) {
+        activeObjectUrlRef.current = audioUrl;
       }
 
       const audio = new Audio(audioUrl);
@@ -1058,21 +1004,30 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       };
       audio.onended = () => {
         setPlaybackState('idle');
+        if (isBlobUrl && activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addQuotaUsage('viettel', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
+        if (isBlobUrl && activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Viettel AI');
         showToast('Lỗi phát âm thanh từ Viettel AI.', 'error');
       };
 
-      audio.play();
+      await audio.play();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`Viettel AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      addHistoryLog(interpolatedText, 'failed', message);
+      showToast(`Viettel AI lỗi: ${message}. Tự động fallback về Browser...`, 'error');
       speakBrowser(textToSpeak);
     }
   };
@@ -1091,8 +1046,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       }
 
       const blob = await response.blob();
+      cleanupActiveAudio();
       const audioUrl = URL.createObjectURL(blob);
+      activeObjectUrlRef.current = audioUrl;
       const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
       
       audio.volume = providerSettings.volume;
       
@@ -1102,20 +1060,29 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       
       audio.onended = () => {
         setPlaybackState('idle');
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'success');
       };
 
       audio.onerror = () => {
         setPlaybackState('idle');
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi tải tệp âm thanh WAV/MP3');
         showToast('Không thể giải mã tệp âm thanh từ Custom Server.', 'error');
       };
 
-      audio.play();
-    } catch (err: any) {
+      await audio.play();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`Không kết nối được Custom TTS Server: ${err.message}. Tự động chuyển đổi sang giọng đọc mặc định...`, 'error');
+      addHistoryLog(interpolatedText, 'failed', message);
+      showToast(`Không kết nối được Custom TTS Server: ${message}. Tự động chuyển đổi sang giọng đọc mặc định...`, 'error');
       speakBrowser(textToSpeak);
     }
   };
@@ -1177,9 +1144,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         throw new Error('Không nhận được audio URL từ Zalo AI');
       }
 
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      cleanupActiveAudio();
 
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
@@ -1199,12 +1164,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         showToast('Lỗi phát âm thanh từ Zalo AI.', 'error');
       };
 
-      audio.play();
+      await audio.play();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`Zalo AI lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      addHistoryLog(interpolatedText, 'failed', message);
+      showToast(`Zalo AI lỗi: ${message}. Tự động fallback về Browser...`, 'error');
       speakBrowser(textToSpeak);
     }
   };
@@ -1235,10 +1201,10 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         gasUrl,
       });
 
+      cleanupActiveAudio();
       const audioUrl = result.blob ? URL.createObjectURL(result.blob) : result.audioUrl!;
-
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
+      if (result.blob) {
+        activeObjectUrlRef.current = audioUrl;
       }
 
       const audio = new Audio(audioUrl);
@@ -1253,22 +1219,29 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       };
       audio.onended = () => {
         setPlaybackState('idle');
-        if (result.blob) URL.revokeObjectURL(audioUrl);
+        if (result.blob && activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addQuotaUsage('google', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
-        if (result.blob) URL.revokeObjectURL(audioUrl);
+        if (result.blob && activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi tải audio từ Google TTS');
         showToast('Lỗi phát âm thanh từ Google TTS.', 'error');
       };
 
       await audio.play();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
-      showToast(`Google TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+      addHistoryLog(interpolatedText, 'failed', message);
+      showToast(`Google TTS lỗi: ${message}. Tự động fallback về Browser...`, 'error');
       speakBrowser(textToSpeak);
     }
   };
@@ -1304,11 +1277,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       });
 
       if (!result.blob) throw new Error('Không nhận được dữ liệu MP3 từ Edge TTS');
+      cleanupActiveAudio();
       const audioUrl = URL.createObjectURL(result.blob);
-
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      activeObjectUrlRef.current = audioUrl;
 
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
@@ -1317,26 +1288,33 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       audio.onplay = () => setPlaybackState('playing');
       audio.onended = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addQuotaUsage('edge', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã MP3 từ Edge TTS');
         showToast('Lỗi phát âm thanh từ Edge Neural TTS.', 'error');
       };
 
       await audio.play();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
+      addHistoryLog(interpolatedText, 'failed', message);
       if (providerSettings.autoFallback) {
-        showToast(`Edge TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        showToast(`Edge TTS lỗi: ${message}. Tự động fallback về Browser...`, 'error');
         speakBrowser(textToSpeak);
       } else {
-        showToast(`Edge TTS lỗi: ${err.message}`, 'error');
+        showToast(`Edge TTS lỗi: ${message}`, 'error');
       }
     }
   };
@@ -1372,11 +1350,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       });
 
       if (!result.blob) throw new Error('Không nhận được dữ liệu âm thanh từ CapCut TTS');
+      cleanupActiveAudio();
       const audioUrl = URL.createObjectURL(result.blob);
-
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      activeObjectUrlRef.current = audioUrl;
 
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
@@ -1385,26 +1361,33 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       audio.onplay = () => setPlaybackState('playing');
       audio.onended = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addQuotaUsage('capcut', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã WAV từ CapCut TTS');
         showToast('Lỗi phát âm thanh từ CapCut TTS.', 'error');
       };
 
       await audio.play();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
+      addHistoryLog(interpolatedText, 'failed', message);
       if (providerSettings.autoFallback) {
-        showToast(`CapCut TTS lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        showToast(`CapCut TTS lỗi: ${message}. Tự động fallback về Browser...`, 'error');
         speakBrowser(textToSpeak);
       } else {
-        showToast(`CapCut TTS lỗi: ${err.message}`, 'error');
+        showToast(`CapCut TTS lỗi: ${message}`, 'error');
       }
     }
   };
@@ -1443,11 +1426,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       if (result.fallbackUsed) {
         showToast(`OpenAI.fm đang bật chống bot, đã tự động chuyển tiếp sang giọng Neural (${result.fallbackUsed})`, 'info');
       }
+      cleanupActiveAudio();
       const audioUrl = URL.createObjectURL(result.blob);
-
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-      }
+      activeObjectUrlRef.current = audioUrl;
 
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
@@ -1459,26 +1440,33 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       audio.onplay = () => setPlaybackState('playing');
       audio.onended = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addQuotaUsage('openaifm', charCount);
         addHistoryLog(interpolatedText, 'success');
       };
       audio.onerror = () => {
         setPlaybackState('idle');
-        URL.revokeObjectURL(audioUrl);
+        if (activeObjectUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          activeObjectUrlRef.current = null;
+        }
         addHistoryLog(interpolatedText, 'failed', 'Lỗi giải mã âm thanh từ OpenAI.fm');
         showToast('Lỗi phát âm thanh từ OpenAI.fm.', 'error');
       };
 
       await audio.play();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi không xác định';
       setPlaybackState('idle');
-      addHistoryLog(interpolatedText, 'failed', err.message);
+      addHistoryLog(interpolatedText, 'failed', message);
       if (providerSettings.autoFallback) {
-        showToast(`OpenAI.fm lỗi: ${err.message}. Tự động fallback về Browser...`, 'error');
+        showToast(`OpenAI.fm lỗi: ${message}. Tự động fallback về Browser...`, 'error');
         speakBrowser(textToSpeak);
       } else {
-        showToast(`OpenAI.fm lỗi: ${err.message}`, 'error');
+        showToast(`OpenAI.fm lỗi: ${message}`, 'error');
       }
     }
   };
@@ -1521,10 +1509,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
-      activeAudioRef.current.src = '';
-    }
+    cleanupActiveAudio();
     setPlaybackState('idle');
   };
 
@@ -1532,7 +1517,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
   const addHistoryLog = (text: string, status: 'success' | 'failed', errMsg?: string) => {
     const p = providerSettings.activeProvider;
     const newItem: TTSHistoryItem = {
-      id: 'hist-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      id: createTtsRecordId('hist'),
       templateId: selectedTemplateId || undefined,
       text: text,
       normalizedText: normalizedTextToSpeak,
@@ -1580,7 +1565,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         ? providerSettings.capcutPitch
         : 1.0,
       volume: providerSettings.volume,
-      playedAt: new Date().toISOString(),
+      playedAt: getCurrentIsoTimestamp(),
       status: status,
       errorMessage: errMsg
     };
@@ -1588,7 +1573,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
     // Auto-save history row in Spreadsheet if active connection exists
     if (spreadsheetId && gasUrl) {
-      saveHistoryToSpreadsheet(newItem);
+      void saveHistoryToSpreadsheet(newItem);
     }
   };
 
@@ -1600,8 +1585,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     }
 
     const title = composeTitle.trim() || `Mẫu câu #${templates.length + 1}`;
-    const id = selectedTemplateId || 'tpl-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    const id = selectedTemplateId || createTtsRecordId('tpl');
     const p = providerSettings.activeProvider;
+    const nowIso = getCurrentIsoTimestamp();
 
     const newTpl: TTSTemplate = {
       id,
@@ -1653,8 +1639,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         : 1.0,
       volume: providerSettings.volume,
       isFavorite: templates.find(t => t.id === id)?.isFavorite || false,
-      createdAt: templates.find(t => t.id === id)?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: templates.find(t => t.id === id)?.createdAt || nowIso,
+      updatedAt: nowIso
     };
 
     setTemplates((prev: TTSTemplate[]) => {
@@ -1700,7 +1686,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     setComposeCategory(tpl.category);
 
     // Apply preset synthesis settings if present
-    setProviderSettings((prev: any) => {
+    setProviderSettings(prev => {
       const p = tpl.providerId;
       return {
         ...prev,
@@ -1744,17 +1730,18 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
   // Add default suggestions templates into active library
   const handleLoadSuggestion = (sug: Omit<TTSTemplate, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const nowIso = getCurrentIsoTimestamp();
     const newTpl: TTSTemplate = {
       ...sug,
-      id: 'tpl-sug-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      id: createTtsRecordId('tpl-sug'),
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
     setTemplates((prev: TTSTemplate[]) => [newTpl, ...prev]);
     showToast(`Đã thêm mẫu câu "${sug.title}" vào thư viện cá nhân!`, 'success');
 
     if (spreadsheetId && gasUrl) {
-      saveTemplateToSpreadsheet(newTpl);
+      void saveTemplateToSpreadsheet(newTpl);
     }
   };
 
@@ -1770,7 +1757,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
     try {
       // 1. Fetch remote templates
-      const getUrl = `${gasUrl}?action=get_tts_templates&ssId=${spreadsheetId}`;
+      const getUrl = `${gasUrl}?action=get_tts_templates&ssId=${encodeURIComponent(spreadsheetId)}`;
       const response = await fetch(getUrl);
       const result = await response.json();
 
@@ -1807,12 +1794,12 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
       // 1.1 Fetch remote settings
       try {
-        const settingsUrl = `${gasUrl}?action=get_tts_settings&ssId=${spreadsheetId}`;
+        const settingsUrl = `${gasUrl}?action=get_tts_settings&ssId=${encodeURIComponent(spreadsheetId)}`;
         const settingsRes = await fetch(settingsUrl);
         const settingsResult = await settingsRes.json();
         if (settingsResult.success && settingsResult.data) {
           const cloudSettings = settingsResult.data;
-          setProviderSettings((prev: any) => ({
+          setProviderSettings(prev => ({
             ...prev,
             fptApiKey: cloudSettings.fptApiKey !== undefined ? cloudSettings.fptApiKey : prev.fptApiKey,
             viettelToken: cloudSettings.viettelToken !== undefined ? cloudSettings.viettelToken : prev.viettelToken,
@@ -1826,10 +1813,11 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       setTemplates(mergedList);
       setSyncStatus('synced');
       showToast('Đồng bộ hoàn tất! Dữ liệu đã khớp 100% với Google Sheets.', 'success');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setSyncStatus('error');
-      showToast(`Đồng bộ thất bại: ${e.message}`, 'error');
+      const message = e instanceof Error ? e.message : 'Lỗi kết nối';
+      showToast(`Đồng bộ thất bại: ${message}`, 'error');
     }
   };
 
@@ -1838,7 +1826,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     try {
       await fetch(gasUrl, {
         method: 'POST',
-        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'save_tts_template',
           spreadsheetId: spreadsheetId,
@@ -1855,7 +1843,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     try {
       await fetch(gasUrl, {
         method: 'POST',
-        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'delete_tts_template',
           spreadsheetId: spreadsheetId,
@@ -1872,7 +1860,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
     try {
       await fetch(gasUrl, {
         method: 'POST',
-        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'save_tts_history',
           spreadsheetId: spreadsheetId,
@@ -2358,7 +2346,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       <input 
                         type="checkbox" 
                         checked={providerSettings.autoOptimize}
-                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoOptimize: e.target.checked }))}
+                        onChange={e => setProviderSettings(prev => ({ ...prev, autoOptimize: e.target.checked }))}
                         style={{ accentColor: 'var(--accent-primary)' }}
                       />
                       <span>Tự động tối ưu câu đọc</span>
@@ -2544,7 +2532,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     <select 
                       className="form-control"
                       value={providerSettings.activeProvider}
-                      onChange={e => setProviderSettings((prev: any) => ({ ...prev, activeProvider: e.target.value }))}
+                      onChange={e => setProviderSettings(prev => ({ ...prev, activeProvider: e.target.value }))}
                       style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
                       <optgroup label="🌟 Nguồn Reverse-Engineered (Miễn phí, Không cần API Key)">
@@ -2569,7 +2557,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       <input 
                         type="checkbox" 
                         checked={providerSettings.autoFallback}
-                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, autoFallback: e.target.checked }))}
+                        onChange={e => setProviderSettings(prev => ({ ...prev, autoFallback: e.target.checked }))}
                         style={{ accentColor: 'var(--cyan)' }}
                       />
                       <span>Tự động Fallback sang nguồn dự phòng (Google/Browser) khi lỗi</span>
@@ -2591,7 +2579,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.edgeVoiceId || 'vi-VN-HoaiMyNeural'}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeVoiceId: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, edgeVoiceId: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {EDGE_VOICES.map(v => (
@@ -2611,7 +2599,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="50" 
                             step="5"
                             value={providerSettings.edgeRate || 0} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeRate: parseInt(e.target.value, 10) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, edgeRate: parseInt(e.target.value, 10) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)' }}
                           />
                         </div>
@@ -2626,7 +2614,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="30" 
                             step="2"
                             value={providerSettings.edgePitch || 0} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgePitch: parseInt(e.target.value, 10) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, edgePitch: parseInt(e.target.value, 10) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)' }}
                           />
                         </div>
@@ -2638,7 +2626,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="number" 
                           className="form-control"
                           value={providerSettings.edgeDailyLimit || 100000}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, edgeDailyLimit: parseInt(e.target.value, 10) || 100000 }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, edgeDailyLimit: parseInt(e.target.value, 10) || 100000 }))}
                         />
                       </div>
                     </>
@@ -2659,7 +2647,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.capcutVoiceId || 'BV074_streaming'}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutVoiceId: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, capcutVoiceId: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {Array.from(new Set(CAPCUT_VOICES.map(v => v.group))).map(groupName => (
@@ -2683,7 +2671,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="20" 
                             step="1"
                             value={providerSettings.capcutSpeed || 10} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutSpeed: parseInt(e.target.value, 10) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, capcutSpeed: parseInt(e.target.value, 10) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)' }}
                           />
                         </div>
@@ -2698,7 +2686,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="20" 
                             step="1"
                             value={providerSettings.capcutPitch || 10} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutPitch: parseInt(e.target.value, 10) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, capcutPitch: parseInt(e.target.value, 10) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)' }}
                           />
                         </div>
@@ -2710,7 +2698,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="number" 
                           className="form-control"
                           value={providerSettings.capcutDailyLimit || 50000}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, capcutDailyLimit: parseInt(e.target.value, 10) || 50000 }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, capcutDailyLimit: parseInt(e.target.value, 10) || 50000 }))}
                         />
                       </div>
                     </>
@@ -2732,7 +2720,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           <select 
                             className="form-control"
                             value={providerSettings.openaifmVoiceId || 'coral'}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmVoiceId: e.target.value }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, openaifmVoiceId: e.target.value }))}
                             style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                           >
                             {OPENAIFM_VOICES.map(v => (
@@ -2749,7 +2737,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="1.5" 
                             step="0.05"
                             value={providerSettings.openaifmSpeed || 1.0} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmSpeed: parseFloat(e.target.value) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, openaifmSpeed: parseFloat(e.target.value) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)', marginTop: '8px' }}
                           />
                         </div>
@@ -2761,7 +2749,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control"
                           rows={2}
                           value={providerSettings.openaifmPrompt || DEFAULT_OPENAIFM_PROMPT}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmPrompt: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, openaifmPrompt: e.target.value }))}
                           placeholder="Mô tả phong cách giọng đọc tiếng Việt..."
                           style={{ fontSize: '0.82rem', lineHeight: 1.4 }}
                         />
@@ -2775,7 +2763,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             className="form-control"
                             value={providerSettings.openaifmEndpoint || 'https://www.openai.fm/api/generate'}
                             placeholder="https://www.openai.fm/api/generate hoặc http://localhost:8000/v1/audio/speech"
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmEndpoint: e.target.value }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, openaifmEndpoint: e.target.value }))}
                           />
                         </div>
 
@@ -2786,7 +2774,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             className="form-control"
                             value={providerSettings.openaifmApiKey || ''}
                             placeholder="Không bắt buộc với openai.fm"
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmApiKey: e.target.value }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, openaifmApiKey: e.target.value }))}
                           />
                         </div>
                       </div>
@@ -2797,7 +2785,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="number" 
                           className="form-control"
                           value={providerSettings.openaifmDailyLimit || 30000}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, openaifmDailyLimit: parseInt(e.target.value, 10) || 30000 }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, openaifmDailyLimit: parseInt(e.target.value, 10) || 30000 }))}
                         />
                       </div>
                     </>
@@ -2811,7 +2799,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.browserVoiceURI}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, browserVoiceURI: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, browserVoiceURI: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                         >
                           <option value="">-- Mặc định (Tự chọn vi-VN) --</option>
@@ -2839,7 +2827,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           max="2.0" 
                           step="0.1"
                           value={providerSettings.rate} 
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, rate: parseFloat(e.target.value) }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, rate: parseFloat(e.target.value) }))}
                           style={{ width: '100%', accentColor: 'var(--cyan)' }}
                         />
                       </div>
@@ -2853,7 +2841,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           max="1.5" 
                           step="0.05"
                           value={providerSettings.pitch} 
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, pitch: parseFloat(e.target.value) }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, pitch: parseFloat(e.target.value) }))}
                           style={{ width: '100%', accentColor: 'var(--cyan)' }}
                         />
                       </div>
@@ -2879,7 +2867,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control" 
                           placeholder="Nhập API Key FPT.AI"
                           value={providerSettings.fptApiKey || ''}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptApiKey: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, fptApiKey: e.target.value }))}
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://console.fpt.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
@@ -2893,7 +2881,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.fptVoiceId}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptVoiceId: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, fptVoiceId: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {FPT_VOICES.map(v => (
@@ -2913,7 +2901,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           max="3" 
                           step="1"
                           value={providerSettings.fptSpeed} 
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptSpeed: parseInt(e.target.value, 10) }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, fptSpeed: parseInt(e.target.value, 10) }))}
                           style={{ width: '100%', accentColor: 'var(--cyan)' }}
                         />
                       </div>
@@ -2924,7 +2912,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           <select 
                             className="form-control"
                             value={providerSettings.fptFormat}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptFormat: e.target.value }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, fptFormat: e.target.value }))}
                             style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                           >
                             <option value="mp3">MP3</option>
@@ -2937,7 +2925,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             type="number" 
                             className="form-control"
                             value={providerSettings.fptDailyLimit}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, fptDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
                           />
                         </div>
                       </div>
@@ -2948,7 +2936,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="text" 
                           className="form-control"
                           value={providerSettings.fptEndpoint}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, fptEndpoint: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, fptEndpoint: e.target.value }))}
                         />
                       </div>
 
@@ -2956,7 +2944,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         type="button"
                         className="btn-outline"
                         onClick={() => {
-                          setProviderSettings((prev: any) => ({ ...prev, fptApiKey: '' }));
+                          setProviderSettings(prev => ({ ...prev, fptApiKey: '' }));
                           showToast('Đã xóa FPT API Key thành công!', 'info');
                         }}
                         style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
@@ -2985,7 +2973,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control" 
                           placeholder="Nhập Token Viettel AI"
                           value={providerSettings.viettelToken || ''}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelToken: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, viettelToken: e.target.value }))}
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://viettelai.vn" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
@@ -2999,7 +2987,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.viettelVoiceId}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelVoiceId: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, viettelVoiceId: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {VIETTEL_VOICES.map(v => (
@@ -3019,7 +3007,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           max="1.2" 
                           step="0.1"
                           value={providerSettings.viettelSpeed} 
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelSpeed: parseFloat(e.target.value) }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, viettelSpeed: parseFloat(e.target.value) }))}
                           style={{ width: '100%', accentColor: 'var(--cyan)' }}
                         />
                       </div>
@@ -3030,7 +3018,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           <select 
                             className="form-control"
                             value={providerSettings.viettelFormat}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelFormat: e.target.value }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, viettelFormat: e.target.value }))}
                             style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                           >
                             <option value="mp3">MP3</option>
@@ -3043,7 +3031,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             type="number" 
                             className="form-control"
                             value={providerSettings.viettelDailyLimit}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, viettelDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
                           />
                         </div>
                       </div>
@@ -3054,7 +3042,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="text" 
                           className="form-control"
                           value={providerSettings.viettelEndpoint}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, viettelEndpoint: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, viettelEndpoint: e.target.value }))}
                         />
                       </div>
 
@@ -3062,7 +3050,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         type="button"
                         className="btn-outline"
                         onClick={() => {
-                          setProviderSettings((prev: any) => ({ ...prev, viettelToken: '' }));
+                          setProviderSettings(prev => ({ ...prev, viettelToken: '' }));
                           showToast('Đã xóa Viettel Token thành công!', 'info');
                         }}
                         style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
@@ -3091,7 +3079,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           className="form-control" 
                           placeholder="Nhập API Key Zalo AI"
                           value={providerSettings.zaloApiKey || ''}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloApiKey: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, zaloApiKey: e.target.value }))}
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://zalo.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
@@ -3105,7 +3093,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         <select 
                           className="form-control"
                           value={providerSettings.zaloVoiceId}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloVoiceId: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, zaloVoiceId: e.target.value }))}
                           style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                         >
                           {ZALO_VOICES.map(v => (
@@ -3125,7 +3113,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           max="1.2" 
                           step="0.05"
                           value={providerSettings.zaloSpeed} 
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloSpeed: parseFloat(e.target.value) }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, zaloSpeed: parseFloat(e.target.value) }))}
                           style={{ width: '100%', accentColor: 'var(--cyan)' }}
                         />
                       </div>
@@ -3137,7 +3125,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             type="number" 
                             className="form-control"
                             value={providerSettings.zaloDailyLimit}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, zaloDailyLimit: parseInt(e.target.value, 10) || 5000 }))}
                           />
                         </div>
                       </div>
@@ -3148,7 +3136,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           type="text" 
                           className="form-control"
                           value={providerSettings.zaloEndpoint}
-                          onChange={e => setProviderSettings((prev: any) => ({ ...prev, zaloEndpoint: e.target.value }))}
+                          onChange={e => setProviderSettings(prev => ({ ...prev, zaloEndpoint: e.target.value }))}
                         />
                       </div>
 
@@ -3156,7 +3144,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         type="button"
                         className="btn-outline"
                         onClick={() => {
-                          setProviderSettings((prev: any) => ({ ...prev, zaloApiKey: '' }));
+                          setProviderSettings(prev => ({ ...prev, zaloApiKey: '' }));
                           showToast('Đã xóa Zalo API Key thành công!', 'info');
                         }}
                         style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)', fontSize: '0.8rem' }}
@@ -3183,7 +3171,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             max="1.5" 
                             step="0.05"
                             value={providerSettings.googleSpeed || 1.0} 
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleSpeed: parseFloat(e.target.value) }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, googleSpeed: parseFloat(e.target.value) }))}
                             style={{ width: '100%', accentColor: 'var(--cyan)', marginTop: '8px' }}
                           />
                         </div>
@@ -3194,7 +3182,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                             type="number" 
                             className="form-control"
                             value={providerSettings.googleDailyLimit}
-                            onChange={e => setProviderSettings((prev: any) => ({ ...prev, googleDailyLimit: parseInt(e.target.value, 10) || 20000 }))}
+                            onChange={e => setProviderSettings(prev => ({ ...prev, googleDailyLimit: parseInt(e.target.value, 10) || 20000 }))}
                           />
                         </div>
                       </div>
@@ -3210,7 +3198,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         className="form-control" 
                         value={providerSettings.customEndpoint}
                         placeholder="VD: http://localhost:5000/tts"
-                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, customEndpoint: e.target.value }))}
+                        onChange={e => setProviderSettings(prev => ({ ...prev, customEndpoint: e.target.value }))}
                       />
                       <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '4px', lineHeight: 1.3 }}>
                         Endpoint nhận tham số `?text=` và trả về luồng âm thanh trực tiếp (WAV/MP3).
@@ -3227,7 +3215,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         className="form-control" 
                         value={providerSettings.reverseProxyUrl || ''}
                         placeholder="Để trống để dùng Vite Proxy (/api/tts-proxy) hoặc nhập Cloudflare Worker URL"
-                        onChange={e => setProviderSettings((prev: any) => ({ ...prev, reverseProxyUrl: e.target.value }))}
+                        onChange={e => setProviderSettings(prev => ({ ...prev, reverseProxyUrl: e.target.value }))}
                       />
                       <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '4px', lineHeight: 1.3 }}>
                         Mặc định hệ thống tự động kết nối qua `/api/tts-proxy` (Vite server) hoặc `CloudflareWorkerHikvision.js` / `gas_backend.gs`.
@@ -3244,7 +3232,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       max="1.0" 
                       step="0.05"
                       value={providerSettings.volume} 
-                      onChange={e => setProviderSettings((prev: any) => ({ ...prev, volume: parseFloat(e.target.value) }))}
+                      onChange={e => setProviderSettings(prev => ({ ...prev, volume: parseFloat(e.target.value) }))}
                       style={{ width: '100%', accentColor: 'var(--cyan)' }}
                     />
                   </div>
@@ -3265,7 +3253,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     type="button"
                     className="btn-outline"
                     onClick={() => {
-                      setProviderSettings((prev: any) => ({
+                      setProviderSettings(prev => ({
                         ...prev,
                         fptApiKey: '',
                         viettelToken: '',

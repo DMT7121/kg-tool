@@ -17,6 +17,15 @@ import {
   Puzzle
 } from 'lucide-react';
 
+export type CommandTabId =
+  | 'attendance'
+  | 'payroll'
+  | 'vietqr'
+  | 'tts'
+  | 'settings'
+  | 'transfer'
+  | 'hikvision';
+
 export interface CommandItem {
   id: string;
   title: string;
@@ -30,7 +39,7 @@ export interface CommandItem {
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  onNavigateTab: (tab: any) => void;
+  onNavigateTab: (tab: CommandTabId) => void;
   onTriggerAction?: (actionId: string) => void;
 }
 
@@ -44,8 +53,7 @@ const stripAccents = (str: string): string => {
     .toLowerCase();
 };
 
-export const CommandPalette: React.FC<CommandPaletteProps> = ({
-  isOpen,
+const CommandPaletteDialog: React.FC<Omit<CommandPaletteProps, 'isOpen'>> = ({
   onClose,
   onNavigateTab,
   onTriggerAction
@@ -240,23 +248,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     });
   }, [commands, query]);
 
-  useEffect(() => {
-    if (isOpen) {
-      setQuery('');
-      setSelectedIndex(0);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 40);
-    }
-  }, [isOpen]);
+  const activeIndex = selectedIndex < filteredCommands.length ? selectedIndex : 0;
 
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+    const timerId = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 40);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -264,26 +265,24 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIndex(prev =>
-          filteredCommands.length > 0 ? (prev + 1) % filteredCommands.length : 0
+          filteredCommands.length > 0 ? ((prev < filteredCommands.length ? prev : 0) + 1) % filteredCommands.length : 0
         );
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIndex(prev =>
           filteredCommands.length > 0
-            ? (prev - 1 + filteredCommands.length) % filteredCommands.length
+            ? ((prev < filteredCommands.length ? prev : 0) - 1 + filteredCommands.length) % filteredCommands.length
             : 0
         );
-      } else if (e.key === 'Enter' && filteredCommands[selectedIndex]) {
+      } else if (e.key === 'Enter' && filteredCommands[activeIndex]) {
         e.preventDefault();
-        filteredCommands[selectedIndex].onSelect();
+        filteredCommands[activeIndex].onSelect();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, filteredCommands, selectedIndex, onClose]);
-
-  if (!isOpen) return null;
+  }, [filteredCommands, activeIndex, onClose]);
 
   return (
     <div className="cmd-palette-backdrop" onClick={onClose}>
@@ -302,7 +301,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             className="cmd-palette-input"
             placeholder="Gõ lệnh hoặc tìm công cụ (VD: tính lương, chuyển khoản, vietqr, sáng/tối)..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => {
+              setQuery(e.target.value);
+              setSelectedIndex(0);
+            }}
           />
           <kbd
             style={{
@@ -343,7 +345,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     <div className="cmd-palette-group-title">{catLabel}</div>
                     {groupItems.map(item => {
                       const globalIndex = filteredCommands.findIndex(c => c.id === item.id);
-                      const isSelected = globalIndex === selectedIndex;
+                      const isSelected = globalIndex === activeIndex;
 
                       return (
                         <div
@@ -381,4 +383,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       </div>
     </div>
   );
+};
+
+export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, ...rest }) => {
+  if (!isOpen) return null;
+  return <CommandPaletteDialog {...rest} />;
 };

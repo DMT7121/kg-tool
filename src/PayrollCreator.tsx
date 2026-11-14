@@ -14,13 +14,18 @@ import {
   Minimize2,
   Maximize2
 } from 'lucide-react';
-import JSZip from 'jszip';
-import { jsPDF } from 'jspdf';
 import './PayrollCreator.css';
 import { StatCard, EmptyState, GuidePanel, PageHeader } from './components/Shared';
 import { Users, Calendar, Wallet, CreditCard, Sliders } from 'lucide-react';
 import { SlideOverDrawer } from './components/SlideOverDrawer';
-import ExcelJS from 'exceljs';
+import {
+  escapeHtml,
+  numberToVietnameseWords,
+  parseSmartCurrency,
+  parseSmartDecimal,
+  removeVietnameseAccents,
+  unwrapExcelCellValue,
+} from './utils/numberUtils';
 
 const THEMES = {
   blue: '#1e3a8a',
@@ -118,9 +123,152 @@ const AVAILABLE_FONTS = [
   'Source Serif 4',
 ];
 
-// Format Utilities
-const escapeHtml = (s: string) => String(s ?? '').replace(/[&<>"]/g, c => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c] || ''));
-const onlyNumber = (v: any) => Number(String(v ?? '').replace(/\./g, '').replace(/[^0-9-]/g, '')) || 0;
+type SalaryMode = 'monthly' | 'hourly' | 'restaurant';
+type RoundMode = 'none' | 'hundred' | 'thousand';
+type PrintScope = 'current' | 'all' | 'selected';
+type VisibilityConfig = CustomPrintPreset['visibility'];
+type ThermalOptionsConfig = CustomPrintPreset['thermalOptions'];
+
+const DEFAULT_VISIBILITY: VisibilityConfig = {
+  showLogo: true,
+  showUnitInfo: true,
+  showTitle: true,
+  showMetaInfo: true,
+  showEmpName: true,
+  showEmpRole: true,
+  showEmpDept: true,
+  showEmpBank: true,
+  showBaseSalary: true,
+  showTime: true,
+  showAdvance: true,
+  showDeductions: true,
+  showSignatures: true,
+  showNotes: true,
+};
+
+const DEFAULT_THERMAL_OPTIONS: ThermalOptionsConfig = {
+  splitEachSlip: true,
+  compactCut: true,
+  bottomFeedMm: 6,
+  hideSignature: true,
+  hideEmptyNotes: true,
+  hideEmptyRows: true,
+  showCutLine: false,
+};
+
+const GOOGLE_FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700&family=Nunito:wght@400;600;700&family=Roboto:wght@400;500;700&family=Noto+Sans:wght@400;700&family=Noto+Serif:wght@400;700&family=Manrope:wght@400;500;700&family=Mulish:wght@400;700&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@400;700;800;900&display=swap';
+
+function createPayrollId(prefix = ''): string {
+  const base = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  return prefix ? `${prefix}-${base}` : base;
+}
+
+function roundSalaryByMode(n: number, mode: RoundMode): number {
+  if (mode === 'thousand') return Math.round(n / 1000) * 1000;
+  if (mode === 'hundred') return Math.round(n / 100) * 100;
+  return Math.round(n);
+}
+
+function calculateRestaurantDetails(emp: Employee) {
+  const salary = emp.salary || 0;
+  const workedDays = emp.workedDays !== undefined ? emp.workedDays : emp.days;
+  const addedDays = emp.addedDays !== undefined ? emp.addedDays : 0;
+
+  const quyDoi = Math.round(salary / 240);
+  const luongTheoGio = Math.round((salary * (workedDays + addedDays)) / 30);
+  const tienCom = emp.lunchPay !== undefined ? emp.lunchPay : workedDays * 20000;
+  const thuong = emp.bonus || 0;
+  const tangCa = emp.overtimePay || 0;
+  const doBe = emp.deduction || 0;
+  const tamUng = emp.advance || 0;
+  const tongNhan = luongTheoGio + tienCom + thuong + tangCa - doBe - tamUng;
+
+  return {
+    quyDoi,
+    luongTheoGio,
+    tienCom,
+    thuong,
+    tangCa,
+    doBe,
+    tamUng,
+    tongNhan,
+  };
+}
+
+function computeEmployeeAmount(
+  emp: Employee,
+  mode: SalaryMode,
+  stdDays: number,
+  rMode: RoundMode
+): number {
+  if (mode === 'restaurant') {
+    return calculateRestaurantDetails(emp).tongNhan;
+  }
+  if (mode === 'hourly') {
+    return roundSalaryByMode(emp.salary * emp.days, rMode);
+  }
+  const safeStdDays = stdDays > 0 ? stdDays : 26;
+  return roundSalaryByMode((emp.salary * emp.days) / safeStdDays, rMode);
+}
+
+interface InitialPayrollDraft {
+  salaryMode: SalaryMode;
+  payMonth: string;
+  voucherDate: string;
+  standardDays: number;
+  defaultPosition: string;
+  defaultDept: string;
+  advance: number;
+  employees: Employee[];
+  deductions: Deduction[];
+  activeTemplate: 'standard' | 'k80' | 'modern';
+}
+
+function loadInitialPayrollDraft(): InitialPayrollDraft {
+  const fallback: InitialPayrollDraft = {
+    salaryMode: 'restaurant',
+    payMonth: '2026-06',
+    voucherDate: '2026-06-12',
+    standardDays: 30,
+    defaultPosition: 'Nhân viên',
+    defaultDept: 'Nhân sự',
+    advance: 0,
+    employees: [],
+    deductions: [],
+    activeTemplate: 'standard',
+  };
+
+  try {
+    const saved = localStorage.getItem('kg_tool_payroll_state');
+    if (!saved) return fallback;
+    const data = JSON.parse(saved) as Partial<InitialPayrollDraft>;
+    return {
+      salaryMode: data.salaryMode || 'monthly',
+      payMonth: data.payMonth || '2026-06',
+      voucherDate: data.voucherDate || '2026-06-12',
+      standardDays: Number(data.standardDays) || 30,
+      defaultPosition: data.defaultPosition || 'Nhân viên',
+      defaultDept: data.defaultDept || 'Nhân sự',
+      advance: Number(data.advance) || 0,
+      employees: Array.isArray(data.employees) ? data.employees : [],
+      deductions: Array.isArray(data.deductions) ? data.deductions : [],
+      activeTemplate: data.activeTemplate || 'standard',
+    };
+  } catch (e) {
+    console.error(e);
+    return fallback;
+  }
+}
+
+function safeParseJson<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 interface MoneyInputProps {
   value: number;
@@ -134,12 +282,6 @@ const MoneyInput: React.FC<MoneyInputProps> = ({ value, onChange, className, pla
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState('');
 
-  useEffect(() => {
-    if (!isFocused) {
-      setLocalValue(formatMoney(value));
-    }
-  }, [value, isFocused, formatMoney]);
-
   const handleFocus = () => {
     setIsFocused(true);
     setLocalValue(value === 0 ? '' : String(value));
@@ -147,7 +289,7 @@ const MoneyInput: React.FC<MoneyInputProps> = ({ value, onChange, className, pla
 
   const handleBlur = () => {
     setIsFocused(false);
-    const parsed = onlyNumber(localValue);
+    const parsed = Math.round(parseSmartCurrency(localValue));
     onChange(parsed);
   };
 
@@ -162,7 +304,7 @@ const MoneyInput: React.FC<MoneyInputProps> = ({ value, onChange, className, pla
       type="text"
       className={className}
       placeholder={placeholder}
-      value={localValue}
+      value={isFocused ? localValue : formatMoney(value)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onChange={handleChange}
@@ -185,75 +327,35 @@ function formatDate(value: string) {
 }
 
 function numberToVietnamese(num: number): string {
-  num = Math.round(Number(num) || 0);
-  if (num === 0) return 'Không đồng chẵn';
-  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
-  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
-
-  function readTriple(n: number, full: boolean) {
-    const tr = Math.floor(n / 100);
-    const ch = Math.floor((n % 100) / 10);
-    const dv = n % 10;
-    let out = [];
-    if (tr > 0 || full) out.push(digits[tr], 'trăm');
-    if (ch > 1) {
-      out.push(digits[ch], 'mươi');
-      if (dv === 1) out.push('mốt');
-      else if (dv === 5) out.push('lăm');
-      else if (dv > 0) out.push(digits[dv]);
-    } else if (ch === 1) {
-      out.push('mười');
-      if (dv === 5) out.push('lăm');
-      else if (dv > 0) out.push(digits[dv]);
-    } else if (dv > 0) {
-      if (tr > 0 || full) out.push('lẻ');
-      out.push(digits[dv]);
-    }
-    return out.join(' ');
-  }
-
-  let parts = [];
-  let groups = [];
-  let sign = num < 0 ? 'Âm ' : '';
-  num = Math.abs(num);
-
-  while (num > 0) {
-    groups.push(num % 1000);
-    num = Math.floor(num / 1000);
-  }
-
-  for (let i = groups.length - 1; i >= 0; i--) {
-    if (groups[i] === 0) continue;
-    const full = i < groups.length - 1 && groups[i] < 100;
-    const text = readTriple(groups[i], full);
-    parts.push(text + (units[i] ? ' ' + units[i] : ''));
-  }
-
-  let result = parts.join(' ').replace(/\s+/g, ' ').trim();
-  return sign + result.charAt(0).toUpperCase() + result.slice(1) + ' đồng chẵn';
+  const rounded = Math.round(Number(num) || 0);
+  if (rounded === 0) return 'Không đồng chẵn';
+  const words = numberToVietnameseWords(rounded);
+  return words.charAt(0).toUpperCase() + words.slice(1) + ' đồng chẵn';
 }
 
 export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, showToast }: PayrollCreatorProps) {
-  // Main form states
-  const [salaryMode, setSalaryMode] = useState<'monthly' | 'hourly' | 'restaurant'>('restaurant');
-  const [payMonth, setPayMonth] = useState('2026-06');
-  const [voucherDate, setVoucherDate] = useState('2026-06-12');
-  const [standardDays, setStandardDays] = useState(30);
-  const [defaultPosition, setDefaultPosition] = useState('Nhân viên');
-  const [defaultDept, setDefaultDept] = useState('Nhân sự');
-  
-  const [advance, setAdvance] = useState(0);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [deductions, setDeductions] = useState<Deduction[]>([]);
-  
+  const [initialDraft] = useState<InitialPayrollDraft>(() => loadInitialPayrollDraft());
+
+  // Main form states (initialized lazily from draft to avoid cascading setState on mount)
+  const [salaryMode, setSalaryMode] = useState<SalaryMode>(() => initialDraft.salaryMode);
+  const [payMonth, setPayMonth] = useState(() => initialDraft.payMonth);
+  const [voucherDate, setVoucherDate] = useState(() => initialDraft.voucherDate);
+  const [standardDays, setStandardDays] = useState(() => initialDraft.standardDays);
+  const [defaultPosition, setDefaultPosition] = useState(() => initialDraft.defaultPosition);
+  const [defaultDept, setDefaultDept] = useState(() => initialDraft.defaultDept);
+
+  const [advance, setAdvance] = useState(() => initialDraft.advance);
+  const [employees, setEmployees] = useState<Employee[]>(() => initialDraft.employees);
+  const [deductions, setDeductions] = useState<Deduction[]>(() => initialDraft.deductions);
+
   // UI Preview configs
-  const [activeTemplate, setActiveTemplate] = useState<'standard' | 'k80' | 'modern'>('standard');
+  const [activeTemplate, setActiveTemplate] = useState<'standard' | 'k80' | 'modern'>(() => initialDraft.activeTemplate);
   const [activeView, setActiveView] = useState<'receipt' | 'summary'>('receipt');
-  
+
   // Sync history states
   const [historyMonths, setHistoryMonths] = useState<SavedPayrollMonth[]>([]);
   const [syncStatus, setSyncStatus] = useState<'online' | 'offline' | 'loading'>('offline');
-  
+
   // File inputs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -266,78 +368,66 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [fontSizeTable, setFontSizeTable] = useState(() => Number(localStorage.getItem('kg_tool_font_size_table')) || 13);
   const [titleWeight, setTitleWeight] = useState(() => localStorage.getItem('kg_tool_title_weight') || '700');
 
-  const [visibility, setVisibility] = useState(() => {
-    const saved = localStorage.getItem('kg_tool_payroll_visibility');
-    return saved ? JSON.parse(saved) : {
-      showLogo: true,
-      showUnitInfo: true,
-      showTitle: true,
-      showMetaInfo: true,
-      showEmpName: true,
-      showEmpRole: true,
-      showEmpDept: true,
-      showEmpBank: true,
-      showBaseSalary: true,
-      showTime: true,
-      showAdvance: true,
-      showDeductions: true,
-      showSignatures: true,
-      showNotes: true
-    };
-  });
-  
+  const [visibility, setVisibility] = useState<VisibilityConfig>(() =>
+    safeParseJson<VisibilityConfig>(localStorage.getItem('kg_tool_payroll_visibility'), DEFAULT_VISIBILITY)
+  );
+
   const [currencySymbol, setCurrencySymbol] = useState<'đ' | 'VNĐ' | 'none'>(() => (localStorage.getItem('kg_tool_currency_symbol') as 'đ' | 'VNĐ' | 'none') || 'đ');
   const [currencySeparator, setCurrencySeparator] = useState<'.' | ','>(() => (localStorage.getItem('kg_tool_currency_separator') as '.' | ',') || '.');
-  const [roundMode, setRoundMode] = useState<'none' | 'hundred' | 'thousand'>(() => (localStorage.getItem('kg_tool_round_mode') as 'none' | 'hundred' | 'thousand') || 'thousand');
-  
+  const [roundMode, setRoundMode] = useState<RoundMode>(() => (localStorage.getItem('kg_tool_round_mode') as RoundMode) || 'thousand');
+
   const [currentEmployeeIndex, setCurrentEmployeeIndex] = useState(0);
   const [previewMode, setPreviewMode] = useState<'single' | 'list' | 'thumbnail'>(() => (localStorage.getItem('kg_tool_preview_mode') as 'single' | 'list' | 'thumbnail') || 'single');
   const [zoomLevel, setZoomLevel] = useState<string | number>('fit');
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
+    () => new Set(initialDraft.employees.map(e => e.id))
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [searchEmployeeQuery, setSearchEmployeeQuery] = useState('');
   const [navigatorFilter, setNavigatorFilter] = useState<'all' | 'valid' | 'invalid' | 'deduction' | 'advance'>('all');
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
-  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
+  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(() => {
+    if (localStorage.getItem('kg_tool_pending_open_payroll_config') === '1') {
+      localStorage.removeItem('kg_tool_pending_open_payroll_config');
+      return true;
+    }
+    return false;
+  });
   const [configDrawerTab, setConfigDrawerTab] = useState<'salary' | 'print' | 'sync' | 'warnings'>('salary');
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [isDeductionsExpanded, setIsDeductionsExpanded] = useState(false);
   const [isPresetsExpanded, setIsPresetsExpanded] = useState(false);
 
   useEffect(() => {
-    const handleOpenConfig = () => setIsConfigDrawerOpen(true);
+    const handleOpenConfig = () => {
+      localStorage.removeItem('kg_tool_pending_open_payroll_config');
+      setIsConfigDrawerOpen(true);
+    };
     window.addEventListener('kg_open_payroll_config', handleOpenConfig);
     return () => window.removeEventListener('kg_open_payroll_config', handleOpenConfig);
   }, []);
-  
-  const [printScope, setPrintScope] = useState<'current' | 'all' | 'selected'>(() => (localStorage.getItem('kg_tool_print_scope') as 'current' | 'all' | 'selected') || 'current');
-  const [paperSize, setPaperSize] = useState<'a4' | 'k80'>(() => (localStorage.getItem('kg_tool_paper_size') as 'a4' | 'k80') || 'a4');
+
+  const [printScope, setPrintScope] = useState<PrintScope>(() => (localStorage.getItem('kg_tool_print_scope') as PrintScope) || 'current');
+  const [paperSize, setPaperSize] = useState<'a4' | 'k80'>(() => {
+    if (initialDraft.activeTemplate === 'k80') return 'k80';
+    return (localStorage.getItem('kg_tool_paper_size') as 'a4' | 'k80') || 'a4';
+  });
   const [activeQuickPreset, setActiveQuickPreset] = useState<'full' | 'compact' | 'internal' | 'k80'>(() => (localStorage.getItem('kg_tool_quick_preset') as 'full' | 'compact' | 'internal' | 'k80') || 'full');
   const [activeTypoPreset, setActiveTypoPreset] = useState<'modern' | 'admin' | 'minimalist' | 'luxury' | 'k80'>(() => (localStorage.getItem('kg_tool_typo_preset') as 'modern' | 'admin' | 'minimalist' | 'luxury' | 'k80') || 'admin');
 
-  const [thermalOptions, setThermalOptions] = useState(() => {
-    const saved = localStorage.getItem('kg_tool_thermal_options');
-    return saved ? JSON.parse(saved) : {
-      splitEachSlip: true,
-      compactCut: true,
-      bottomFeedMm: 6,
-      hideSignature: true,
-      hideEmptyNotes: true,
-      hideEmptyRows: true,
-      showCutLine: false
-    };
-  });
+  const [thermalOptions, setThermalOptions] = useState<ThermalOptionsConfig>(() =>
+    safeParseJson<ThermalOptionsConfig>(localStorage.getItem('kg_tool_thermal_options'), DEFAULT_THERMAL_OPTIONS)
+  );
 
   useEffect(() => {
     localStorage.setItem('kg_tool_thermal_options', JSON.stringify(thermalOptions));
   }, [thermalOptions]);
 
-  const [customPresets, setCustomPresets] = useState<CustomPrintPreset[]>(() => {
-    const saved = localStorage.getItem('kg_tool_custom_print_presets');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [customPresets, setCustomPresets] = useState<CustomPrintPreset[]>(() =>
+    safeParseJson<CustomPrintPreset[]>(localStorage.getItem('kg_tool_custom_print_presets'), [])
+  );
 
   const [containerWidth, setContainerWidth] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -405,45 +495,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     };
   }, []);
 
-  // Load state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('kg_tool_payroll_state');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setSalaryMode(data.salaryMode || 'monthly');
-        setPayMonth(data.payMonth || '2026-06');
-        setVoucherDate(data.voucherDate || '2026-06-12');
-        setStandardDays(Number(data.standardDays) || 30);
-        setDefaultPosition(data.defaultPosition || 'Nhân viên');
-        setDefaultDept(data.defaultDept || 'Nhân sự');
-        setAdvance(Number(data.advance) || 0);
-        const loadedEmployees: Employee[] = data.employees || [];
-        setEmployees(loadedEmployees);
-        setSelectedEmployeeIds(new Set(loadedEmployees.map(e => e.id)));
-        setDeductions(data.deductions || []);
-        const tpl = data.activeTemplate || 'standard';
-        setActiveTemplate(tpl);
-        if (tpl === 'k80') {
-          setPaperSize('k80');
-        }
-      } catch (e) {
-        console.error(e);
-        setEmployees([]);
-        setDeductions([]);
-      }
-    }
-  }, []);
-
-  // Sync paperSize with activeTemplate
-  useEffect(() => {
-    if (activeTemplate === 'k80' && paperSize !== 'k80') {
-      setPaperSize('k80');
-    } else if (activeTemplate !== 'k80' && paperSize === 'k80') {
-      setPaperSize('a4');
-    }
-  }, [activeTemplate]);
-
   // Save changes to local draft on state adjustment
   useEffect(() => {
     const stateObj = {
@@ -479,18 +530,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     localStorage.setItem('kg_tool_typo_preset', activeTypoPreset);
   }, [selectedFont, fontSizeTitle, fontSizeContent, fontSizeTable, titleWeight, visibility, currencySymbol, currencySeparator, roundMode, previewMode, printScope, paperSize, activeQuickPreset, activeTypoPreset]);
 
-  // Dynamic Google Font Injection in the Browser Head
-  const getGoogleFontsImport = () => {
-    return `@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700&family=Nunito:wght@400;600;700&family=Roboto:wght@400;500;700&family=Noto+Sans:wght@400;700&family=Noto+Serif:wght@400;700&family=Manrope:wght@400;500;700&family=Mulish:wght@400;700&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@400;700;800;900&display=swap');`;
-  };
-
+  // Load Google Fonts once in document.head via <link> (avoids duplicate @import parsing inside every SVG)
   useEffect(() => {
-    const styleId = 'google-fonts-payroll';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.innerHTML = getGoogleFontsImport();
-      document.head.appendChild(style);
+    const linkId = 'google-fonts-payroll-link';
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = GOOGLE_FONTS_HREF;
+      document.head.appendChild(link);
     }
   }, []);
 
@@ -532,71 +580,83 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
   }, [paperSize]);
 
-  // Load sync months history list if gasUrl is set
-  useEffect(() => {
-    if (gasUrl) {
-      fetchHistoryMonths();
-    } else {
+  // Google Apps Script REST API connections
+  const fetchHistoryMonths = useCallback(async () => {
+    if (!gasUrl) return;
+    setSyncStatus('loading');
+    try {
+      const url = `${gasUrl}?action=getMonths&ssId=${encodeURIComponent(spreadsheetId)}`;
+      const res = await fetch(url);
+      const result = await res.json() as { success?: boolean; data?: SavedPayrollMonth[]; error?: string };
+      if (result.success) {
+        setHistoryMonths(result.data || []);
+        setSyncStatus('online');
+      } else {
+        console.error(result.error);
+        setSyncStatus('offline');
+      }
+    } catch (e) {
+      console.error(e);
       setSyncStatus('offline');
     }
   }, [gasUrl, spreadsheetId]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (gasUrl) {
+        void fetchHistoryMonths();
+      } else {
+        setSyncStatus('offline');
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [gasUrl, fetchHistoryMonths]);
+
   // Round salary helper based on configuration
-  const roundSalary = (n: number) => {
-    if (roundMode === 'thousand') return Math.round(n / 1000) * 1000;
-    if (roundMode === 'hundred') return Math.round(n / 100) * 100;
-    return Math.round(n);
+  const roundSalary = useCallback((n: number) => {
+    return roundSalaryByMode(n, roundMode);
+  }, [roundMode]);
+
+  const getRestaurantDetails = calculateRestaurantDetails;
+
+  const getEmployeeNet = useCallback((emp: Employee) => {
+    if (salaryMode === 'restaurant') {
+      return Number(emp.amount || 0);
+    }
+    return Number(emp.amount || 0) - Number(emp.advance || 0) - Number(emp.deduction || 0);
+  }, [salaryMode]);
+
+  const recalculateAllEmployees = useCallback((mode: SalaryMode, stdDays: number, rMode: RoundMode) => {
+    setEmployees(prev => prev.map(e => ({
+      ...e,
+      amount: computeEmployeeAmount(e, mode, stdDays, rMode),
+    })));
+  }, []);
+
+  const handleSalaryModeChange = (nextMode: SalaryMode) => {
+    setSalaryMode(nextMode);
+    recalculateAllEmployees(nextMode, standardDays, roundMode);
   };
 
-  const getRestaurantDetails = (emp: Employee) => {
-    const salary = emp.salary || 0;
-    const workedDays = emp.workedDays !== undefined ? emp.workedDays : emp.days;
-    const addedDays = emp.addedDays !== undefined ? emp.addedDays : 0;
-    
-    // Quy đổi
-    const quyDoi = Math.round(salary / 240);
-    
-    // Lương theo giờ
-    const luongTheoGio = Math.round(salary * (workedDays + addedDays) / 30);
-    
-    // Tiền cơm
-    const tienCom = emp.lunchPay !== undefined ? emp.lunchPay : workedDays * 20000;
-    
-    // Thưởng
-    const thuong = emp.bonus || 0;
-    
-    // Tăng ca
-    const tangCa = emp.overtimePay || 0;
-    
-    // Đổ bể
-    const doBe = emp.deduction || 0;
-
-    // Tạm ứng
-    const tamUng = emp.advance || 0;
-    
-    // Tổng nhận
-    const tongNhan = luongTheoGio + tienCom + thuong + tangCa - doBe - tamUng;
-    
-    return {
-      quyDoi,
-      luongTheoGio,
-      tienCom,
-      thuong,
-      tangCa,
-      doBe,
-      tamUng,
-      tongNhan
-    };
+  const handleStandardDaysChange = (nextDays: number) => {
+    const safeDays = nextDays > 0 ? nextDays : 26;
+    setStandardDays(safeDays);
+    recalculateAllEmployees(salaryMode, safeDays, roundMode);
   };
 
-  const updateEmployeeRestaurantField = (id: string, field: keyof Employee, value: any) => {
+  const handleRoundModeChange = (nextRoundMode: RoundMode) => {
+    setRoundMode(nextRoundMode);
+    recalculateAllEmployees(salaryMode, standardDays, nextRoundMode);
+  };
+
+  const updateEmployeeRestaurantField = <K extends keyof Employee>(id: string, field: K, value: Employee[K]) => {
     setEmployees(prev => prev.map(e => {
       if (e.id === id) {
-        const updatedEmp = { ...e, [field]: value };
+        const updatedEmp: Employee = { ...e, [field]: value };
         if (field === 'workedDays') {
           updatedEmp.days = Number(value) || 0;
         }
-        const details = getRestaurantDetails(updatedEmp);
+        const details = calculateRestaurantDetails(updatedEmp);
         updatedEmp.amount = details.tongNhan;
         return updatedEmp;
       }
@@ -633,7 +693,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           const daysVal = salaryMode === 'hourly' ? (s.totalHours || s.workedDays * 8) : s.workedDays;
 
           const tempEmp: Employee = {
-            id: existing?.id || `att-${Date.now()}-${idx}`,
+            id: existing?.id || createPayrollId(`att-${idx}`),
             name: s.name,
             days: daysVal,
             workedDays: s.workedDays,
@@ -649,13 +709,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             amount: 0
           };
 
-          if (salaryMode === 'restaurant') {
-            tempEmp.amount = getRestaurantDetails(tempEmp).tongNhan;
-          } else if (salaryMode === 'hourly') {
-            tempEmp.amount = roundSalary(baseSalary * daysVal);
-          } else {
-            tempEmp.amount = roundSalary((baseSalary * daysVal) / standardDays);
-          }
+          tempEmp.amount = computeEmployeeAmount(tempEmp, salaryMode, standardDays, roundMode);
           return tempEmp;
         });
 
@@ -667,7 +721,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     } catch (e) {
       console.error(e);
     }
-  }, [salaryMode, standardDays]);
+  }, [roundMode, salaryMode, showToast, standardDays]);
 
   const handlePipeToTransferTool = () => {
     if (employees.length === 0) {
@@ -693,168 +747,156 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   };
 
   useEffect(() => {
-    if (localStorage.getItem('kg_tool_pending_attendance_payroll') === '1') {
-      localStorage.removeItem('kg_tool_pending_attendance_payroll');
-      importFromAttendanceSummary();
-    }
-    const onImportAtt = () => importFromAttendanceSummary();
     const onPresetK80 = () => {
+      localStorage.removeItem('kg_tool_pending_preset_k80');
       setPaperSize('k80');
       setActiveTemplate('k80');
+      setActiveQuickPreset('k80');
       showToast('Đã chuyển sang chế độ In nhiệt K80 (80mm)!', 'success');
+    };
+    const timer = window.setTimeout(() => {
+      if (localStorage.getItem('kg_tool_pending_attendance_payroll') === '1') {
+        localStorage.removeItem('kg_tool_pending_attendance_payroll');
+        importFromAttendanceSummary();
+      }
+      if (localStorage.getItem('kg_tool_pending_preset_k80') === '1') {
+        localStorage.removeItem('kg_tool_pending_preset_k80');
+        onPresetK80();
+      }
+    }, 0);
+    const onImportAtt = () => {
+      localStorage.removeItem('kg_tool_pending_attendance_payroll');
+      importFromAttendanceSummary();
     };
     window.addEventListener('kg-import-attendance-to-payroll', onImportAtt);
     window.addEventListener('kg-preset-k80', onPresetK80);
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener('kg-import-attendance-to-payroll', onImportAtt);
       window.removeEventListener('kg-preset-k80', onPresetK80);
     };
-  }, [importFromAttendanceSummary]);
+  }, [importFromAttendanceSummary, showToast]);
 
-  const importPayrollFromExcel = async (file: File) => {
+  const importPayrollFromExcel = useCallback(async (file: File) => {
     try {
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        try {
-          const buffer = evt.target?.result as ArrayBuffer;
-          const workbook = new ExcelJS.Workbook();
-          await workbook.xlsx.load(buffer);
-          
-          const worksheet = workbook.worksheets[0];
-          if (!worksheet) {
-            showToast("Không tìm thấy bảng tính nào trong file Excel.", "error");
-            return;
-          }
+      const buffer = await file.arrayBuffer();
+      const ExcelJSMod = await import('exceljs');
+      const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
 
-          const parsedEmployees: Employee[] = [];
-          const rowCount = worksheet.rowCount;
-          const colCount = worksheet.columnCount;
-          
-          const getCellValue = (cell: any): any => {
-            if (!cell) return null;
-            const val = cell.value;
-            if (val !== null && typeof val === 'object') {
-              if ('result' in val) return val.result;
-              if ('text' in val) return val.text;
-            }
-            return val;
-          };
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        showToast('Không tìm thấy bảng tính nào trong file Excel.', 'error');
+        return;
+      }
 
-          const parseNumberValue = (val: any): number => {
-            if (val === null || val === undefined) return 0;
-            if (typeof val === 'number') return val;
-            const cleaned = String(val).replace(/[^0-9.-]/g, '');
-            const num = Number(cleaned);
-            return isNaN(num) ? 0 : num;
-          };
+      const parsedEmployees: Employee[] = [];
+      const rowCount = worksheet.rowCount;
+      const colCount = worksheet.columnCount;
 
-          // Scan all cells in the sheet to find block starters
-          for (let r = 1; r <= rowCount; r++) {
-            const row = worksheet.getRow(r);
-            for (let c = 1; c <= colCount; c++) {
-              const cellVal = getCellValue(row.getCell(c));
-              if (cellVal && typeof cellVal === 'string' && cellVal.toUpperCase().includes("PHIẾU LƯƠNG NHÂN VIÊN")) {
-                let name = '';
-                let addedDays = 0;
-                let totalHours = 0;
-                let workedDays = 26;
-                let salary = 0;
-                let lunchPay = 0;
-                let bonus = 0;
-                let overtimePay = 0;
-                let deduction = 0;
-                let advance = 0;
-                
-                // Scan the block rows (up to 20 rows below the header)
-                for (let br = r + 1; br <= Math.min(r + 20, rowCount); br++) {
-                  const blockRow = worksheet.getRow(br);
-                  const labelCell = blockRow.getCell(c);
-                  const label = getCellValue(labelCell);
-                  
-                  if (!label || typeof label !== 'string') continue;
-                  const normLabel = label.toLowerCase().trim();
-                  
-                  if (normLabel.includes("phiếu lương nhân viên")) {
-                    break;
-                  }
-                  
-                  const val1 = getCellValue(blockRow.getCell(c + 1));
-                  const val2 = getCellValue(blockRow.getCell(c + 2));
-                  const rawValue = val2 !== null && val2 !== undefined && val2 !== '' ? val2 : val1;
-                  
-                  if (normLabel.includes("họ và tên") || normLabel.includes("họ tên") || normLabel.includes("nhân viên")) {
-                    const nameVal = val1 && typeof val1 === 'string' && val1.trim() !== '' ? val1 : val2;
-                    if (nameVal) {
-                      name = String(nameVal).trim();
-                    }
-                  } else if (normLabel.includes("ngày cộng thêm") || normLabel.includes("bù ngày")) {
-                    addedDays = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("tổng giờ làm") || normLabel.includes("giờ làm/tháng")) {
-                    totalHours = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("số ngày làm") || normLabel.includes("ngày làm/tháng")) {
-                    workedDays = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("mức lương") || normLabel.includes("lương hiện tại")) {
-                    salary = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("tiền cơm")) {
-                    lunchPay = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("thưởng")) {
-                    bonus = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("tăng ca")) {
-                    overtimePay = Math.round(parseNumberValue(rawValue));
-                  } else if (normLabel.includes("đổ bể") || normLabel.includes("đồ bể")) {
-                    deduction += Math.round(Math.abs(parseNumberValue(rawValue)));
-                  } else if (normLabel.includes("phạt")) {
-                    deduction += Math.round(Math.abs(parseNumberValue(rawValue)));
-                  } else if (normLabel.includes("ứng lương") || normLabel.includes("tạm ứng")) {
-                    advance = Math.round(Math.abs(parseNumberValue(rawValue)));
-                  }
+      // Scan all cells in the sheet to find block starters
+      for (let r = 1; r <= rowCount; r++) {
+        const row = worksheet.getRow(r);
+        for (let c = 1; c <= colCount; c++) {
+          const cellVal = unwrapExcelCellValue(row.getCell(c)?.value);
+          if (cellVal && typeof cellVal === 'string' && cellVal.toUpperCase().includes('PHIẾU LƯƠNG NHÂN VIÊN')) {
+            let name = '';
+            let addedDays = 0;
+            let totalHours = 0;
+            let workedDays = 26;
+            let salary = 0;
+            let lunchPay = 0;
+            let bonus = 0;
+            let overtimePay = 0;
+            let deduction = 0;
+            let empAdv = 0;
+
+            // Scan the block rows (up to 20 rows below the header)
+            for (let br = r + 1; br <= Math.min(r + 20, rowCount); br++) {
+              const blockRow = worksheet.getRow(br);
+              const label = unwrapExcelCellValue(blockRow.getCell(c)?.value);
+
+              if (!label || typeof label !== 'string') continue;
+              const normLabel = label.toLowerCase().trim();
+
+              if (normLabel.includes('phiếu lương nhân viên')) {
+                break;
+              }
+
+              const val1 = unwrapExcelCellValue(blockRow.getCell(c + 1)?.value);
+              const val2 = unwrapExcelCellValue(blockRow.getCell(c + 2)?.value);
+              const rawValue = val2 !== null && val2 !== undefined && val2 !== '' ? val2 : val1;
+
+              if (normLabel.includes('họ và tên') || normLabel.includes('họ tên') || normLabel.includes('nhân viên')) {
+                const nameVal = val1 && typeof val1 === 'string' && val1.trim() !== '' ? val1 : val2;
+                if (nameVal) {
+                  name = String(nameVal).trim();
                 }
-                
-                if (name) {
-                  const empId = Date.now().toString() + Math.random().toString(36).substr(2, 4);
-                   const tempEmp: Employee = {
-                    id: empId,
-                    name,
-                    days: workedDays,
-                    workedDays,
-                    addedDays,
-                    totalHours,
-                    salary,
-                    range: `${payMonth.split('-')[1]}/${payMonth.split('-')[0]}`,
-                    lunchPay,
-                    bonus,
-                    overtimePay,
-                    deduction,
-                    advance,
-                    amount: 0
-                  };
-                  
-                  const details = getRestaurantDetails(tempEmp);
-                  tempEmp.amount = details.tongNhan;
-                  parsedEmployees.push(tempEmp);
-                }
+              } else if (normLabel.includes('ngày cộng thêm') || normLabel.includes('bù ngày')) {
+                addedDays = parseSmartDecimal(rawValue);
+              } else if (normLabel.includes('tổng giờ làm') || normLabel.includes('giờ làm/tháng')) {
+                totalHours = parseSmartDecimal(rawValue);
+              } else if (normLabel.includes('số ngày làm') || normLabel.includes('ngày làm/tháng')) {
+                workedDays = parseSmartDecimal(rawValue);
+              } else if (normLabel.includes('mức lương') || normLabel.includes('lương hiện tại')) {
+                salary = Math.round(parseSmartCurrency(rawValue));
+              } else if (normLabel.includes('tiền cơm')) {
+                lunchPay = Math.round(parseSmartCurrency(rawValue));
+              } else if (normLabel.includes('thưởng')) {
+                bonus = Math.round(parseSmartCurrency(rawValue));
+              } else if (normLabel.includes('tăng ca')) {
+                overtimePay = Math.round(parseSmartCurrency(rawValue));
+              } else if (normLabel.includes('đổ bể') || normLabel.includes('đồ bể')) {
+                deduction += Math.round(Math.abs(parseSmartCurrency(rawValue)));
+              } else if (normLabel.includes('phạt')) {
+                deduction += Math.round(Math.abs(parseSmartCurrency(rawValue)));
+              } else if (normLabel.includes('ứng lương') || normLabel.includes('tạm ứng')) {
+                empAdv = Math.round(Math.abs(parseSmartCurrency(rawValue)));
               }
             }
+
+            if (name) {
+              const empId = createPayrollId('xls');
+              const tempEmp: Employee = {
+                id: empId,
+                name,
+                days: workedDays,
+                workedDays,
+                addedDays,
+                totalHours,
+                salary,
+                range: `${payMonth.split('-')[1]}/${payMonth.split('-')[0]}`,
+                lunchPay,
+                bonus,
+                overtimePay,
+                deduction,
+                advance: empAdv,
+                amount: 0,
+              };
+
+              const details = calculateRestaurantDetails(tempEmp);
+              tempEmp.amount = details.tongNhan;
+              parsedEmployees.push(tempEmp);
+            }
           }
-          
-          if (parsedEmployees.length > 0) {
-            setEmployees(parsedEmployees);
-            setSalaryMode('restaurant');
-            setSelectedEmployeeIds(new Set(parsedEmployees.map(e => e.id)));
-            showToast(`Đã nạp thành công ${parsedEmployees.length} phiếu lương từ file Excel!`, "success");
-          } else {
-            showToast("Không tìm thấy phiếu lương hợp lệ nào theo cấu trúc Nhà hàng F&B.", "info");
-          }
-        } catch (err: any) {
-          console.error(err);
-          showToast(`Lỗi phân tích file Excel: ${err.message}`, "error");
         }
-      };
-      reader.readAsArrayBuffer(file);
-    } catch (error: any) {
-      showToast(`Không thể đọc file: ${error.message}`, "error");
+      }
+
+      if (parsedEmployees.length > 0) {
+        setEmployees(parsedEmployees);
+        setSalaryMode('restaurant');
+        setSelectedEmployeeIds(new Set(parsedEmployees.map(e => e.id)));
+        showToast(`Đã nạp thành công ${parsedEmployees.length} phiếu lương từ file Excel!`, 'success');
+      } else {
+        showToast('Không tìm thấy phiếu lương hợp lệ nào theo cấu trúc Nhà hàng F&B.', 'info');
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Lỗi phân tích file Excel: ${msg}`, 'error');
     }
-  };
+  }, [payMonth, showToast]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -872,33 +914,25 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingFile(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       const ext = file.name.toLowerCase().split('.').pop();
       if (ext !== 'xlsx' && ext !== 'xls') {
-        showToast("Vui lòng kéo thả tệp Excel hợp lệ (.xlsx, .xls)", "error");
+        showToast('Vui lòng kéo thả tệp Excel hợp lệ (.xlsx, .xls)', 'error');
         return;
       }
-      importPayrollFromExcel(file);
+      void importPayrollFromExcel(file);
     }
-  }, [payMonth]);
+  }, [importPayrollFromExcel, showToast]);
 
   // Recalculate employee payout amount when basic salary or days changes
   const updateEmployeeSalary = (id: string, salaryVal: string) => {
-    const rawSal = onlyNumber(salaryVal);
+    const rawSal = Math.round(parseSmartCurrency(salaryVal));
     setEmployees(prev => prev.map(e => {
       if (e.id === id) {
-        let amount = 0;
-        if (salaryMode === 'restaurant') {
-          const details = getRestaurantDetails({ ...e, salary: rawSal });
-          amount = details.tongNhan;
-        } else if (salaryMode === 'hourly') {
-          amount = roundSalary(rawSal * e.days);
-        } else {
-          amount = roundSalary(rawSal * e.days / standardDays);
-        }
-        return { ...e, salary: rawSal, amount };
+        const updated = { ...e, salary: rawSal };
+        return { ...updated, amount: computeEmployeeAmount(updated, salaryMode, standardDays, roundMode) };
       }
       return e;
     }));
@@ -907,16 +941,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const updateEmployeeDays = (id: string, daysVal: number) => {
     setEmployees(prev => prev.map(e => {
       if (e.id === id) {
-        let amount = 0;
-        if (salaryMode === 'restaurant') {
-          const details = getRestaurantDetails({ ...e, workedDays: daysVal, days: daysVal });
-          amount = details.tongNhan;
-        } else if (salaryMode === 'hourly') {
-          amount = roundSalary(e.salary * daysVal);
-        } else {
-          amount = roundSalary(e.salary * daysVal / standardDays);
-        }
-        return { ...e, days: daysVal, workedDays: daysVal, amount };
+        const updated = { ...e, days: daysVal, workedDays: daysVal };
+        return { ...updated, amount: computeEmployeeAmount(updated, salaryMode, standardDays, roundMode) };
       }
       return e;
     }));
@@ -926,31 +952,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, [field]: val } : e));
   };
 
-  // Trigger recalculation on all employees when global parameters change
-  useEffect(() => {
-    setEmployees(prev => prev.map(e => {
-      let amount = 0;
-      if (salaryMode === 'restaurant') {
-        const details = getRestaurantDetails(e);
-        amount = details.tongNhan;
-      } else if (salaryMode === 'hourly') {
-        amount = roundSalary(e.salary * e.days);
-      } else {
-        amount = roundSalary(e.salary * e.days / standardDays);
-      }
-      return { ...e, amount };
-    }));
-  }, [salaryMode, standardDays, roundMode]);
-
   const loadSampleData = () => {
     if (salaryMode === 'restaurant') {
       setEmployees([
-        { 
-          id: '1', 
-          name: 'Đào Thị Thiên Thanh (TV)', 
-          days: 28, 
-          range: '01/06 - 30/06', 
-          salary: 6500000, 
+        {
+          id: '1',
+          name: 'Đào Thị Thiên Thanh (TV)',
+          days: 28,
+          range: '01/06 - 30/06',
+          salary: 6500000,
           amount: 7530000,
           addedDays: 2,
           totalHours: 244,
@@ -960,12 +970,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           overtimePay: 500000,
           deduction: 30000
         },
-        { 
-          id: '2', 
-          name: 'Quách Thị Bảo Trang (TV)', 
-          days: 29, 
-          range: '01/06 - 30/06', 
-          salary: 6500000, 
+        {
+          id: '2',
+          name: 'Quách Thị Bảo Trang (TV)',
+          days: 29,
+          range: '01/06 - 30/06',
+          salary: 6500000,
           amount: 9033750,
           addedDays: 2,
           totalHours: 279,
@@ -993,14 +1003,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   };
 
   const addEmployee = () => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+    const id = createPayrollId('emp');
     const isHourly = salaryMode === 'hourly';
     const isRestaurant = salaryMode === 'restaurant';
-    
+
     let initialSalary = 10000000;
     let initialDays = 26;
     let initialAmount = 0;
-    
+
     if (isHourly) {
       initialSalary = 35000;
       initialDays = 160;
@@ -1008,7 +1018,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     } else if (isRestaurant) {
       initialSalary = 6500000;
       initialDays = 26;
-      const details = getRestaurantDetails({
+      const details = calculateRestaurantDetails({
         id,
         name: `Nhân viên mới ${employees.length + 1}`,
         days: 26,
@@ -1059,7 +1069,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   };
 
   const addDeduction = () => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+    const id = createPayrollId('ded');
     setDeductions(prev => [...prev, { id, label: '', amount: 0 }]);
   };
 
@@ -1067,7 +1077,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     setDeductions(prev => prev.filter(d => d.id !== id));
   };
 
-  const updateDeduction = (id: string, field: 'label' | 'amount', val: any) => {
+  const updateDeduction = <K extends keyof Deduction>(id: string, field: K, val: Deduction[K]) => {
     setDeductions(prev => prev.map(d => d.id === id ? { ...d, [field]: val } : d));
   };
 
@@ -1093,7 +1103,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    importPayrollFromExcel(file);
+    void importPayrollFromExcel(file);
+    if (excelInputRef.current) excelInputRef.current.value = '';
   };
 
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1105,7 +1116,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       const text = evt.target?.result as string;
       if (!text) return;
 
-      const lines = text.split('\n');
+      const lines = text.split(/\r?\n/);
       const newEmps: Employee[] = [];
       const isHourly = salaryMode === 'hourly';
 
@@ -1115,25 +1126,23 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         if (cols.length < 2) return;
 
         const name = cols[0]?.trim();
-        const days = Number(cols[1]) || 0;
+        if (!name) return;
+        const days = parseSmartDecimal(cols[1]);
         const range = cols[2]?.trim() || '';
-        const salary = onlyNumber(cols[3] || (isHourly ? '35.000' : '10.000.000'));
-        
-        let amount = 0;
-        if (isHourly) {
-          amount = roundSalary(salary * days);
-        } else {
-          amount = roundSalary(salary * days / standardDays);
-        }
+        const salary = Math.round(parseSmartCurrency(cols[3] || (isHourly ? '35.000' : '10.000.000')));
 
-        newEmps.push({
-          id: Date.now().toString() + idx,
+        const candidate: Employee = {
+          id: createPayrollId(`csv-${idx}`),
           name,
           days,
+          workedDays: days,
           range,
           salary,
-          amount
-        });
+          amount: 0,
+        };
+        candidate.amount = computeEmployeeAmount(candidate, salaryMode, standardDays, roundMode);
+
+        newEmps.push(candidate);
       });
 
       if (newEmps.length > 0) {
@@ -1148,27 +1157,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Google Apps Script REST API connections
-  const fetchHistoryMonths = async () => {
-    if (!gasUrl) return;
-    setSyncStatus('loading');
-    try {
-      const url = `${gasUrl}?action=getMonths&ssId=${encodeURIComponent(spreadsheetId)}`;
-      const res = await fetch(url);
-      const result = await res.json();
-      if (result.success) {
-        setHistoryMonths(result.data || []);
-        setSyncStatus('online');
-      } else {
-        console.error(result.error);
-        setSyncStatus('offline');
-      }
-    } catch (e) {
-      console.error(e);
-      setSyncStatus('offline');
-    }
-  };
-
   const loadHistoryMonth = async (month: string) => {
     if (!gasUrl) {
       showToast('Vui lòng cấu hình URL Google Apps Script trong Cài đặt trước!', 'error');
@@ -1179,7 +1167,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     try {
       const url = `${gasUrl}?action=getPayroll&month=${month}&ssId=${encodeURIComponent(spreadsheetId)}`;
       const res = await fetch(url);
-      const result = await res.json();
+      const result = await res.json() as {
+        success?: boolean;
+        data?: Partial<InitialPayrollDraft>;
+        error?: string;
+      };
       if (result.success && result.data) {
         const data = result.data;
         setSalaryMode(data.salaryMode || 'monthly');
@@ -1189,9 +1181,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         setDefaultPosition(data.defaultPosition || '');
         setDefaultDept(data.defaultDept || '');
         setAdvance(Number(data.advance) || 0);
-        setEmployees(data.employees || []);
-        setDeductions(data.deductions || []);
-        
+        const loadedEmps = Array.isArray(data.employees) ? data.employees : [];
+        setEmployees(loadedEmps);
+        setSelectedEmployeeIds(new Set(loadedEmps.map(e => e.id)));
+        setDeductions(Array.isArray(data.deductions) ? data.deductions : []);
+
         showToast(`Đã tải thành công dữ liệu tháng ${month}!`, 'success');
         setSyncStatus('online');
       } else {
@@ -1222,10 +1216,10 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
           operator: operatorName
         })
       });
-      const result = await res.json();
+      const result = await res.json() as { success?: boolean; error?: string };
       if (result.success) {
         showToast(`Đã xóa thành công tháng ${month}!`, 'success');
-        fetchHistoryMonths();
+        void fetchHistoryMonths();
       } else {
         showToast(`Lỗi: ${result.error}`, 'error');
         setSyncStatus('online');
@@ -1244,7 +1238,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
     showToast('Đang lưu dữ liệu lên Google Sheets...', 'info');
     setSyncStatus('loading');
-    
+
     const payload = {
       action: 'savePayroll',
       ssId: spreadsheetId,
@@ -1270,10 +1264,10 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      const result = await res.json();
+      const result = await res.json() as { success?: boolean; error?: string };
       if (result.success) {
         showToast('Lưu phiếu lương thành công lên Google Sheets!', 'success');
-        fetchHistoryMonths();
+        void fetchHistoryMonths();
       } else {
         showToast(`Lỗi lưu: ${result.error}`, 'error');
         setSyncStatus('online');
@@ -1287,41 +1281,29 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
   // Money Formatting custom utility
   const formatMoney = (n: number) => {
-    let rounded = Math.round(n);
-    if (roundMode === 'thousand') {
-      rounded = Math.round(n / 1000) * 1000;
-    } else if (roundMode === 'hundred') {
-      rounded = Math.round(n / 100) * 100;
-    }
-    
+    const rounded = roundSalaryByMode(n, roundMode);
+
     let formatted = rounded.toLocaleString('vi-VN');
     if (currencySeparator === ',') {
       formatted = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
-    
+
     if (currencySymbol === 'đ') return `${formatted}đ`;
     if (currencySymbol === 'VNĐ') return `${formatted} VNĐ`;
     return formatted;
   };
 
-  //Accents-agnostic search helper
+  // Accents-agnostic search helper
   const stripAccents = (str: string): string => {
-    if (!str) return '';
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase();
+    return removeVietnameseAccents(str || '').toLowerCase();
   };
 
-  // Dynamic Validation maps
+  // Dynamic Validation maps (individual employee net validation)
   const validationMap = useMemo(() => {
-    const map: Record<string, { type: 'error' | 'warning', message: string }[]> = {};
-    const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
-    
+    const map: Record<string, { type: 'error' | 'warning'; message: string }[]> = {};
+
     employees.forEach(emp => {
-      const msgs: { type: 'error' | 'warning', message: string }[] = [];
+      const msgs: { type: 'error' | 'warning'; message: string }[] = [];
       if (!emp.name.trim()) {
         msgs.push({ type: 'error', message: 'Thiếu họ tên nhân viên' });
       }
@@ -1331,34 +1313,32 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       if (Number(emp.salary || 0) <= 0) {
         msgs.push({ type: 'error', message: 'Mức lương cơ bản chưa hợp lệ' });
       }
-      const netAmount = salaryMode === 'restaurant'
-        ? Number(emp.amount || 0)
-        : Number(emp.amount || 0) - advance - totalDeduct;
+      const netAmount = getEmployeeNet(emp);
       if (netAmount < 0) {
-        msgs.push({ type: 'error', message: `Khấu trừ & tạm ứng vượt quá thu nhập (Thực nhận âm)` });
+        msgs.push({ type: 'error', message: 'Khấu trừ & tạm ứng vượt quá thu nhập (Thực nhận âm)' });
       }
       if (msgs.length > 0) {
         map[emp.id] = msgs;
       }
     });
     return map;
-  }, [employees, deductions, advance]);
+  }, [employees, getEmployeeNet]);
 
   // Filtered employees list for navigation and search
   const filteredNavigatorEmployees = useMemo(() => {
     const query = stripAccents(searchEmployeeQuery).trim();
     const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
-    
+
     return employees.filter(emp => {
       const matchQuery = stripAccents(emp.name).includes(query);
       if (!matchQuery) return false;
-      
+
       const msgs = validationMap[emp.id] || [];
-      
+
       if (navigatorFilter === 'invalid') return msgs.length > 0;
       if (navigatorFilter === 'valid') return msgs.length === 0;
-      if (navigatorFilter === 'deduction') return totalDeduct > 0;
-      if (navigatorFilter === 'advance') return advance > 0;
+      if (navigatorFilter === 'deduction') return Number(emp.deduction || 0) > 0 || totalDeduct > 0;
+      if (navigatorFilter === 'advance') return Number(emp.advance || 0) > 0 || advance > 0;
       return true;
     });
   }, [employees, searchEmployeeQuery, navigatorFilter, validationMap, deductions, advance]);
@@ -1481,7 +1461,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (!name || !name.trim()) return;
 
     const newPreset: CustomPrintPreset = {
-      id: Date.now().toString(),
+      id: createPayrollId('preset'),
       name: name.trim(),
       selectedFont,
       fontSizeTitle,
@@ -1513,6 +1493,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     setCurrencySymbol(preset.currencySymbol);
     setCurrencySeparator(preset.currencySeparator);
     setRoundMode(preset.roundMode);
+    recalculateAllEmployees(salaryMode, standardDays, preset.roundMode);
     setActiveTemplate(preset.activeTemplate);
     setPaperSize(preset.paperSize);
     if (preset.thermalOptions) {
@@ -1580,7 +1561,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         <rect x="26" y="26" width="948" height="1348" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="2" opacity=".9"/>
         
         <style>
-          ${getGoogleFontsImport()}
           .title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle}px; font-weight: ${titleWeight}; fill: ${THEMES.blue}; text-anchor: middle; }
           .sub-title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 4}px; font-weight: 700; fill: ${THEMES.blue}; text-anchor: middle; }
           .normal-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent}px; fill: #0f172a; }
@@ -1655,7 +1635,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
 
     const infoDays = isHourly ? (emp.range ? `${emp.days} giờ (${emp.range})` : `${emp.days} giờ`) : (emp.range ? `${emp.days} công (${emp.range})` : `${emp.days} công`);
-    const words = numberToVietnamese(emp.amount);
+    const empNet = getEmployeeNet(emp);
+    const words = numberToVietnamese(empNet);
     
     const row1Label = isHourly ? "Lương cơ bản theo giờ" : "Mức lương cơ bản";
     const row1Val = isHourly ? `${formatMoney(emp.salary)} / giờ` : `${formatMoney(emp.salary)}`;
@@ -1674,7 +1655,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       <rect x="26" y="26" width="948" height="1348" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="2" opacity=".9"/>
       
       <style>
-        ${getGoogleFontsImport()}
         .title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle}px; font-weight: ${titleWeight}; fill: ${THEMES.blue}; text-anchor: middle; }
         .sub-title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 4}px; font-weight: 700; fill: ${THEMES.blue}; text-anchor: middle; }
         .normal-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent}px; fill: #0f172a; }
@@ -1750,7 +1730,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       <rect x="45" y="960" width="910" height="108" fill="${THEMES.lightBlue}" opacity=".8" stroke="${THEMES.blue}" stroke-width="2"/>
       <line x1="690" y1="960" x2="690" y2="1068" stroke="${THEMES.blue}" stroke-width="2"/>
       <text x="70" y="1025" font-family="'${selectedFont}', sans-serif" font-size="28" font-weight="900" fill="${THEMES.blue}">TỔNG TIỀN THỰC NHẬN</text>
-      <text x="930" y="1028" class="total-pay-text">${formatMoney(emp.amount)}</text>
+      <text x="930" y="1028" class="total-pay-text">${formatMoney(empNet)}</text>
       
       ${visibility.showNotes ? `
         <text x="500" y="1120" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 1}px; font-style: italic; fill: #64748b;">(Bằng chữ: ${escapeHtml(words)})</text>
@@ -1771,8 +1751,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const summarySvgStandard = () => {
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const totalDays = employees.reduce((a, b) => a + Number(b.days || 0), 0);
-    const totalSalary = employees.reduce((a, b) => a + Number(b.amount || 0), 0);
+    const resolveEmpDays = (e: Employee) => (salaryMode === 'restaurant' ? Number(e.workedDays ?? e.days ?? 0) : Number(e.days || 0));
+    const totalDays = employees.reduce((a, b) => a + resolveEmpDays(b), 0);
+    const totalSalary = employees.reduce((a, b) => a + getEmployeeNet(b), 0);
     const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
     const net = totalSalary - advance - totalDeduct;
     const words = numberToVietnamese(net);
@@ -1780,13 +1761,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
     const rows = employees.map((e, i) => {
       const y = 382 + i * 66;
+      const empDays = resolveEmpDays(e);
       return `
         <text x="75" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="20">${i + 1}</text>
         <text x="125" y="${y}" font-family="'${selectedFont}', sans-serif" font-size="20">${escapeHtml(e.name)}</text>
-        <text x="462" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="20">${e.days}${isHourly ? 'g' : ''}</text>
+        <text x="462" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="20">${empDays}${isHourly ? 'g' : ''}</text>
         <text x="590" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="18">${escapeHtml(e.range || '-')}</text>
         <text x="738" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="18">${formatMoney(e.salary)}</text>
-        <text x="890" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="18">${formatMoney(e.amount)}</text>`;
+        <text x="890" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="18">${formatMoney(getEmployeeNet(e))}</text>`;
     }).join('');
 
     const tableBottom = 330 + Math.max(employees.length, 5) * 66;
@@ -1813,10 +1795,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 ${netTop + 400}" fill="none" role="img" aria-label="Phiếu tổng hợp lương">
       <rect x="16" y="16" width="968" height="${netTop + 368}" rx="0" fill="#fff" stroke="${THEMES.blue}" stroke-width="4"/>
       <rect x="26" y="26" width="948" height="${netTop + 348}" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="2" opacity=".9"/>
-      
-      <style>
-        ${getGoogleFontsImport()}
-      </style>
 
       <text x="500" y="105" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="50" font-weight="700" fill="${THEMES.blue}">PHIẾU TỔNG HỢP LƯƠNG</text>
       <text x="500" y="165" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="30" font-weight="700" fill="${THEMES.blue}">${mLabel}</text>
@@ -2042,9 +2020,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
         <rect width="320" height="${currentY}" fill="#fff"/>
-        <style>
-          ${getGoogleFontsImport()}
-        </style>
         ${elements.join('\n')}
       </svg>`;
     }
@@ -2118,7 +2093,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
     elements.push(`
       <text x="20" y="${currentY + 12}" class="k80-text">${row2Label}</text>
-      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${row2Val}</text>
+      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${escapeHtml(row2Val)}</text>
     `);
     currentY += 25;
 
@@ -2128,9 +2103,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     `);
     currentY += 25;
 
-    // Advance payment
-    const empAdvance = emp.advance !== undefined ? emp.advance : advance;
-    if (empAdvance > 0 || !thermalOptions.hideEmptyRows) {
+    // Individual advance & deduction (company-wide advance/deductions apply only to company summary)
+    const empAdvance = Number(emp.advance || 0);
+    const empDeduct = Number(emp.deduction || 0);
+    const empNet = getEmployeeNet(emp);
+
+    if (visibility.showAdvance && (empAdvance > 0 || !thermalOptions.hideEmptyRows)) {
       elements.push(`
         <text x="20" y="${currentY + 12}" class="k80-text">Tạm ứng lương</text>
         <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(empAdvance)}</text>
@@ -2138,18 +2116,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       currentY += 25;
     }
 
-    // Deductions
-    const totalDeduct = deductions.reduce((sum, d) => sum + d.amount, 0);
-    if (totalDeduct > 0 || !thermalOptions.hideEmptyRows) {
-      deductions.forEach(d => {
-        if (d.amount > 0 || !thermalOptions.hideEmptyRows) {
-          elements.push(`
-            <text x="20" y="${currentY + 12}" class="k80-text">${escapeHtml(d.label)}</text>
-            <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(d.amount)}</text>
-          `);
-          currentY += 20;
-        }
-      });
+    if (visibility.showDeductions && (empDeduct > 0 || !thermalOptions.hideEmptyRows)) {
+      elements.push(`
+        <text x="20" y="${currentY + 12}" class="k80-text">Khấu trừ cá nhân</text>
+        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(empDeduct)}</text>
+      `);
+      currentY += 20;
     }
 
     // Divider before total
@@ -2159,12 +2131,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     // Net total
     elements.push(`
       <text x="20" y="${currentY + 15}" class="k80-total">TỔNG THỰC NHẬN</text>
-      <text x="300" y="${currentY + 18}" class="k80-price">${formatMoney(emp.amount)}</text>
+      <text x="300" y="${currentY + 18}" class="k80-price">${formatMoney(empNet)}</text>
     `);
     currentY += 30;
 
     // Notes
-    const wordsText = numberToVietnamese(emp.amount);
+    const wordsText = numberToVietnamese(empNet);
     const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
     if (hasNotes) {
       elements.push(`
@@ -2219,7 +2191,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
       <rect width="320" height="${currentY}" fill="#fff"/>
       <style>
-        ${getGoogleFontsImport()}
         .k80-text-base { font-family: '${selectedFont}', system-ui, sans-serif; }
         .k80-title { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle - 8}px; font-weight: ${titleWeight}; fill: #000; text-anchor: middle; }
         .k80-subtitle { font-family: '${selectedFont}', system-ui, sans-serif; font-size: 10px; fill: #000; text-anchor: middle; }
@@ -2237,8 +2208,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const summarySvgK80 = () => {
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const totalDays = employees.reduce((a, b) => a + Number(b.days || 0), 0);
-    const totalSalary = employees.reduce((a, b) => a + Number(b.amount || 0), 0);
+    const resolveEmpDays = (e: Employee) => (salaryMode === 'restaurant' ? Number(e.workedDays ?? e.days ?? 0) : Number(e.days || 0));
+    const totalDays = employees.reduce((a, b) => a + resolveEmpDays(b), 0);
+    const totalSalary = employees.reduce((a, b) => a + getEmployeeNet(b), 0);
     const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
     const net = totalSalary - advance - totalDeduct;
     const isHourly = salaryMode === 'hourly';
@@ -2268,10 +2240,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
     // Employee rows
     employees.forEach((e, i) => {
+      const empDays = resolveEmpDays(e);
       elements.push(`
         <text x="20" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#000">${i + 1}. ${escapeHtml(e.name.substring(0, 16))}</text>
-        <text x="175" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="middle" fill="#000">${e.days}${isHourly ? 'g' : ''}</text>
-        <text x="300" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(e.amount)}</text>
+        <text x="175" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="middle" fill="#000">${empDays}${isHourly ? 'g' : ''}</text>
+        <text x="300" y="${currentY + 10}" font-size="9" font-family="'${selectedFont}', sans-serif" text-anchor="end" fill="#000">${formatMoney(getEmployeeNet(e))}</text>
       `);
       currentY += 22;
     });
@@ -2354,7 +2327,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu tổng hợp lương">
       <rect width="320" height="${currentY}" fill="#fff"/>
       <style>
-        ${getGoogleFontsImport()}
         .k80-title { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle - 8}px; font-weight: ${titleWeight}; fill: #000; text-anchor: middle; }
         .k80-subtitle { font-family: '${selectedFont}', system-ui, sans-serif; font-size: 10px; fill: #000; text-anchor: middle; }
         .k80-divider { stroke: #000; stroke-width: 1; stroke-dasharray: 4, 3; }
@@ -2420,7 +2392,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         </defs>
         
         <style>
-          ${getGoogleFontsImport()}
           .modern-text { font-family: '${selectedFont}', system-ui, sans-serif; }
         </style>
         
@@ -2479,7 +2450,8 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       </svg>`;
     }
 
-    const words = numberToVietnamese(emp.amount);
+    const empNet = getEmployeeNet(emp);
+    const words = numberToVietnamese(empNet);
     const infoDays = isHourly ? (emp.range ? `${emp.days} giờ (${emp.range})` : `${emp.days} giờ`) : (emp.range ? `${emp.days} công (${emp.range})` : `${emp.days} công`);
     
     const row1Label = isHourly ? "Lương cơ bản theo giờ" : "Mức lương cơ bản hàng tháng";
@@ -2489,7 +2461,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     const row3Label = isHourly ? "Tổng số giờ làm việc thực tế" : "Số ngày công đi làm thực tế";
     const row3Val = isHourly ? `${emp.days} giờ` : infoDays;
     const row4Label = isHourly ? "Hệ số tính toán" : "Hệ số hoàn thành nhiệm vụ";
-    const row4Val = isHourly ? "Không áp dụng" : (emp.days / standardDays).toFixed(4);
+    const row4Val = isHourly ? "Không áp dụng" : (emp.days / (standardDays || 26)).toFixed(4);
 
     return `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1350" role="img" aria-label="Modern Payroll Slip">
@@ -2505,7 +2477,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       </defs>
       
       <style>
-        ${getGoogleFontsImport()}
         .modern-text { font-family: '${selectedFont}', system-ui, sans-serif; }
       </style>
       
@@ -2546,11 +2517,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       <line x1="60" y1="495" x2="940" y2="495" stroke="#f1f5f9" stroke-width="1"/>
       
       <text x="90" y="535" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row2Label}</text>
-      <text x="910" y="535" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${row2Val}</text>
+      <text x="910" y="535" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${escapeHtml(row2Val)}</text>
       <line x1="60" y1="565" x2="940" y2="565" stroke="#f1f5f9" stroke-width="1"/>
       
       <text x="90" y="605" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row3Label}</text>
-      <text x="910" y="605" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#2563eb">${row3Val}</text>
+      <text x="910" y="605" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#2563eb">${escapeHtml(row3Val)}</text>
       <line x1="60" y1="635" x2="940" y2="635" stroke="#f1f5f9" stroke-width="1"/>
       
       <text x="90" y="675" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row4Label}</text>
@@ -2566,7 +2537,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       ${visibility.showNotes ? `
         <text x="100" y="890" class="modern-text" font-size="15" font-weight="600" fill="#64748b" font-style="italic">Bằng chữ: ${escapeHtml(words)}</text>
       ` : ''}
-      <text x="900" y="885" text-anchor="end" class="modern-text" font-size="44" font-weight="900" fill="#dc2626">${formatMoney(emp.amount)}</text>
+      <text x="900" y="885" text-anchor="end" class="modern-text" font-size="44" font-weight="900" fill="#dc2626">${formatMoney(empNet)}</text>
       
       <text x="90" y="1040" class="modern-text" font-size="15" font-weight="600" fill="#64748b">${escapeHtml(vDate)}</text>
       <line x1="60" y1="1080" x2="940" y2="1080" stroke="#f1f5f9" stroke-width="1"/>
@@ -2584,8 +2555,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const summarySvgModern = () => {
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const totalDays = employees.reduce((a, b) => a + Number(b.days || 0), 0);
-    const totalSalary = employees.reduce((a, b) => a + Number(b.amount || 0), 0);
+    const resolveEmpDays = (e: Employee) => (salaryMode === 'restaurant' ? Number(e.workedDays ?? e.days ?? 0) : Number(e.days || 0));
+    const totalDays = employees.reduce((a, b) => a + resolveEmpDays(b), 0);
+    const totalSalary = employees.reduce((a, b) => a + getEmployeeNet(b), 0);
     const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
     const net = totalSalary - advance - totalDeduct;
     const words = numberToVietnamese(net);
@@ -2593,13 +2565,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
     const rows = employees.map((e, i) => {
       const y = 390 + i * 58;
+      const empDays = resolveEmpDays(e);
       return `
         <text x="90" y="${y}" font-family="'${selectedFont}', sans-serif" font-size="15" fill="#334155">${i + 1}</text>
         <text x="150" y="${y}" font-family="'${selectedFont}', sans-serif" font-size="15" font-weight="700" fill="#0f172a">${escapeHtml(e.name)}</text>
-        <text x="440" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="15" fill="#334155">${e.days}${isHourly ? 'g' : ''}</text>
+        <text x="440" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="15" fill="#334155">${empDays}${isHourly ? 'g' : ''}</text>
         <text x="560" y="${y}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="14" fill="#64748b">${escapeHtml(e.range || '-')}</text>
         <text x="710" y="${y}" text-anchor="end" font-family="'${selectedFont}', sans-serif" font-size="14" fill="#334155">${formatMoney(e.salary)}</text>
-        <text x="900" y="${y}" text-anchor="end" font-family="'${selectedFont}', sans-serif" font-size="15" font-weight="700" fill="#0f172a">${formatMoney(e.amount)}</text>
+        <text x="900" y="${y}" text-anchor="end" font-family="'${selectedFont}', sans-serif" font-size="15" font-weight="700" fill="#0f172a">${formatMoney(getEmployeeNet(e))}</text>
         <line x1="60" y1="${y + 18}" x2="940" y2="${y + 18}" stroke="#f8fafc" stroke-width="1"/>
       `;
     }).join('');
@@ -2636,7 +2609,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       </defs>
       
       <style>
-        ${getGoogleFontsImport()}
         .modern-text { font-family: '${selectedFont}', system-ui, sans-serif; }
       </style>
       
@@ -2705,56 +2677,64 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
   };
 
-  // Convert SVG string to PNG image download link
-  const svgToPng = (svgText: string, filename: string, isK80: boolean) => {
-    return new Promise<void>((resolve, reject) => {
+  const renderSvgToCanvas = async (
+    svgText: string,
+    isK80: boolean
+  ): Promise<{ canvas: HTMLCanvasElement; baseWidth: number; baseHeight: number }> => {
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+    return new Promise((resolve, reject) => {
       const parser = new DOMParser();
       const doc = parser.parseFromString(svgText, 'image/svg+xml');
       const svgEl = doc.documentElement;
       const baseWidth = isK80 ? 320 : 1000;
-      const baseHeight = parseInt(svgEl.getAttribute('viewBox')?.split(' ')[3] || (isK80 ? '540' : '1400'), 10);
-      
+      const baseHeight = parseInt(
+        svgEl.getAttribute('viewBox')?.split(' ')[3] || (isK80 ? '540' : '1400'),
+        10
+      );
+
       const canvas = document.createElement('canvas');
-      canvas.width = baseWidth * 2; // high res scaling
+      canvas.width = baseWidth * 2;
       canvas.height = baseHeight * 2;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         reject(new Error('Canvas context not available'));
         return;
       }
-      
+
       ctx.scale(2, 2);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, baseWidth, baseHeight);
-      
+
       const img = new Image();
       const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svgBlob);
-      
+
       img.onload = () => {
         ctx.drawImage(img, 0, 0, baseWidth, baseHeight);
         URL.revokeObjectURL(url);
-        
-        try {
-          const pngUrl = canvas.toDataURL('image/png');
-          const a = document.createElement('a');
-          a.download = filename;
-          a.href = pngUrl;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          resolve();
-        } catch (e) {
-          reject(e);
-        }
+        resolve({ canvas, baseWidth, baseHeight });
       };
-      
+
       img.onerror = () => {
         URL.revokeObjectURL(url);
         reject(new Error('Failed to load SVG into Image object'));
       };
       img.src = url;
     });
+  };
+
+  // Convert SVG string to PNG image download link
+  const svgToPng = async (svgText: string, filename: string, isK80: boolean) => {
+    const { canvas } = await renderSvgToCanvas(svgText, isK80);
+    const pngUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.download = filename;
+    a.href = pngUrl;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleDownloadPng = async (emp?: Employee) => {
@@ -2785,60 +2765,35 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       showToast('Không có nhân viên để xuất hàng loạt!', 'error');
       return;
     }
-    const zip = new JSZip();
     setIsExporting(true);
     setExportProgress(0);
     try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+
       for (let i = 0; i < employees.length; i++) {
         const emp = employees[i];
         setExportProgress(Math.round(((i + 1) / employees.length) * 100));
+        await new Promise<void>(r => window.setTimeout(r, 0));
+
         const svgText = getActiveSvgText(emp);
         const isK80 = activeTemplate === 'k80';
         const suffix = isK80 ? '-k80' : '';
         const filename = `phieu-luong-${emp.name.toLowerCase().replace(/\s+/g, '-')}-${payMonth}${suffix}.png`;
-        
+
+        const { canvas } = await renderSvgToCanvas(svgText, isK80);
         const blob = await new Promise<Blob>((resolve, reject) => {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(svgText, 'image/svg+xml');
-          const svgEl = doc.documentElement;
-          const baseWidth = isK80 ? 320 : 1000;
-          const baseHeight = parseInt(svgEl.getAttribute('viewBox')?.split(' ')[3] || (isK80 ? '540' : '1400'), 10);
-          
-          const canvas = document.createElement('canvas');
-          canvas.width = baseWidth * 2;
-          canvas.height = baseHeight * 2;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Canvas context not available'));
-            return;
-          }
-          ctx.scale(2, 2);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, baseWidth, baseHeight);
-          
-          const img = new Image();
-          const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-          const url = URL.createObjectURL(svgBlob);
-          
-          img.onload = () => {
-            ctx.drawImage(img, 0, 0, baseWidth, baseHeight);
-            URL.revokeObjectURL(url);
-            canvas.toBlob((blob) => {
-              if (blob) {
-                resolve(blob);
-              } else {
-                reject(new Error('Canvas conversion to blob failed'));
-              }
-            }, 'image/png');
-          };
-          img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Failed to load SVG into Image'));
-          };
-          img.src = url;
+          canvas.toBlob((outBlob) => {
+            if (outBlob) {
+              resolve(outBlob);
+            } else {
+              reject(new Error('Canvas conversion to blob failed'));
+            }
+          }, 'image/png');
         });
         zip.file(filename, blob);
       }
+
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -2847,11 +2802,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       showToast('Tải file ZIP thành công!', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Lỗi xuất ZIP: ${err.message}`, 'error');
+      const msg = err instanceof Error ? err.message : 'Không xác định';
+      showToast(`Lỗi xuất ZIP: ${msg}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -2867,62 +2823,32 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     setIsExporting(true);
     setExportProgress(0);
     try {
+      const [{ jsPDF }, { canvas, baseWidth, baseHeight }] = await Promise.all([
+        import('jspdf'),
+        renderSvgToCanvas(getActiveSvgText(targetEmp), activeTemplate === 'k80'),
+      ]);
       const isK80 = activeTemplate === 'k80';
-      const svgText = getActiveSvgText(targetEmp);
-      const parser = new DOMParser();
-      const docXml = parser.parseFromString(svgText, 'image/svg+xml');
-      const svgEl = docXml.documentElement;
-      const baseWidth = isK80 ? 320 : 1000;
-      const baseHeight = parseInt(svgEl.getAttribute('viewBox')?.split(' ')[3] || (isK80 ? '540' : '1400'), 10);
-      
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = baseWidth * 2;
-        canvas.height = baseHeight * 2;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas context not available'));
-          return;
-        }
-        ctx.scale(2, 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, baseWidth, baseHeight);
-        
-        const img = new Image();
-        const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
-        
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0, baseWidth, baseHeight);
-          URL.revokeObjectURL(url);
-          resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error('Failed to load SVG into Image'));
-        };
-        img.src = url;
+      const dataUrl = canvas.toDataURL('image/png');
+
+      const format: 'a4' | [number, number] = isK80 ? [80, (baseHeight / baseWidth) * 80] : 'a4';
+      const pdfDoc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format,
       });
 
-      const orientation = isK80 ? 'p' : 'p';
-      const format = isK80 ? [80, (baseHeight / baseWidth) * 80] : 'a4';
-      const pdfDoc = new jsPDF({
-        orientation: orientation,
-        unit: 'mm',
-        format: format
-      });
-      
       const pdfWidth = isK80 ? 80 : 210;
       const pdfHeight = isK80 ? (baseHeight / baseWidth) * 80 : 297;
-      
+
       pdfDoc.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      const nameStr = activeView === 'receipt' ? targetEmp.name : 'Bang_Tong_Hop_Luong';
+
+      const nameStr = activeView === 'receipt' ? (targetEmp?.name || 'Phieu_Luong') : 'Bang_Tong_Hop_Luong';
       pdfDoc.save(`phieu-luong-${nameStr.toLowerCase().replace(/\s+/g, '-')}-${payMonth}.pdf`);
       showToast('Xuất PDF thành công!', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Lỗi xuất PDF: ${err.message}`, 'error');
+      const msg = err instanceof Error ? err.message : 'Không xác định';
+      showToast(`Lỗi xuất PDF: ${msg}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -2978,32 +2904,21 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       setFontSizeContent(14);
       setFontSizeTable(13);
       setTitleWeight('700');
-      setVisibility({
-        showLogo: true,
-        showUnitInfo: true,
-        showTitle: true,
-        showMetaInfo: true,
-        showEmpName: true,
-        showEmpRole: true,
-        showEmpDept: true,
-        showEmpBank: true,
-        showBaseSalary: true,
-        showTime: true,
-        showAdvance: true,
-        showDeductions: true,
-        showSignatures: true,
-        showNotes: true
-      });
+      setVisibility(DEFAULT_VISIBILITY);
       setCurrencySymbol('đ');
       setCurrencySeparator('.');
       setRoundMode('thousand');
+      recalculateAllEmployees(salaryMode, standardDays, 'thousand');
       setZoomLevel(100);
       showToast('Đã khôi phục cài đặt mặc định!', 'info');
     }
   };
 
-  const totalDays = employees.reduce((a, b) => a + Number(b.days || 0), 0);
-  const totalSalary = employees.reduce((a, b) => a + Number(b.amount || 0), 0);
+  const totalDays = employees.reduce(
+    (a, b) => a + (salaryMode === 'restaurant' ? Number(b.workedDays ?? b.days ?? 0) : Number(b.days || 0)),
+    0
+  );
+  const totalSalary = employees.reduce((a, b) => a + getEmployeeNet(b), 0);
   const totalDeduct = deductions.reduce((a, b) => a + Number(b.amount || 0), 0);
   const net = totalSalary - advance - totalDeduct;
 
@@ -3305,12 +3220,30 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                           if (!line.trim()) return;
                           const cols = line.split('\t');
                           if (cols.length < 2) return;
-                          const name = cols[0]?.trim();
-                          const days = Number(cols[1]) || 0;
+                          const name = cols[0]?.trim() || '';
+                          const days = parseSmartDecimal(cols[1]);
                           const range = cols[2]?.trim() || '';
-                          const salary = onlyNumber(cols[3] || (isHourlyMode ? '35.000' : '10.000.000'));
-                          let amount = isHourlyMode ? roundSalary(salary * days) : roundSalary(salary * days / standardDays);
-                          newEmps.push({ id: Date.now().toString() + idx, name, days, range, salary, amount });
+                          const salary = Math.round(
+                            parseSmartCurrency(cols[3] || (isHourlyMode ? '35.000' : '10.000.000'))
+                          );
+                          const tempEmp: Employee = {
+                            id: createPayrollId(`paste-${idx}`),
+                            name,
+                            days,
+                            workedDays: isHourlyMode ? 0 : days,
+                            totalHours: isHourlyMode ? days : days * 8,
+                            addedDays: 0,
+                            lunchPay: isHourlyMode ? 0 : days * 20000,
+                            bonus: 0,
+                            overtimePay: 0,
+                            deduction: 0,
+                            advance: 0,
+                            range,
+                            salary,
+                            amount: 0,
+                          };
+                          tempEmp.amount = computeEmployeeAmount(tempEmp, salaryMode, standardDays, roundMode);
+                          newEmps.push(tempEmp);
                         });
                         if (newEmps.length > 0) {
                           setEmployees(prev => [...prev, ...newEmps]);
@@ -4070,15 +4003,15 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 </div>
                 <div className="metric-box">
                   <span>{isHourly ? 'Giờ Làm' : 'Ngày Công'}</span>
-                  <strong>{activeEmployee.days}</strong>
+                  <strong>{salaryMode === 'restaurant' ? (activeEmployee.workedDays ?? activeEmployee.days) : activeEmployee.days}</strong>
                 </div>
                 <div className="metric-box">
                   <span>Khấu Trừ</span>
-                  <strong className="red">{formatMoney(totalDeduct + (activeEmployee.advance || 0))}</strong>
+                  <strong className="red">{formatMoney((activeEmployee.deduction || 0) + (activeEmployee.advance || 0))}</strong>
                 </div>
                 <div className="metric-box">
                   <span>Thực Nhận</span>
-                  <strong style={{ color: 'var(--cyan)' }}>{formatMoney(activeEmployee.amount)}</strong>
+                  <strong style={{ color: 'var(--cyan)' }}>{formatMoney(getEmployeeNet(activeEmployee))}</strong>
                 </div>
               </div>
             )}
@@ -4466,7 +4399,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 <button 
                   type="button" 
                   className={`segmented-item ${salaryMode === 'restaurant' ? 'active' : ''}`}
-                  onClick={() => setSalaryMode('restaurant')}
+                  onClick={() => handleSalaryModeChange('restaurant')}
                   style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
                 >
                   🍽️ F&B Nhà Hàng
@@ -4474,7 +4407,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 <button 
                   type="button" 
                   className={`segmented-item ${salaryMode === 'monthly' ? 'active' : ''}`}
-                  onClick={() => setSalaryMode('monthly')}
+                  onClick={() => handleSalaryModeChange('monthly')}
                   style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
                 >
                   📅 Theo Tháng
@@ -4482,7 +4415,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 <button 
                   type="button" 
                   className={`segmented-item ${salaryMode === 'hourly' ? 'active' : ''}`}
-                  onClick={() => setSalaryMode('hourly')}
+                  onClick={() => handleSalaryModeChange('hourly')}
                   style={{ flex: 1, padding: '7px 8px', fontSize: '12px' }}
                 >
                   ⏰ Theo Giờ
@@ -4504,11 +4437,11 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
             <div className="grid2">
               <div className="form-group" style={{ display: isHourly ? 'none' : 'block' }}>
                 <label className="form-label">Số ngày công định mức</label>
-                <input type="number" className="form-control" value={standardDays} onChange={(e) => setStandardDays(Number(e.target.value) || 26)} />
+                <input type="number" className="form-control" value={standardDays} onChange={(e) => handleStandardDaysChange(Number(e.target.value) || 26)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Làm tròn số tiền</label>
-                <select className="form-control" value={roundMode} onChange={(e) => setRoundMode(e.target.value as any)}>
+                <select className="form-control" value={roundMode} onChange={(e) => handleRoundModeChange(e.target.value as RoundMode)}>
                   <option value="none">Không làm tròn</option>
                   <option value="hundred">Làm tròn hàng trăm (100đ)</option>
                   <option value="thousand">Làm tròn hàng nghìn (1.000đ)</option>
@@ -4594,7 +4527,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
             <div className="form-group">
               <label className="form-label">Phạm vi in ấn</label>
-              <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as any)}>
+              <select className="form-control" value={printScope} onChange={e => setPrintScope(e.target.value as PrintScope)}>
                 <option value="current">Chỉ phiếu đang xem (1 NV)</option>
                 <option value="all">In tất cả nhân viên ({employees.length} NV)</option>
                 <option value="selected">In nhân viên được chọn ({selectedEmployeeIds.size}/{employees.length} NV)</option>
@@ -4639,27 +4572,27 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
               </span>
               <div className="checkbox-grid">
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility((prev: any) => ({ ...prev, showLogo: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showLogo} onChange={e => setVisibility(prev => ({ ...prev, showLogo: e.target.checked }))} />
                   <span>Logo đơn vị</span>
                 </label>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility((prev: any) => ({ ...prev, showTitle: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showTitle} onChange={e => setVisibility(prev => ({ ...prev, showTitle: e.target.checked }))} />
                   <span>Tiêu đề phiếu</span>
                 </label>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility((prev: any) => ({ ...prev, showBaseSalary: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showBaseSalary} onChange={e => setVisibility(prev => ({ ...prev, showBaseSalary: e.target.checked }))} />
                   <span>Mức lương cơ bản</span>
                 </label>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility((prev: any) => ({ ...prev, showTime: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showTime} onChange={e => setVisibility(prev => ({ ...prev, showTime: e.target.checked }))} />
                   <span>Số công/giờ làm</span>
                 </label>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility((prev: any) => ({ ...prev, showSignatures: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showSignatures} onChange={e => setVisibility(prev => ({ ...prev, showSignatures: e.target.checked }))} />
                   <span>Chữ ký xác nhận</span>
                 </label>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility((prev: any) => ({ ...prev, showNotes: e.target.checked }))} />
+                  <input type="checkbox" checked={visibility.showNotes} onChange={e => setVisibility(prev => ({ ...prev, showNotes: e.target.checked }))} />
                   <span>Ghi chú bằng chữ</span>
                 </label>
               </div>
@@ -4672,19 +4605,19 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="checkbox-label">
-                    <input type="checkbox" checked={thermalOptions.splitEachSlip} onChange={e => setThermalOptions((prev: any) => ({ ...prev, splitEachSlip: e.target.checked }))} />
+                    <input type="checkbox" checked={thermalOptions.splitEachSlip} onChange={e => setThermalOptions(prev => ({ ...prev, splitEachSlip: e.target.checked }))} />
                     <span>Tách từng phiếu khi in hàng loạt (Auto-cut)</span>
                   </label>
                   <label className="checkbox-label">
-                    <input type="checkbox" checked={thermalOptions.compactCut} onChange={e => setThermalOptions((prev: any) => ({ ...prev, compactCut: e.target.checked }))} />
+                    <input type="checkbox" checked={thermalOptions.compactCut} onChange={e => setThermalOptions(prev => ({ ...prev, compactCut: e.target.checked }))} />
                     <span>Cắt gọn cuối phiếu (co sát theo nội dung)</span>
                   </label>
                   <label className="checkbox-label">
-                    <input type="checkbox" checked={thermalOptions.hideSignature} onChange={e => setThermalOptions((prev: any) => ({ ...prev, hideSignature: e.target.checked }))} />
+                    <input type="checkbox" checked={thermalOptions.hideSignature} onChange={e => setThermalOptions(prev => ({ ...prev, hideSignature: e.target.checked }))} />
                     <span>Ẩn phần ký tên trên phiếu nhiệt</span>
                   </label>
                   <label className="checkbox-label">
-                    <input type="checkbox" checked={thermalOptions.showCutLine} onChange={e => setThermalOptions((prev: any) => ({ ...prev, showCutLine: e.target.checked }))} />
+                    <input type="checkbox" checked={thermalOptions.showCutLine} onChange={e => setThermalOptions(prev => ({ ...prev, showCutLine: e.target.checked }))} />
                     <span>Hiện đường kẻ cắt giấy ✂ cuối phiếu</span>
                   </label>
                 </div>

@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
-import { 
-  RefreshCw, 
-  Copy, 
-  Check, 
-  Wifi, 
-  Cpu, 
-  Users, 
-  Clock, 
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  RefreshCw,
+  Copy,
+  Check,
+  Wifi,
+  Cpu,
+  Users,
+  Clock,
   AlertCircle,
   Search
 } from 'lucide-react';
 import { StatCard, EmptyState, LoadingState, ErrorState, GuidePanel, PageHeader, Badge } from './Shared';
+import { getLocalYMD } from '../utils/numberUtils';
 
 interface AttendanceLog {
   name: string;
@@ -27,68 +28,92 @@ interface HikvisionSyncProps {
   onNavigate?: (view: 'attendance' | 'payroll' | 'vietqr' | 'tts' | 'settings' | 'transfer' | 'hikvision') => void;
 }
 
+function loadSessionPassword(): string {
+  try {
+    const fromSession = sessionStorage.getItem('kg_tool_sync_password');
+    if (fromSession !== null) return fromSession;
+    // Migrate and purge legacy plaintext password from persistent localStorage
+    const legacy = localStorage.getItem('kg_tool_sync_password');
+    if (legacy) {
+      sessionStorage.setItem('kg_tool_sync_password', legacy);
+      localStorage.removeItem('kg_tool_sync_password');
+      return legacy;
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  return '';
+}
+
 export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavigate }: HikvisionSyncProps) {
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => Boolean(gasUrl));
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Webhook settings variables
-  const [workerUrl, setWorkerUrl] = useState(() => localStorage.getItem('kg_tool_worker_url') || 'https://kingsgrill-hikvision-sync.dmt-kgwork.workers.dev');
+  const [workerUrl, setWorkerUrl] = useState(
+    () => localStorage.getItem('kg_tool_worker_url') || 'https://kingsgrill-hikvision-sync.dmt-kgwork.workers.dev'
+  );
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const secretKey = 'KINGS_GRILL_HIKVISION_SECRET_2026';
 
-  // Offline sync settings variables
-  const getTodayDateStr = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
   const [syncDeviceUrl, setSyncDeviceUrl] = useState(() => localStorage.getItem('kg_tool_sync_device_url') || '');
   const [syncUsername, setSyncUsername] = useState('admin');
-  const [syncPassword, setSyncPassword] = useState(() => localStorage.getItem('kg_tool_sync_password') || '');
-  const [syncFromDate, setSyncFromDate] = useState(getTodayDateStr);
-  const [syncToDate, setSyncToDate] = useState(getTodayDateStr);
+  const [syncPassword, setSyncPassword] = useState(loadSessionPassword);
+  const [syncFromDate, setSyncFromDate] = useState(() => getLocalYMD());
+  const [syncToDate, setSyncToDate] = useState(() => getLocalYMD());
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const [syncResultMsg, setSyncResultMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const fetchLogs = async () => {
+  const loadAttendanceLogs = useCallback(async (signal?: AbortSignal) => {
     if (!gasUrl) {
       setErrorMsg('Vui lòng cấu hình URL Google Apps Script trong phần Cài đặt trước!');
+      setIsLoading(false);
       return;
     }
-    
+
     setIsLoading(true);
     setErrorMsg(null);
-    
+
     try {
       const url = `${gasUrl}?action=getAttendanceLogs&ssId=${encodeURIComponent(spreadsheetId)}`;
-      const res = await fetch(url);
-      const result = await res.json();
-      
+      const res = await fetch(url, { signal });
+      const result = (await res.json()) as { success?: boolean; data?: AttendanceLog[]; error?: string };
+
+      if (signal?.aborted) return;
+
       if (result.success && Array.isArray(result.data)) {
         setLogs(result.data);
       } else {
         throw new Error(result.error || 'Dữ liệu phản hồi sai định dạng.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
       console.error(err);
-      setErrorMsg(`Không thể tải lịch sử chấm công: ${err.message || 'Lỗi mạng'}`);
+      const message = err instanceof Error ? err.message : 'Lỗi mạng';
+      setErrorMsg(`Không thể tải lịch sử chấm công: ${message}`);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
-  };
-
-  useEffect(() => {
-    fetchLogs();
   }, [gasUrl, spreadsheetId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void loadAttendanceLogs(controller.signal);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [loadAttendanceLogs]);
+
   const handleSaveWorkerUrl = () => {
-    localStorage.setItem('kg_tool_worker_url', workerUrl);
+    localStorage.setItem('kg_tool_worker_url', workerUrl.trim());
     showToast('Đã lưu URL Cloudflare Worker của bạn!', 'success');
   };
 
@@ -105,8 +130,13 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
 
     setIsSyncingOffline(true);
     setSyncResultMsg(null);
-    localStorage.setItem('kg_tool_sync_device_url', syncDeviceUrl);
-    localStorage.setItem('kg_tool_sync_password', syncPassword);
+    localStorage.setItem('kg_tool_sync_device_url', syncDeviceUrl.trim());
+    try {
+      sessionStorage.setItem('kg_tool_sync_password', syncPassword);
+      localStorage.removeItem('kg_tool_sync_password');
+    } catch {
+      // Ignore sessionStorage restrictions
+    }
 
     try {
       const response = await fetch(workerUrl, {
@@ -116,8 +146,8 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
         },
         body: JSON.stringify({
           action: 'sync_offline_logs',
-          tunnelUrl: syncDeviceUrl,
-          username: syncUsername,
+          tunnelUrl: syncDeviceUrl.trim(),
+          username: syncUsername.trim(),
           password: syncPassword,
           fromDate: syncFromDate,
           toDate: syncToDate,
@@ -125,14 +155,14 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
         })
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as { success?: boolean; message?: string };
       if (result.success) {
         setSyncResultMsg({
           text: result.message || 'Đồng bộ bổ sung hoàn tất thành công.',
           type: 'success'
         });
         showToast(result.message || 'Đồng bộ bổ sung hoàn tất!', 'success');
-        fetchLogs();
+        void loadAttendanceLogs();
       } else {
         setSyncResultMsg({
           text: result.message || 'Đồng bộ thất bại. Vui lòng kiểm tra lại thông tin cấu hình.',
@@ -140,10 +170,11 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
         });
         showToast(result.message || 'Lỗi đồng bộ bổ sung!', 'error');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
+      const message = err instanceof Error ? err.message : 'Lỗi mạng';
       setSyncResultMsg({
-        text: `Lỗi kết nối tới Cloudflare Worker: ${err.message || 'Lỗi mạng'}`,
+        text: `Lỗi kết nối tới Cloudflare Worker: ${message}`,
         type: 'error'
       });
       showToast('Lỗi kết nối tới Worker!', 'error');
@@ -167,12 +198,8 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
       .catch(() => showToast('Không thể sao chép!', 'error'));
   };
 
-  // KPIs Calculations
   const todayStr = useMemo(() => {
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
+    const [yyyy, mm, dd] = getLocalYMD().split('-');
     return `${dd}/${mm}/${yyyy}`;
   }, []);
 
@@ -184,16 +211,19 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
     return new Set(todayLogs.map(log => log.name)).size;
   }, [todayLogs]);
 
-  // Filter logs by search query
   const filteredLogs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return logs;
-    return logs.filter(log => 
+    return logs.filter(log =>
       log.name.toLowerCase().includes(query) ||
       log.date.includes(query) ||
       (log.notes && log.notes.toLowerCase().includes(query))
     );
   }, [logs, searchQuery]);
+
+  const effectiveError = !gasUrl
+    ? 'Vui lòng cấu hình URL Google Apps Script trong phần Cài đặt trước!'
+    : errorMsg;
 
   return (
     <div className="screen active">
@@ -205,16 +235,16 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
         badgeVariant="danger"
       />
       <div className="hub-subtab-bar">
-        <button 
-          type="button" 
+        <button
+          type="button"
           className="hub-subtab-btn"
           onClick={() => onNavigate?.('attendance')}
         >
           <Clock size={15} />
           <span>Xử lý Chấm Công & Phân Ca</span>
         </button>
-        <button 
-          type="button" 
+        <button
+          type="button"
           className="hub-subtab-btn active"
           onClick={() => onNavigate?.('hikvision')}
         >
@@ -224,38 +254,38 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
       </div>
       <div className="head" style={{ marginBottom: '1.5rem' }}>
         <div className="kpis">
-          <StatCard 
-            icon={<Clock size={20} />} 
-            label="Lượt chấm hôm nay" 
-            value={todayLogs.length} 
+          <StatCard
+            icon={<Clock size={20} />}
+            label="Lượt chấm hôm nay"
+            value={todayLogs.length}
             subtext={`Ngày ${todayStr}`}
-            hasData={logs.length > 0} 
+            hasData={logs.length > 0}
           />
-          <StatCard 
-            icon={<Users size={20} />} 
-            label="Nhân viên đi làm hôm nay" 
-            value={uniqueEmpsToday} 
+          <StatCard
+            icon={<Users size={20} />}
+            label="Nhân viên đi làm hôm nay"
+            value={uniqueEmpsToday}
             subtext="Số người đã quét vân tay/mặt"
-            hasData={logs.length > 0} 
+            hasData={logs.length > 0}
           />
-          <StatCard 
-            icon={<Cpu size={20} />} 
-            label="Trạng thái Webhook" 
-            value={gasUrl ? "Đã liên kết" : "Chưa cấu hình"} 
-            subtext={gasUrl ? "Đang chờ tín hiệu..." : "Vui lòng cài đặt GAS"}
-            hasData={!!gasUrl} 
+          <StatCard
+            icon={<Cpu size={20} />}
+            label="Trạng thái Webhook"
+            value={gasUrl ? 'Đã liên kết' : 'Chưa cấu hình'}
+            subtext={gasUrl ? 'Đang chờ tín hiệu...' : 'Vui lòng cài đặt GAS'}
+            hasData={!!gasUrl}
           />
-          <StatCard 
-            icon={<Wifi size={20} />} 
-            label="Kết nối thiết bị" 
-            value={logs.length > 0 ? "Trực tuyến" : "Chờ đồng bộ"} 
-            subtext={logs.length > 0 ? `Lượt cuối: ${logs[0]?.name}` : "Chưa có log đẩy lên"}
-            hasData={logs.length > 0} 
+          <StatCard
+            icon={<Wifi size={20} />}
+            label="Kết nối thiết bị"
+            value={logs.length > 0 ? 'Trực tuyến' : 'Chờ đồng bộ'}
+            subtext={logs.length > 0 ? `Lượt cuối: ${logs[0]?.name}` : 'Chưa có log đẩy lên'}
+            hasData={logs.length > 0}
           />
         </div>
       </div>
 
-      <GuidePanel 
+      <GuidePanel
         title="Đồng Bộ Máy Chấm Công"
         purpose="Module này kết nối trực tuyến với máy chấm công Hikvision DS-K1T320MX đặt tại cửa hàng thông qua Cloudflare Worker để nhận tín hiệu chấm công tự động mà không cần máy tính POS chạy ngầm."
         steps={[
@@ -282,20 +312,21 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
           <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', margin: 0 }}>
             <h2>⚙️ Cấu hình Webhook</h2>
             <p className="sub" style={{ margin: 0 }}>Cài đặt đường link nhận dữ liệu từ Cloudflare Worker để dán vào máy chấm công Hikvision.</p>
-            
+
             <div className="field full" style={{ marginTop: '0.5rem' }}>
               <label>Đường dẫn Cloudflare Worker của bạn</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input 
-                  type="text" 
-                  className="form-control" 
+                <input
+                  type="text"
+                  className="form-control"
                   value={workerUrl}
                   onChange={(e) => setWorkerUrl(e.target.value)}
                   placeholder="https://kingsgrill-attendance-webhook.username.workers.dev"
                   style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
-                <button 
-                  className="primary" 
+                <button
+                  type="button"
+                  className="primary"
                   onClick={handleSaveWorkerUrl}
                   style={{ height: '44px', padding: '0 16px', borderRadius: '8px', minWidth: '80px', flexShrink: 0 }}
                 >
@@ -309,8 +340,8 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
                   <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', wordBreak: 'break-all' }}>{workerUrl}</code>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => handleCopy(workerUrl, 'url')}
                     style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedUrl ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
@@ -323,8 +354,8 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
                   <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>{secretKey}</code>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => handleCopy(secretKey, 'secret')}
                     style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedSecret ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
                   >
@@ -333,7 +364,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                 </div>
               </div>
             </div>
-            
+
             <div style={{ background: 'rgba(34, 211, 238, 0.04)', border: '1px solid rgba(34, 211, 238, 0.15)', borderRadius: '10px', padding: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
               <AlertCircle size={18} style={{ color: 'var(--cyan)', flexShrink: 0, marginTop: '2px' }} />
               <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
@@ -351,9 +382,9 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
 
             <div className="field full">
               <label>Địa chỉ máy chấm công (IP / Tên miền / Tunnel URL)</label>
-              <input 
-                type="text" 
-                className="form-control" 
+              <input
+                type="text"
+                className="form-control"
                 value={syncDeviceUrl}
                 onChange={(e) => setSyncDeviceUrl(e.target.value)}
                 placeholder="Ví dụ: http://192.168.1.3 hoặc https://xyz.trycloudflare.com"
@@ -368,9 +399,9 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
             <div style={{ display: 'flex', gap: '12px' }}>
               <div className="field" style={{ flex: 1 }}>
                 <label>Tài khoản máy</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
+                <input
+                  type="text"
+                  className="form-control"
                   value={syncUsername}
                   onChange={(e) => setSyncUsername(e.target.value)}
                   placeholder="admin"
@@ -379,14 +410,15 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                 />
               </div>
               <div className="field" style={{ flex: 1 }}>
-                <label>Mật khẩu máy</label>
-                <input 
-                  type="password" 
-                  className="form-control" 
+                <label>Mật khẩu máy (chỉ lưu trong phiên)</label>
+                <input
+                  type="password"
+                  className="form-control"
                   value={syncPassword}
                   onChange={(e) => setSyncPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
                 />
               </div>
@@ -395,9 +427,9 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
             <div style={{ display: 'flex', gap: '12px' }}>
               <div className="field" style={{ flex: 1 }}>
                 <label>Từ ngày</label>
-                <input 
-                  type="date" 
-                  className="form-control" 
+                <input
+                  type="date"
+                  className="form-control"
                   value={syncFromDate}
                   onChange={(e) => setSyncFromDate(e.target.value)}
                   required
@@ -406,9 +438,9 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               </div>
               <div className="field" style={{ flex: 1 }}>
                 <label>Đến ngày</label>
-                <input 
-                  type="date" 
-                  className="form-control" 
+                <input
+                  type="date"
+                  className="form-control"
                   value={syncToDate}
                   onChange={(e) => setSyncToDate(e.target.value)}
                   required
@@ -418,10 +450,10 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
             </div>
 
             {syncResultMsg && (
-              <div style={{ 
+              <div style={{
                 background: syncResultMsg.type === 'success' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
                 border: syncResultMsg.type === 'success' ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                borderRadius: '8px', 
+                borderRadius: '8px',
                 padding: '10px 12px',
                 fontSize: '0.8rem',
                 color: syncResultMsg.type === 'success' ? '#4ade80' : '#f87171',
@@ -431,14 +463,14 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               </div>
             )}
 
-            <button 
-              type="submit" 
-              className="primary" 
+            <button
+              type="submit"
+              className="primary"
               disabled={isSyncingOffline}
               style={{ width: '100%', height: '44px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontWeight: 600 }}
             >
-              <RefreshCw className={isSyncingOffline ? "spinner" : ""} size={16} />
-              {isSyncingOffline ? "Đang đồng bộ..." : "Đồng bộ log từ máy chấm công"}
+              <RefreshCw className={isSyncingOffline ? 'spinner' : ''} size={16} />
+              {isSyncingOffline ? 'Đang đồng bộ...' : 'Đồng bộ log từ máy chấm công'}
             </button>
           </form>
         </div>
@@ -450,22 +482,23 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
               <span>📋 Nhật ký chấm công online</span>
               <span className="badge badge-info" style={{ fontSize: '11px', padding: '2px 8px' }}>{filteredLogs.length} dòng</span>
             </h2>
-            <button 
-              className="btn-outline" 
-              onClick={fetchLogs} 
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => void loadAttendanceLogs()}
               disabled={isLoading}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 12px', borderRadius: '8px' }}
             >
-              <RefreshCw className={isLoading ? "spinner" : ""} size={14} />
+              <RefreshCw className={isLoading ? 'spinner' : ''} size={14} />
               Tải lại
             </button>
           </div>
 
           <div style={{ position: 'relative', width: '100%' }}>
             <span style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--muted)' }}><Search size={16} /></span>
-            <input 
-              type="text" 
-              className="form-control" 
+            <input
+              type="text"
+              className="form-control"
               placeholder="Tìm kiếm theo tên nhân viên, ngày hoặc ghi chú..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -475,13 +508,13 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
 
           {isLoading ? (
             <LoadingState message="Đang tải dữ liệu từ Google Sheets..." />
-          ) : errorMsg ? (
-            <ErrorState message={errorMsg} onRetry={fetchLogs} />
+          ) : effectiveError ? (
+            <ErrorState message={effectiveError} onRetry={() => void loadAttendanceLogs()} />
           ) : filteredLogs.length === 0 ? (
-            <EmptyState 
-              icon="📟" 
-              title="Không có log chấm công nào" 
-              description={searchQuery ? "Không tìm thấy dữ liệu phù hợp với tìm kiếm của bạn." : "Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets."} 
+            <EmptyState
+              icon="📟"
+              title="Không có log chấm công nào"
+              description={searchQuery ? 'Không tìm thấy dữ liệu phù hợp với tìm kiếm của bạn.' : 'Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets.'}
             />
           ) : (
             <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: '10px' }}>
@@ -511,7 +544,7 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
                     const cleanOut = formatTime(log.checkOut);
 
                     return (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
+                      <tr key={`${log.name}-${log.date}-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
                         <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '11px' }}>#{idx + 1}</td>
                         <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{log.name}</td>
                         <td style={{ padding: '10px 14px', color: 'var(--muted)', fontFamily: 'monospace', fontSize: '12px' }}>{cleanDate}</td>

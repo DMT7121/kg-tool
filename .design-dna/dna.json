@@ -1,0 +1,41 @@
+{
+  "projectName": "KG Studio v3.0 — Kings Grill Operations & FinTech Hub",
+  "stitchProjectId": "projects/9248036041257582824",
+  "stitchDesignSystemId": "assets/eeb72f1a5b9e407dbf41812cbed780c4",
+  "displayName": "KG Studio Operations",
+  "aesthetic": "Refined Dark-First SaaS & High-Density FinTech Cockpit (Linear / Raycast / Stripe)",
+  "typography": {
+    "sans": "Be Vietnam Pro",
+    "mono": "JetBrains Mono",
+    "numericVariant": "tabular-nums"
+  },
+  "tokens": {
+    "surfaceContainerLowest": "#0a0e17",
+    "surface": "#0f131c",
+    "surfaceContainerLow": "#181b25",
+    "surfaceContainer": "#1c1f29",
+    "surfaceContainerHigh": "#262a34",
+    "surfaceContainerHighest": "#31353f",
+    "outlineVariant": "#424754",
+    "outline": "#8c909f",
+    "primary": "#adc6ff",
+    "primaryContainer": "#4d8eff",
+    "secondary": "#4cd7f6",
+    "tertiary": "#4edea3",
+    "error": "#ffb4ab"
+  },
+  "screens": [
+    {
+      "id": "6abc67c0159445d9b16cfc57bca293fb",
+      "title": "KG Studio — Quản Lý Bảng Lương & Phiếu Lương K80"
+    },
+    {
+      "id": "c532424d173f41e6902cf7cd4e19aae2",
+      "title": "KG Studio — Quản Lý Chấm Công Ca Đêm & Máy Chấm Công Cloud"
+    },
+    {
+      "id": "a77f7e6f844b41a0bbc5e2b1a3423715",
+      "title": "KG Studio — Tạo Mã QR Thu Ngân POS & Lệnh Chuyển Khoản Ngân Hàng Hàng Loạt"
+    }
+  ]
+}

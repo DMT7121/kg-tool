@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import html2canvas from 'html2canvas';
+import React, { Suspense, lazy, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   CheckCircle, 
   FileText, 
@@ -33,14 +32,18 @@ import {
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, summarizeAttendanceForPayroll, type ProcessedRecord, type TimeRecord } from './processor';
-import PayrollCreator from './PayrollCreator';
-import TransferFileTool from './components/TransferFileTool';
-import TTSPage from './components/TTSPage';
-import HikvisionSync from './components/HikvisionSync';
-import { StatCard, EmptyState, GuidePanel, PageHeader, Badge } from './components/Shared';
+import { StatCard, EmptyState, GuidePanel, PageHeader, Badge, LoadingState } from './components/Shared';
 import { CommandPalette } from './components/CommandPalette';
+import { allocateEqualSplit, escapeHtml, getLocalYMD, removeVietnameseAccents } from './utils/numberUtils';
 
+const PayrollCreator = lazy(() => import('./PayrollCreator'));
+const TransferFileTool = lazy(() => import('./components/TransferFileTool'));
+const TTSPage = lazy(() => import('./components/TTSPage'));
+const HikvisionSync = lazy(() => import('./components/HikvisionSync'));
 
+type AppViewTab = 'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts' | 'hikvision';
+type ReceiptTheme = 'blue' | 'green' | 'black' | 'gold';
+type SplitMethod = 'equal' | 'custom';
 
 // Interface definitions
 interface Bank {
@@ -61,6 +64,29 @@ interface SavedAccount {
   accountHolder: string;
   defaultMemo: string;
   defaultAmount: string;
+}
+
+interface QrTransaction {
+  id: string;
+  bankCode: string;
+  accountNo: string;
+  amount: number;
+  memo: string;
+  timestamp: string;
+}
+
+interface SplitGuest {
+  id: string;
+  name: string;
+  amount: number;
+  memo: string;
+}
+
+interface GasAttendanceLog {
+  name: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
 }
 
 interface Toast {
@@ -84,9 +110,104 @@ const FALLBACK_BANKS: Bank[] = [
   { id: 12, name: "Ngân hàng Nông nghiệp và Phát triển Nông thôn Việt Nam", code: "VBA", bin: "970405", shortName: "Agribank", logo: "https://api.vietqr.io/resources/images/bank_logos/agribank.png" }
 ];
 
+function createAppId(prefix = ''): string {
+  const base = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  return prefix ? `${prefix}-${base}` : base;
+}
+
+function safeParseStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function buildEqualSplitGuests(totalAmountStr: string, count: number, tableNo: string): SplitGuest[] {
+  const cleanTotal = Number(totalAmountStr.replace(/\D/g, '')) || 0;
+  const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+  const shares = allocateEqualSplit(cleanTotal, safeCount);
+  const labelTable = tableNo || 'BAN 05';
+
+  return shares.map((share, i) => ({
+    id: String(i + 1),
+    name: `Khách ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ''}`,
+    amount: share,
+    memo: `CK ${labelTable} PHAN ${i + 1}`,
+  }));
+}
+
+interface InitialDeepLinkState {
+  view: AppViewTab;
+  amount: string;
+  memo: string;
+  selectedBank: Bank | null;
+  accountNo: string;
+  accountHolder: string;
+}
+
+function resolveInitialDeepLinkState(savedAccounts: SavedAccount[], banks: Bank[]): InitialDeepLinkState {
+  const params = new URLSearchParams(window.location.search);
+  const tabParam = params.get('tab');
+  const amountParam = params.get('amount');
+  const descParam = params.get('desc');
+  const textParam = params.get('text');
+
+  if (tabParam === 'qr' || tabParam === 'vietqr' || amountParam) {
+    let selectedBank: Bank | null = null;
+    let accountNo = '';
+    let accountHolder = '';
+    let memo = descParam || '';
+
+    if (savedAccounts.length > 0) {
+      const firstAcc = savedAccounts[0];
+      selectedBank =
+        banks.find(b => b.bin === firstAcc.bankId || b.code === firstAcc.bankCode) || FALLBACK_BANKS[0];
+      accountNo = firstAcc.accountNo;
+      accountHolder = firstAcc.accountHolder;
+      if (!descParam && firstAcc.defaultMemo) {
+        memo = firstAcc.defaultMemo;
+      }
+    }
+
+    return {
+      view: 'vietqr',
+      amount: amountParam ? amountParam.replace(/\D/g, '') : '',
+      memo,
+      selectedBank,
+      accountNo,
+      accountHolder,
+    };
+  }
+
+  let view: AppViewTab = 'attendance';
+  if (tabParam === 'tts' || textParam) view = 'tts';
+  else if (tabParam === 'payroll') view = 'payroll';
+  else if (tabParam === 'transfer') view = 'transfer';
+  else if (tabParam === 'hikvision') view = 'hikvision';
+  else if (tabParam === 'settings') view = 'settings';
+
+  return {
+    view,
+    amount: '',
+    memo: '',
+    selectedBank: null,
+    accountNo: '',
+    accountHolder: '',
+  };
+}
+
 function App() {
+  const initialBanks = useMemo(() => safeParseStorage<Bank[]>('kg_tool_cached_banks', FALLBACK_BANKS), []);
+  const initialSavedAccounts = useMemo(() => safeParseStorage<SavedAccount[]>('kg_tool_saved_accounts', []), []);
+  const initialDeepLink = useMemo(
+    () => resolveInitialDeepLinkState(initialSavedAccounts, initialBanks),
+    [initialSavedAccounts, initialBanks]
+  );
+
   // Navigation & UI state
-  const [currentView, setCurrentView] = useState<'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts' | 'hikvision'>('attendance');
+  const [currentView, setCurrentView] = useState<AppViewTab>(initialDeepLink.view);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -104,6 +225,15 @@ function App() {
   });
   const [showExtensionGuideModal, setShowExtensionGuideModal] = useState(false);
 
+  // Toast System Helper (declared early so all handlers can safely call it)
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = createAppId('toast');
+    setToasts(prev => [...prev, { id, message, type }]);
+    window.setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, []);
+
   // Sync theme to document root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -115,20 +245,18 @@ function App() {
     document.body.classList.toggle('is-extension-mode', isExtensionMode);
   }, [isExtensionMode]);
 
-  const toggleTheme = () => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      showToast(
-        next === 'light'
-          ? 'Đã chuyển sang chế độ Sáng (Daylight Alabaster)'
-          : 'Đã chuyển sang chế độ Tối (Warm Carbon Studio)',
-        'info'
-      );
-      return next;
-    });
-  };
+  const toggleTheme = useCallback(() => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    showToast(
+      next === 'light'
+        ? 'Đã chuyển sang chế độ Sáng (Daylight Alabaster)'
+        : 'Đã chuyển sang chế độ Tối (Warm Carbon Studio)',
+      'info'
+    );
+  }, [theme, showToast]);
 
-  // Global Shortcut listener for Command Palette (Ctrl+K / Cmd+K) & Module Switch (Alt+1..5)
+  // Global Shortcut listener for Command Palette (Ctrl+K / Cmd+K) & Module Switch (Alt+1..7)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -145,7 +273,7 @@ function App() {
       }
     };
     const handleNavigateTab = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+      const detail = (e as CustomEvent<AppViewTab>).detail;
       if (detail) setCurrentView(detail);
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -218,42 +346,35 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Attendance search & filter for preview table
+  // Attendance search, filter & pagination for preview table
   const [attendanceSearch, setAttendanceSearch] = useState('');
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'night' | 'complete' | 'incomplete'>('all');
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendancePageSize, setAttendancePageSize] = useState<number>(50);
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
-
   // 2. VietQR & Personal Bank state
-  const [banks, setBanks] = useState<Bank[]>(() => {
-    const cached = localStorage.getItem('kg_tool_cached_banks');
-    return cached ? JSON.parse(cached) : FALLBACK_BANKS;
-  });
+  const [banks, setBanks] = useState<Bank[]>(initialBanks);
   const [isBanksLoading, setIsBanksLoading] = useState(false);
   const [banksError, setBanksError] = useState(false);
 
-  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => {
-    const saved = localStorage.getItem('kg_tool_saved_accounts');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(initialSavedAccounts);
+  const [selectedBank, setSelectedBank] = useState<Bank | null>(initialDeepLink.selectedBank);
   const [searchBankQuery, setSearchBankQuery] = useState('');
   const [showBankDropdown, setShowBankDropdown] = useState(false);
-  const [accountNo, setAccountNo] = useState('');
-  const [accountHolder, setAccountHolder] = useState('');
-  const [amount, setAmount] = useState('');
-  const [memo, setMemo] = useState('');
+  const [accountNo, setAccountNo] = useState(initialDeepLink.accountNo);
+  const [accountHolder, setAccountHolder] = useState(initialDeepLink.accountHolder);
+  const [amount, setAmount] = useState(initialDeepLink.amount);
+  const [memo, setMemo] = useState(initialDeepLink.memo);
   const [selectedTemplate, setSelectedTemplate] = useState<'qr_only' | 'compact' | 'compact2' | 'print'>('compact');
-  
+
   // VietQR Transaction History state
-  const [qrHistory, setQrHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem('kg_tool_qr_history');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [qrHistory, setQrHistory] = useState<QrTransaction[]>(() =>
+    safeParseStorage<QrTransaction[]>('kg_tool_qr_history', [])
+  );
 
   // VietQR Actions & State
-  const [qrUrl, setQrUrl] = useState('');
-  const [isQrLoading, setIsQrLoading] = useState(false);
+  const [loadedQrUrl, setLoadedQrUrl] = useState('');
   const [isSavingAccount, setIsSavingAccount] = useState(false);
   const [showAddAccountForm, setShowAddAccountForm] = useState(false);
 
@@ -261,22 +382,19 @@ function App() {
   const [vietQrViewMode, setVietQrViewMode] = useState<'single' | 'split'>('single');
   const [splitTotalAmount, setSplitTotalAmount] = useState('1200000');
   const [splitPeopleCount, setSplitPeopleCount] = useState(4);
-  const [splitMethod, setSplitMethod] = useState<'equal' | 'custom'>('equal');
-  const [splitGuests, setSplitGuests] = useState<any[]>([
-    { id: '1', name: 'Khách A', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH A' },
-    { id: '2', name: 'Khách B', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH B' },
-    { id: '3', name: 'Khách C', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH C' },
-    { id: '4', name: 'Khách D', amount: 300000, memo: 'THANH TOAN BAN 05 KHACH D' },
-  ]);
+  const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
+  const [receiptTableNo, setReceiptTableNo] = useState('Bàn 05');
+  const [splitGuests, setSplitGuests] = useState<SplitGuest[]>(() =>
+    buildEqualSplitGuests('1200000', 4, 'Bàn 05')
+  );
   const [selectedSplitGuestIndex, setSelectedSplitGuestIndex] = useState(0);
 
   // Branded Receipt states
-  const [receiptTheme, setReceiptTheme] = useState<'blue' | 'green' | 'black' | 'gold'>('blue');
+  const [receiptTheme, setReceiptTheme] = useState<ReceiptTheme>('blue');
   const [receiptThankYou, setReceiptThankYou] = useState('Kings Grill cảm ơn Quý khách!');
   const [receiptShowLogo, setReceiptShowLogo] = useState(true);
   const [receiptShowCashier, setReceiptShowCashier] = useState(true);
   const [receiptShowDate, setReceiptShowDate] = useState(true);
-  const [receiptTableNo, setReceiptTableNo] = useState('Bàn 05');
   const [receiptShowBranded, setReceiptShowBranded] = useState(true);
 
   // New account form temporary state
@@ -288,12 +406,12 @@ function App() {
   const [newDefaultMemo, setNewDefaultMemo] = useState('');
   const [newDefaultAmount, setNewDefaultAmount] = useState('');
 
-  const fetchBanksList = async (showToastNotice = false) => {
+  const fetchBanksList = useCallback(async (showToastNotice = false) => {
     setIsBanksLoading(true);
     setBanksError(false);
     try {
       const res = await fetch('https://api.vietqr.io/v2/banks');
-      const resData = await res.json();
+      const resData = (await res.json()) as { code?: string; data?: Bank[] };
       if (resData.code === '00' && Array.isArray(resData.data)) {
         setBanks(resData.data);
         localStorage.setItem('kg_tool_cached_banks', JSON.stringify(resData.data));
@@ -317,90 +435,69 @@ function App() {
     } finally {
       setIsBanksLoading(false);
     }
-  };
+  }, [showToast]);
 
-  // Fetch VietQR Bank list and handle Extension / Deep-link URL parameters on mount
+  // Refresh VietQR bank catalog asynchronously on mount
   useEffect(() => {
-    fetchBanksList(true);
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
-    const amountParam = params.get('amount');
-    const descParam = params.get('desc');
-    const textParam = params.get('text');
+    const timer = window.setTimeout(() => {
+      void fetchBanksList(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchBanksList]);
 
-    if (tabParam === 'qr' || tabParam === 'vietqr' || amountParam) {
-      setCurrentView('vietqr');
-      if (amountParam) setAmount(amountParam.replace(/\D/g, ''));
-      if (descParam) setMemo(descParam);
-      // Pre-select first saved account if available
-      if (savedAccounts.length > 0 && !selectedBank) {
-        const firstAcc = savedAccounts[0];
-        const foundBank = banks.find(b => b.bin === firstAcc.bankId || b.code === firstAcc.bankCode) || FALLBACK_BANKS[0];
-        setSelectedBank(foundBank);
-        setAccountNo(firstAcc.accountNo);
-        setAccountHolder(firstAcc.accountHolder);
-        if (!descParam && firstAcc.defaultMemo) setMemo(firstAcc.defaultMemo);
-      }
-    } else if (tabParam === 'tts' || textParam) {
-      setCurrentView('tts');
-    } else if (tabParam === 'payroll') {
-      setCurrentView('payroll');
-    } else if (tabParam === 'transfer') {
-      setCurrentView('transfer');
-    } else if (tabParam === 'attendance') {
-      setCurrentView('attendance');
-    }
-  }, []);
-
-  // Update split bill details
-  useEffect(() => {
+  // Handlers keeping splitGuests synchronized without cascading useEffect
+  const handleSplitTotalAmountChange = (nextTotalStr: string) => {
+    const clean = nextTotalStr.replace(/\D/g, '');
+    setSplitTotalAmount(clean);
     if (splitMethod === 'equal') {
-      const cleanTotal = Number(splitTotalAmount.replace(/\D/g, '')) || 0;
-      const count = Number(splitPeopleCount) || 1;
-      const equalShare = Math.round(cleanTotal / count);
-      
-      const newGuests = Array.from({ length: count }, (_, i) => ({
-        id: String(i + 1),
-        name: `Khách ${String.fromCharCode(65 + i)}`,
-        amount: equalShare,
-        memo: `CK ${receiptTableNo || 'BAN 05'} PHAN ${i + 1}`
-      }));
-      setSplitGuests(newGuests);
+      setSplitGuests(buildEqualSplitGuests(clean, splitPeopleCount, receiptTableNo));
       setSelectedSplitGuestIndex(0);
     }
-  }, [splitTotalAmount, splitPeopleCount, splitMethod, receiptTableNo]);
+  };
 
-  // Update QR Code Image Link dynamically based on inputs
-  useEffect(() => {
-    if (selectedBank && accountNo && accountHolder) {
-      setIsQrLoading(true);
-      let cleanAmount = '';
-      let activeMemo = '';
-      
-      if (vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]) {
-        cleanAmount = String(splitGuests[selectedSplitGuestIndex].amount);
-        activeMemo = splitGuests[selectedSplitGuestIndex].memo || '';
-      } else {
-        cleanAmount = amount.replace(/\D/g, '');
-        activeMemo = memo;
-      }
-      
-      const bankId = selectedBank.bin || selectedBank.code;
-      const url = `https://img.vietqr.io/image/${bankId}-${accountNo}-${selectedTemplate}.png?amount=${cleanAmount}&addInfo=${encodeURIComponent(activeMemo)}&accountName=${encodeURIComponent(accountHolder.toUpperCase())}`;
-      setQrUrl(url);
-    } else {
-      setQrUrl('');
+  const handleSplitPeopleCountChange = (nextCount: number) => {
+    const safeCount = Math.max(1, Math.min(50, Math.floor(nextCount || 1)));
+    setSplitPeopleCount(safeCount);
+    if (splitMethod === 'equal') {
+      setSplitGuests(buildEqualSplitGuests(splitTotalAmount, safeCount, receiptTableNo));
+      setSelectedSplitGuestIndex(0);
     }
+  };
+
+  const handleReceiptTableNoChange = (nextTableNo: string) => {
+    setReceiptTableNo(nextTableNo);
+    if (splitMethod === 'equal') {
+      setSplitGuests(buildEqualSplitGuests(splitTotalAmount, splitPeopleCount, nextTableNo));
+    }
+  };
+
+  const handleSplitMethodChange = (nextMethod: SplitMethod) => {
+    setSplitMethod(nextMethod);
+    if (nextMethod === 'equal') {
+      setSplitGuests(buildEqualSplitGuests(splitTotalAmount, splitPeopleCount, receiptTableNo));
+      setSelectedSplitGuestIndex(0);
+    }
+  };
+
+  // Pure derived QR Code Image Link
+  const qrUrl = useMemo(() => {
+    if (!selectedBank || !accountNo || !accountHolder) return '';
+    let cleanAmount = '';
+    let currentMemo = '';
+
+    if (vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]) {
+      cleanAmount = String(splitGuests[selectedSplitGuestIndex].amount);
+      currentMemo = splitGuests[selectedSplitGuestIndex].memo || '';
+    } else {
+      cleanAmount = amount.replace(/\D/g, '');
+      currentMemo = memo;
+    }
+
+    const bankId = selectedBank.bin || selectedBank.code;
+    return `https://img.vietqr.io/image/${bankId}-${accountNo}-${selectedTemplate}.png?amount=${cleanAmount}&addInfo=${encodeURIComponent(currentMemo)}&accountName=${encodeURIComponent(accountHolder.toUpperCase())}`;
   }, [selectedBank, accountNo, accountHolder, amount, memo, selectedTemplate, vietQrViewMode, splitGuests, selectedSplitGuestIndex]);
 
-  // Toast System Helper
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Date.now().toString();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4500);
-  };
+  const isQrLoading = Boolean(qrUrl) && loadedQrUrl !== qrUrl;
 
   const getThemeGradient = () => {
     switch (receiptTheme) {
@@ -427,6 +524,7 @@ function App() {
     if (!el) return;
     try {
       showToast('Đang tạo hình ảnh biên lai...', 'info');
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(el, {
         useCORS: true,
         allowTaint: true,
@@ -438,23 +536,52 @@ function App() {
       link.href = canvas.toDataURL('image/png');
       link.click();
       showToast('Đã tải xuống hình ảnh biên lai thành công!', 'success');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      showToast(`Lỗi khi tạo ảnh: ${e.message}`, 'error');
+      const msg = e instanceof Error ? e.message : 'Không xác định';
+      showToast(`Lỗi khi tạo ảnh: ${msg}`, 'error');
     }
   };
 
+  // VND Number formatter for text display
+  const formatVND = (val: string) => {
+    const num = val.replace(/\D/g, '');
+    if (!num) return '';
+    return new Intl.NumberFormat('vi-VN').format(parseInt(num, 10));
+  };
+
+  const activeAmount = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].amount
+    : (amount ? Number(amount.replace(/\D/g, '')) : 0);
+
+  const activeMemo = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].memo
+    : memo;
+
+  const activeGuestName = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
+    ? splitGuests[selectedSplitGuestIndex].name
+    : '';
+
   const handlePrintReceipt = () => {
-    const el = document.getElementById('branded-receipt-card');
-    if (!el) return;
+    if (!qrUrl) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    
+
     const themeGradient = getThemeGradient();
-    
+    const safeLocation = escapeHtml(receiptTableNo || 'Bàn 05');
+    const safeTime = escapeHtml(new Date().toLocaleString('vi-VN'));
+    const safeHolder = escapeHtml(accountHolder.toUpperCase());
+    const safeAccount = escapeHtml(`${selectedBank?.shortName || ''} (${accountNo})`);
+    const safeGuest = escapeHtml(activeGuestName);
+    const safeAmount = escapeHtml(`${formatVND(String(activeAmount)) || '0'} đ`);
+    const safeQrUrl = escapeHtml(qrUrl);
+    const safeMemo = escapeHtml(activeMemo);
+    const safeThankYou = escapeHtml(receiptThankYou);
+
     printWindow.document.write(`
       <html>
         <head>
+          <meta charset="utf-8" />
           <title>In Biên lai Kings Grill</title>
           <style>
             body {
@@ -474,69 +601,62 @@ function App() {
               border-radius: 16px;
               box-shadow: 0 4px 10px rgba(0,0,0,0.1);
               box-sizing: border-box;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
-            .receipt-header {
-              text-align: center;
-              margin-bottom: 20px;
+            .receipt-header { text-align: center; margin-bottom: 16px; }
+            .receipt-logo {
+              display: inline-flex; align-items: center; justify-content: center;
+              width: 42px; height: 42px; border-radius: 12px;
+              background: linear-gradient(135deg, #22d3ee, #3b82f6);
+              margin-bottom: 8px; font-size: 20px; font-weight: bold; color: #000;
             }
-            .receipt-header h1 {
-              font-size: 22px;
-              margin: 0;
-              letter-spacing: 0.5px;
+            .receipt-header h1 { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: 0.5px; }
+            .receipt-header p { font-size: 10px; margin: 2px 0 0 0; opacity: 0.7; text-transform: uppercase; font-weight: 600; }
+            .receipt-divider { border-top: 1px dashed rgba(255,255,255,0.2); margin: 12px 0; }
+            .receipt-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+            .receipt-row .label { opacity: 0.65; }
+            .receipt-row .value { font-weight: 600; }
+            .receipt-amount-box {
+              background: rgba(255,255,255,0.06); padding: 12px; border-radius: 12px;
+              text-align: center; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.08);
             }
-            .receipt-header p {
-              font-size: 11px;
-              margin: 4px 0 0 0;
-              opacity: 0.7;
+            .receipt-qr-wrapper { display: flex; justify-content: center; margin: 16px 0; }
+            .receipt-qr-img { width: 180px; height: 180px; background: white; padding: 6px; border-radius: 12px; object-fit: contain; }
+            .receipt-memo {
+              font-size: 11px; text-align: center; background: rgba(255,255,255,0.04);
+              padding: 8px 12px; border-radius: 8px; word-break: break-all;
             }
-            .receipt-divider {
-              border-top: 1px dashed rgba(255,255,255,0.2);
-              margin: 16px 0;
-            }
-            .receipt-row {
-              display: flex;
-              justify-content: space-between;
-              font-size: 13px;
-              margin-bottom: 8px;
-            }
-            .receipt-row .label {
-              opacity: 0.6;
-            }
-            .receipt-row .value {
-              font-weight: 600;
-            }
-            .receipt-amount-row {
-              background: rgba(255,255,255,0.05);
-              padding: 10px;
-              border-radius: 8px;
-              margin-bottom: 12px;
-            }
-            .receipt-qr-wrapper {
-              display: flex;
-              justify-content: center;
-              margin: 20px 0;
-            }
-            .receipt-qr-img {
-              width: 200px;
-              height: 200px;
-              background: white;
-              padding: 8px;
-              border-radius: 12px;
-            }
-            .receipt-footer {
-              text-align: center;
-              font-size: 12px;
-              opacity: 0.8;
-              font-style: italic;
-            }
-            .receipt-controls-print {
-              display: none !important;
-            }
+            .receipt-footer { text-align: center; font-size: 11px; opacity: 0.85; font-style: italic; }
           </style>
         </head>
         <body>
           <div class="receipt-card">
-            ${el.innerHTML}
+            <div class="receipt-header">
+              ${receiptShowLogo ? '<div class="receipt-logo">K</div>' : ''}
+              <h1>KINGS GRILL</h1>
+              <p>Biên lai thanh toán điện tử</p>
+            </div>
+            <div class="receipt-divider"></div>
+            <div class="receipt-row"><span class="label">Địa điểm:</span><span class="value">${safeLocation}</span></div>
+            ${receiptShowDate ? `<div class="receipt-row"><span class="label">Thời gian:</span><span class="value">${safeTime}</span></div>` : ''}
+            ${receiptShowCashier ? '<div class="receipt-row"><span class="label">Thu ngân:</span><span class="value">Kế toán viên</span></div>' : ''}
+            <div class="receipt-row"><span class="label">Thụ hưởng:</span><span class="value">${safeHolder}</span></div>
+            <div class="receipt-row"><span class="label">Tài khoản:</span><span class="value">${safeAccount}</span></div>
+            ${vietQrViewMode === 'split' && safeGuest ? `<div class="receipt-row" style="color:#22d3ee"><span class="label" style="opacity:1;font-weight:600">Phần thanh toán:</span><span class="value">${safeGuest}</span></div>` : ''}
+            <div class="receipt-divider"></div>
+            <div class="receipt-amount-box">
+              <div style="font-size:11px;opacity:0.65;text-transform:uppercase;margin-bottom:2px">Số tiền thanh toán</div>
+              <strong style="font-size:20px;color:#30e797;font-weight:800">${safeAmount}</strong>
+            </div>
+            <div class="receipt-qr-wrapper">
+              <img class="receipt-qr-img" src="${safeQrUrl}" alt="VietQR Code" />
+            </div>
+            <div class="receipt-memo">
+              <div style="opacity:0.65;font-size:10px;margin-bottom:3px">NỘI DUNG CHUYỂN KHOẢN MÃ HÓA</div>
+              <strong style="font-family:monospace">${safeMemo}</strong>
+            </div>
+            ${safeThankYou ? `<div class="receipt-divider"></div><div class="receipt-footer">${safeThankYou}</div>` : ''}
           </div>
           <script>
             window.onload = function() {
@@ -557,7 +677,7 @@ function App() {
     localStorage.setItem('kg_tool_spreadsheet_id', spreadsheetId);
     showToast('Đã lưu cấu hình hệ thống thành công!', 'success');
     if (gasUrl) {
-      testConnection();
+      void testConnection();
     } else {
       setConnectionStatus('not_configured');
     }
@@ -574,7 +694,7 @@ function App() {
     try {
       const url = `${gasUrl}?action=getMonths&ssId=${encodeURIComponent(spreadsheetId)}`;
       const res = await fetch(url);
-      const result = await res.json();
+      const result = (await res.json()) as { success?: boolean; status?: string };
       if (result.success || Array.isArray(result) || result.status === 'success') {
         setConnectionStatus('connected');
         showToast('Kết nối Google Sheets API thành công!', 'success');
@@ -582,10 +702,11 @@ function App() {
         setConnectionStatus('failed');
         showToast('Kết nối thất bại: API phản hồi sai cấu trúc.', 'error');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setConnectionStatus('failed');
-      showToast(`Không thể kết nối: ${err.message || 'Lỗi mạng hoặc URL không tồn tại'}`, 'error');
+      const msg = err instanceof Error ? err.message : 'Lỗi mạng hoặc URL không tồn tại';
+      showToast(`Không thể kết nối: ${msg}`, 'error');
     }
   };
 
@@ -620,6 +741,7 @@ function App() {
     setIsSuccess(false);
     setProcessedBlob(null);
     setProcessedRecords([]);
+    setAttendancePage(1);
     setAttendanceSyncSuccess(false);
   };
 
@@ -630,15 +752,16 @@ function App() {
     try {
       const records = await parseFile(file);
       const processed = processRecords(records);
-      const blob = await exportToExcel(processed);
       const summary = summarizeAttendanceForPayroll(processed);
       localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
-      setProcessedBlob(blob);
+      setProcessedBlob(null);
       setProcessedRecords(processed);
+      setAttendancePage(1);
       setIsSuccess(true);
       showToast('Xử lý chấm công hoàn tất thành công!', 'success');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Có lỗi xảy ra trong quá trình xử lý');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình xử lý';
+      setErrorMsg(msg);
       console.error(err);
       showToast('Lỗi xử lý file chấm công!', 'error');
     } finally {
@@ -658,12 +781,13 @@ function App() {
     setIsSuccess(false);
     setProcessedBlob(null);
     setProcessedRecords([]);
+    setAttendancePage(1);
     
     try {
       showToast('Đang tải dữ liệu chấm công từ Google Sheets...', 'info');
       const url = `${gasUrl}?action=getAttendanceLogs&ssId=${encodeURIComponent(spreadsheetId)}`;
       const res = await fetch(url);
-      const result = await res.json();
+      const result = (await res.json()) as { success?: boolean; data?: GasAttendanceLog[]; error?: string };
       
       if (!result.success || !Array.isArray(result.data)) {
         throw new Error(result.error || 'Dữ liệu phản hồi từ Apps Script không đúng cấu trúc.');
@@ -676,15 +800,16 @@ function App() {
       
       // Convert AttendanceLog to TimeRecord
       const records: TimeRecord[] = [];
-      logs.forEach((log: any) => {
-        const parts = log.date.split('/');
+      logs.forEach((log) => {
+        if (!log.date) return;
+        const parts = String(log.date).split('/');
         if (parts.length !== 3) return;
         const d = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1;
         const y = parseInt(parts[2], 10);
         
         if (log.checkIn) {
-          const timeParts = log.checkIn.split(':');
+          const timeParts = String(log.checkIn).split(':');
           if (timeParts.length >= 2) {
             const h = parseInt(timeParts[0], 10);
             const min = parseInt(timeParts[1], 10);
@@ -695,7 +820,7 @@ function App() {
         }
         
         if (log.checkOut) {
-          const timeParts = log.checkOut.split(':');
+          const timeParts = String(log.checkOut).split(':');
           if (timeParts.length >= 2) {
             const h = parseInt(timeParts[0], 10);
             const min = parseInt(timeParts[1], 10);
@@ -713,22 +838,23 @@ function App() {
         throw new Error('Không thể phân tích dữ liệu chấm công hợp lệ từ Google Sheet.');
       }
 
-      // Process records using existing engine
+      // Process records using existing engine (Excel workbook generated lazily on download)
       const processed = processRecords(records);
-      const blob = await exportToExcel(processed);
       const summary = summarizeAttendanceForPayroll(processed);
       localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
       
-      setProcessedBlob(blob);
+      setProcessedBlob(null);
       setProcessedRecords(processed);
+      setAttendancePage(1);
       setIsSuccess(true);
       
       // Mock File object to transition the UI state
       setFile(new File([], `Dữ_Liệu_Sheet_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`));
       
       showToast(`Đã xử lý chấm công của ${processed.length} dòng dữ liệu thành công!`, 'success');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Lỗi khi tải hoặc xử lý dữ liệu từ Google Sheet.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Lỗi khi tải hoặc xử lý dữ liệu từ Google Sheet.';
+      setErrorMsg(msg);
       console.error(err);
       showToast('Lỗi xử lý dữ liệu chấm công Cloud!', 'error');
     } finally {
@@ -741,23 +867,34 @@ function App() {
       const summary = summarizeAttendanceForPayroll(processedRecords);
       localStorage.setItem('kg_tool_attendance_summary', JSON.stringify(summary));
     }
+    localStorage.setItem('kg_tool_pending_attendance_payroll', '1');
     setCurrentView('payroll');
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('kg-import-attendance-to-payroll'));
-    }, 120);
+    window.dispatchEvent(new CustomEvent('kg-import-attendance-to-payroll'));
   };
 
-  const handleDownload = () => {
-    if (!processedBlob) return;
-    const url = URL.createObjectURL(processedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bang_Cham_Cong_Da_Xu_Ly_${new Date().getTime()}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Đã tải file kết quả về máy!', 'success');
+  const handleDownload = async () => {
+    if (processedRecords.length === 0 && !processedBlob) return;
+    try {
+      let blob = processedBlob;
+      if (!blob) {
+        showToast('Đang tạo tệp Excel báo cáo...', 'info');
+        blob = await exportToExcel(processedRecords);
+        setProcessedBlob(blob);
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bang_Cham_Cong_Da_Xu_Ly_${new Date().getTime()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('Đã tải file kết quả về máy!', 'success');
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Không xác định';
+      showToast(`Không thể xuất file Excel: ${msg}`, 'error');
+    }
   };
 
   const handleDownloadTemplate = async () => {
@@ -771,11 +908,12 @@ function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       showToast('Đã tải file mẫu chấm công về máy!', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast('Không thể tạo file mẫu: ' + err.message, 'error');
+      const msg = err instanceof Error ? err.message : 'Không xác định';
+      showToast('Không thể tạo file mẫu: ' + msg, 'error');
     }
   };
 
@@ -800,7 +938,7 @@ function App() {
       const res = await fetch(gasUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain'
+          'Content-Type': 'text/plain;charset=utf-8'
         },
         body: JSON.stringify({
           action: 'save_attendance',
@@ -810,22 +948,23 @@ function App() {
       });
 
       const resText = await res.text();
-      let resJson;
+      let resJson: { status?: string; inserted?: number; message?: string };
       try {
-        resJson = JSON.parse(resText);
-      } catch (e) {
+        resJson = JSON.parse(resText) as { status?: string; inserted?: number; message?: string };
+      } catch {
         throw new Error('Không thể parse dữ liệu phản hồi từ Apps Script. Hãy đảm bảo bạn đã deploy Apps Script đúng cách.');
       }
 
       if (resJson.status === 'success') {
-        showToast(`Đồng bộ thành công ${resJson.inserted} dòng dữ liệu lên Google Sheet!`, 'success');
+        showToast(`Đồng bộ thành công ${resJson.inserted ?? 0} dòng dữ liệu lên Google Sheet!`, 'success');
         setAttendanceSyncSuccess(true);
       } else {
         throw new Error(resJson.message || 'Lỗi từ Apps Script backend.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Đồng bộ thất bại: ${err.message || 'Kiểm tra lại kết nối và URL Apps Script'}`, 'error');
+      const msg = err instanceof Error ? err.message : 'Kiểm tra lại kết nối và URL Apps Script';
+      showToast(`Đồng bộ thất bại: ${msg}`, 'error');
     } finally {
       setIsSyncingAttendance(false);
     }
@@ -840,9 +979,9 @@ function App() {
     setAttendanceSyncSuccess(false);
     setAttendanceSearch('');
     setAttendanceFilter('all');
+    setAttendancePage(1);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
 
   // Add personal bank account locally
   const handleAddAccount = (e: React.FormEvent) => {
@@ -853,7 +992,7 @@ function App() {
     }
 
     const newAcc: SavedAccount = {
-      id: Date.now().toString(),
+      id: createAppId('acc'),
       bankId: newBank.bin || newBank.code,
       bankName: newBank.name,
       bankCode: newBank.code,
@@ -888,18 +1027,26 @@ function App() {
   const handleDeleteAccount = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này không?')) {
+      const deletedAcc = savedAccounts.find(acc => acc.id === id);
+      const wasSelected = Boolean(
+        deletedAcc &&
+        selectedBank?.code === deletedAcc.bankCode &&
+        accountNo === deletedAcc.accountNo
+      );
+
       const updated = savedAccounts.filter(acc => acc.id !== id);
       setSavedAccounts(updated);
       localStorage.setItem('kg_tool_saved_accounts', JSON.stringify(updated));
       showToast('Đã xóa tài khoản!', 'info');
-      
-      // Clear fields if the deleted account was selected
-      setAccountNo('');
-      setAccountHolder('');
-      setMemo('');
-      setAmount('');
-      setSelectedBank(null);
-      setSearchBankQuery('');
+
+      if (wasSelected) {
+        setAccountNo('');
+        setAccountHolder('');
+        setMemo('');
+        setAmount('');
+        setSelectedBank(null);
+        setSearchBankQuery('');
+      }
     }
   };
 
@@ -950,16 +1097,16 @@ function App() {
       const res = await fetch(gasUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain'
+          'Content-Type': 'text/plain;charset=utf-8'
         },
         body: JSON.stringify(payload)
       });
 
       const resText = await res.text();
-      let resJson;
+      let resJson: { status?: string; message?: string };
       try {
-        resJson = JSON.parse(resText);
-      } catch (e) {
+        resJson = JSON.parse(resText) as { status?: string; message?: string };
+      } catch {
         throw new Error('Phản hồi từ Google Apps Script không hợp lệ. Hãy kiểm tra lại Deployment Web App.');
       }
 
@@ -967,8 +1114,8 @@ function App() {
         showToast('Lưu tài khoản và mã QR thành công lên sheet DATA2!', 'success');
         
         // Log to history
-        const newTx = {
-          id: Date.now().toString(),
+        const newTx: QrTransaction = {
+          id: createAppId('qr'),
           bankCode: selectedBank.code,
           accountNo: accountNo.trim(),
           amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
@@ -981,9 +1128,10 @@ function App() {
       } else {
         throw new Error(resJson.message || 'Lỗi không rõ từ script.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(`Không thể lưu: ${err.message || 'Kiểm tra lại cấu hình hoặc kết nối'}`, 'error');
+      const msg = err instanceof Error ? err.message : 'Kiểm tra lại cấu hình hoặc kết nối';
+      showToast(`Không thể lưu: ${msg}`, 'error');
     } finally {
       setIsSavingAccount(false);
     }
@@ -1001,12 +1149,12 @@ function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       showToast('Đã tải hình ảnh QR Code về máy!', 'success');
 
       // Log to history
-      const newTx = {
-        id: Date.now().toString(),
+      const newTx: QrTransaction = {
+        id: createAppId('qr'),
         bankCode: selectedBank?.code || '',
         accountNo: accountNo.trim(),
         amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
@@ -1016,7 +1164,7 @@ function App() {
       const updatedHistory = [...qrHistory, newTx];
       setQrHistory(updatedHistory);
       localStorage.setItem('kg_tool_qr_history', JSON.stringify(updatedHistory));
-    } catch (e) {
+    } catch {
       window.open(qrUrl, '_blank');
       showToast('Mở mã QR trong tab mới để tải về!', 'info');
     }
@@ -1029,8 +1177,8 @@ function App() {
         showToast('Đã sao chép link ảnh VietQR!', 'success');
         
         // Log to history
-        const newTx = {
-          id: Date.now().toString(),
+        const newTx: QrTransaction = {
+          id: createAppId('qr'),
           bankCode: selectedBank?.code || '',
           accountNo: accountNo.trim(),
           amount: amount ? parseInt(amount.replace(/\D/g, ''), 10) : 0,
@@ -1044,26 +1192,11 @@ function App() {
       .catch(() => showToast('Không thể sao chép link!', 'error'));
   };
 
-  // VND Number formatter for text display
-  const formatVND = (val: string) => {
-    const num = val.replace(/\D/g, '');
-    if (!num) return '';
-    return new Intl.NumberFormat('vi-VN').format(parseInt(num, 10));
-  };
-
   // Strip accents helper for search
-  const stripAccents = (str: string): string => {
-    if (!str) return '';
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase();
-  };
+  const stripAccents = (str: string): string => removeVietnameseAccents(str).toLowerCase();
 
   // Filter banks for custom searchable selection
-  const filteredBanks = (() => {
+  const filteredBanks = useMemo(() => {
     const query = stripAccents(searchBankQuery).trim();
     if (!query) return banks;
     return banks.filter(b => 
@@ -1072,9 +1205,9 @@ function App() {
       stripAccents(b.shortName || '').includes(query) ||
       (b.bin && b.bin.includes(query))
     );
-  })();
+  }, [banks, searchBankQuery]);
 
-  const filteredNewBanks = (() => {
+  const filteredNewBanks = useMemo(() => {
     const query = stripAccents(newSearchBankQuery).trim();
     if (!query) return banks;
     return banks.filter(b => 
@@ -1083,7 +1216,7 @@ function App() {
       stripAccents(b.shortName || '').includes(query) ||
       (b.bin && b.bin.includes(query))
     );
-  })();
+  }, [banks, newSearchBankQuery]);
 
   // Dynamic KPIs calculations for Attendance
   const hasAttendanceData = processedRecords.length > 0;
@@ -1093,23 +1226,15 @@ function App() {
   const nightCount = hasAttendanceData ? processedRecords.filter(r => r.overtime).length : 0;
   const completionRate = hasAttendanceData ? ((processedCount / daysCount) * 100).toFixed(2) : '0';
 
-  // VietQR calculation metrics
-  const todayStr = new Date().toISOString().split('T')[0];
-  const qrCreatedToday = qrHistory.filter(h => h.timestamp && h.timestamp.startsWith(todayStr)).length;
+  // VietQR calculation metrics (using local YYYY-MM-DD so 00:00–07:00 VN time is counted accurately)
+  const todayLocalStr = getLocalYMD();
+  const qrCreatedToday = qrHistory.filter(h => {
+    if (!h.timestamp) return false;
+    const parsed = new Date(h.timestamp);
+    return !isNaN(parsed.getTime()) && getLocalYMD(parsed) === todayLocalStr;
+  }).length;
   const totalTransactions = qrHistory.length;
   const totalAmountReceived = qrHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-
-  const activeAmount = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
-    ? splitGuests[selectedSplitGuestIndex].amount
-    : (amount ? Number(amount.replace(/\D/g, '')) : 0);
-    
-  const activeMemo = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
-    ? splitGuests[selectedSplitGuestIndex].memo
-    : memo;
-
-  const activeGuestName = vietQrViewMode === 'split' && splitGuests[selectedSplitGuestIndex]
-    ? splitGuests[selectedSplitGuestIndex].name
-    : '';
 
   // Split bill disparity calculation & helpers
   const splitTotalNum = Number(splitTotalAmount.replace(/\D/g, '')) || 0;
@@ -1127,20 +1252,30 @@ function App() {
 
   const handleAddSplitGuest = () => {
     const nextIdx = splitGuests.length + 1;
-    const newGuest = {
-      id: String(Date.now()),
+    if (splitMethod === 'equal') {
+      setSplitPeopleCount(nextIdx);
+      setSplitGuests(buildEqualSplitGuests(splitTotalAmount, nextIdx, receiptTableNo));
+      return;
+    }
+    const newGuest: SplitGuest = {
+      id: createAppId('guest'),
       name: `Khách ${String.fromCharCode(64 + Math.min(nextIdx, 26))}`,
       amount: 0,
       memo: `CK ${receiptTableNo || 'BAN 05'} PHAN ${nextIdx}`
     };
     setSplitGuests(prev => [...prev, newGuest]);
-    setSplitPeopleCount(prev => prev + 1);
+    setSplitPeopleCount(nextIdx);
   };
 
   const handleRemoveSplitGuest = (idx: number) => {
     if (splitGuests.length <= 1) return;
-    setSplitGuests(prev => prev.filter((_, i) => i !== idx));
-    setSplitPeopleCount(prev => Math.max(1, prev - 1));
+    const nextCount = Math.max(1, splitGuests.length - 1);
+    setSplitPeopleCount(nextCount);
+    if (splitMethod === 'equal') {
+      setSplitGuests(buildEqualSplitGuests(splitTotalAmount, nextCount, receiptTableNo));
+    } else {
+      setSplitGuests(prev => prev.filter((_, i) => i !== idx));
+    }
     if (selectedSplitGuestIndex >= splitGuests.length - 1) {
       setSelectedSplitGuestIndex(Math.max(0, splitGuests.length - 2));
     }
@@ -1149,7 +1284,7 @@ function App() {
   const addSampleKingsGrillAccount = () => {
     const sampleBank = banks.find(b => b.code === 'VCB') || FALLBACK_BANKS[0];
     const sampleAcc: SavedAccount = {
-      id: Date.now().toString(),
+      id: createAppId('acc'),
       bankId: sampleBank.bin || sampleBank.code,
       bankName: sampleBank.name,
       bankCode: sampleBank.code,
@@ -1169,7 +1304,7 @@ function App() {
     showToast('Đã thêm tài khoản mẫu Kings Grill thành công!', 'success');
   };
 
-  // Filtered attendance records for DataGrid table preview
+  // Filtered & paginated attendance records for DataGrid table preview
   const filteredAttendanceRecords = useMemo(() => {
     let list = processedRecords;
     if (attendanceFilter === 'night') {
@@ -1180,11 +1315,21 @@ function App() {
       list = list.filter(r => !r.checkIn || !r.checkOut);
     }
     if (attendanceSearch.trim()) {
-      const q = stripAccents(attendanceSearch.trim()).toLowerCase();
-      list = list.filter(r => stripAccents(r.employeeName).toLowerCase().includes(q));
+      const q = removeVietnameseAccents(attendanceSearch.trim()).toLowerCase();
+      list = list.filter(r => removeVietnameseAccents(r.employeeName).toLowerCase().includes(q));
     }
     return list;
   }, [processedRecords, attendanceFilter, attendanceSearch]);
+
+  const totalAttendancePages = attendancePageSize > 0
+    ? Math.max(1, Math.ceil(filteredAttendanceRecords.length / attendancePageSize))
+    : 1;
+  const safeAttendancePage = Math.min(attendancePage, totalAttendancePages);
+  const attendanceStartIndex = attendancePageSize > 0 ? (safeAttendancePage - 1) * attendancePageSize : 0;
+  const paginatedAttendanceRecords = useMemo(() => {
+    if (attendancePageSize <= 0) return filteredAttendanceRecords;
+    return filteredAttendanceRecords.slice(attendanceStartIndex, attendanceStartIndex + attendancePageSize);
+  }, [filteredAttendanceRecords, attendancePageSize, attendanceStartIndex]);
 
   const formatTimeStr = (d: Date | null) => {
     if (!d) return '—';
@@ -1223,7 +1368,21 @@ function App() {
       <aside className={`sidebar ${isMobile ? 'mobile-drawer' : ''} ${isMobile && isMobileDrawerOpen ? 'drawer-open' : ''} ${!isMobile && sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="brand">
           <div className="logo"></div>
-          <span className="logo-text">KG_STUDIO</span>
+          <div className="brand-meta">
+            <div className="brand-title-row">
+              <span className="logo-text">KG Studio</span>
+              <span className="brand-status-dot" title="System Operational"></span>
+            </div>
+            <span className="brand-subtext">Enterprise Financial Terminal</span>
+          </div>
+        </div>
+
+        <div className="sidebar-branch-pill" title="Chi nhánh vận hành hiện tại">
+          <span className="sidebar-branch-left">
+            <span className="brand-status-dot" style={{ width: '6px', height: '6px' }}></span>
+            Kings Grill Central
+          </span>
+          <span className="sidebar-branch-tag">F&amp;B Hub</span>
         </div>
 
         <nav className="nav">
@@ -1276,17 +1435,44 @@ function App() {
 
         <div className="sidebar-art"></div>
 
+        <div
+          className="sidebar-cloud-widget"
+          onClick={() => setCurrentView('settings')}
+          style={{ cursor: 'pointer' }}
+          title="Trạng thái đồng bộ Google Drive & Google Sheets"
+        >
+          <div className="sidebar-cloud-top">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Cloud size={14} style={{ color: 'var(--status-success)' }} />
+              Google Cloud Sync
+            </span>
+            <span className="sidebar-cloud-pct">
+              {connectionStatus === 'connected' ? 'LIVE' : 'STANDBY'}
+            </span>
+          </div>
+          <div className="sidebar-cloud-bar">
+            <div
+              className="sidebar-cloud-bar-fill"
+              style={{ width: connectionStatus === 'connected' ? '92%' : '45%' }}
+            />
+          </div>
+          <div className="sidebar-cloud-meta">
+            <span>Kings Grill F&amp;B Central</span>
+            <span>{banks.length} NH</span>
+          </div>
+        </div>
+
         <div className="support" onClick={() => showToast('Hỗ trợ kỹ thuật: dmt.kgwork@gmail.com', 'info')}>
           <div>
-            <strong>🎧 Hỗ trợ</strong>
-            <span>Trung tâm trợ giúp</span>
+            <strong>🎧 Hỗ trợ & Trợ giúp</strong>
+            <span>Trung tâm điều hành</span>
           </div>
           <b>›</b>
         </div>
 
         <div className="foot">
-          <span>Phiên bản v2.5.0</span>
-          <span>Kings Grill</span>
+          <span>Phiên bản v3.0</span>
+          <span>PRO TERMINAL</span>
         </div>
       </aside>
 
@@ -1361,6 +1547,16 @@ function App() {
           </div>
           
           <div className="user">
+            <div
+              className="topbar-live-pill"
+              onClick={() => setCurrentView('settings')}
+              style={{ cursor: 'pointer' }}
+              title="Trạng thái đồng bộ Google Sheets thời gian thực"
+            >
+              <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
+              <span>{connectionStatus === 'connected' ? 'Google Sheets Live' : 'Cloud Standby'}</span>
+            </div>
+
             {/* Notification Button & Popover */}
             <div className="topbar-action-item">
               <div 
@@ -1418,11 +1614,9 @@ function App() {
             <div 
               className="mini-btn" 
               onClick={() => {
-                setIsExtensionMode(prev => {
-                  const next = !prev;
-                  showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
-                  return next;
-                });
+                const next = !isExtensionMode;
+                setIsExtensionMode(next);
+                showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
               }}
               title={isExtensionMode ? "Thoát chế độ Extension nhỏ gọn" : "Chế độ Extension / Side Panel nhỏ gọn"}
               style={isExtensionMode ? { borderColor: 'var(--blue)', color: 'var(--blue)', background: 'var(--accent-primary-subtle)' } : undefined}
@@ -1827,13 +2021,19 @@ function App() {
                               type="text" 
                               placeholder="Tìm theo tên nhân viên..."
                               value={attendanceSearch}
-                              onChange={(e) => setAttendanceSearch(e.target.value)}
+                              onChange={(e) => {
+                                setAttendanceSearch(e.target.value);
+                                setAttendancePage(1);
+                              }}
                               style={{ width: '100%', height: '32px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 28px 0 30px' }}
                             />
                             {attendanceSearch && (
                               <button 
                                 type="button" 
-                                onClick={() => setAttendanceSearch('')}
+                                onClick={() => {
+                                  setAttendanceSearch('');
+                                  setAttendancePage(1);
+                                }}
                                 style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
                               >
                                 ✕
@@ -1845,7 +2045,7 @@ function App() {
                             <button 
                               type="button" 
                               className={`filter-tag ${attendanceFilter === 'all' ? 'active' : ''}`}
-                              onClick={() => setAttendanceFilter('all')}
+                              onClick={() => { setAttendanceFilter('all'); setAttendancePage(1); }}
                               style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
                               Tất cả
@@ -1853,7 +2053,7 @@ function App() {
                             <button 
                               type="button" 
                               className={`filter-tag ${attendanceFilter === 'night' ? 'active' : ''}`}
-                              onClick={() => setAttendanceFilter('night')}
+                              onClick={() => { setAttendanceFilter('night'); setAttendancePage(1); }}
                               style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
                               🌙 Ca đêm ({nightCount})
@@ -1861,7 +2061,7 @@ function App() {
                             <button 
                               type="button" 
                               className={`filter-tag ${attendanceFilter === 'complete' ? 'active' : ''}`}
-                              onClick={() => setAttendanceFilter('complete')}
+                              onClick={() => { setAttendanceFilter('complete'); setAttendancePage(1); }}
                               style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
                               ✅ Đủ giờ ({processedCount})
@@ -1869,7 +2069,7 @@ function App() {
                             <button 
                               type="button" 
                               className={`filter-tag ${attendanceFilter === 'incomplete' ? 'active' : ''}`}
-                              onClick={() => setAttendanceFilter('incomplete')}
+                              onClick={() => { setAttendanceFilter('incomplete'); setAttendancePage(1); }}
                               style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
                               ⚠️ Thiếu giờ ({daysCount - processedCount})
@@ -1897,12 +2097,13 @@ function App() {
                               </tr>
                             </thead>
                             <tbody>
-                              {filteredAttendanceRecords.map((r, idx) => {
+                              {paginatedAttendanceRecords.map((r, idx) => {
                                 const isNight = r.overtime;
                                 const isComplete = r.checkIn && r.checkOut;
+                                const rowNo = attendanceStartIndex + idx + 1;
                                 return (
-                                  <tr key={`${r.employeeName}-${r.logicalDate}-${idx}`}>
-                                    <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>{idx + 1}</td>
+                                  <tr key={`${r.employeeName}-${r.logicalDate}-${rowNo}`}>
+                                    <td style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>{rowNo}</td>
                                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.employeeName}</td>
                                     <td style={{ color: 'var(--muted)', fontSize: '12px' }}>{formatDateStr(r.logicalDate)}</td>
                                     <td>
@@ -1944,6 +2145,53 @@ function App() {
                           </table>
                         )}
                       </div>
+
+                      {filteredAttendanceRecords.length > 50 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border-default)', fontSize: '12px', color: 'var(--muted)', flexWrap: 'wrap', gap: '8px' }}>
+                          <span>
+                            Hiển thị {attendanceStartIndex + 1}–{Math.min(attendanceStartIndex + paginatedAttendanceRecords.length, filteredAttendanceRecords.length)} / {filteredAttendanceRecords.length} dòng
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <select
+                              value={attendancePageSize}
+                              onChange={(e) => {
+                                setAttendancePageSize(Number(e.target.value));
+                                setAttendancePage(1);
+                              }}
+                              style={{ height: '28px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 8px' }}
+                            >
+                              <option value={50}>50 dòng / trang</option>
+                              <option value={100}>100 dòng / trang</option>
+                              <option value={0}>Tất cả ({filteredAttendanceRecords.length})</option>
+                            </select>
+                            {attendancePageSize > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  type="button"
+                                  className="btn-outline"
+                                  disabled={safeAttendancePage <= 1}
+                                  onClick={() => setAttendancePage(p => Math.max(1, p - 1))}
+                                  style={{ height: '28px', padding: '0 10px', fontSize: '11.5px' }}
+                                >
+                                  ‹ Trước
+                                </button>
+                                <span style={{ padding: '0 6px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {safeAttendancePage} / {totalAttendancePages}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn-outline"
+                                  disabled={safeAttendancePage >= totalAttendancePages}
+                                  onClick={() => setAttendancePage(p => Math.min(totalAttendancePages, p + 1))}
+                                  style={{ height: '28px', padding: '0 10px', fontSize: '11.5px' }}
+                                >
+                                  Sau ›
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2534,7 +2782,7 @@ function App() {
                           type="text" 
                           placeholder="Ví dụ: 1.200.000"
                           value={splitTotalAmount ? formatVND(splitTotalAmount) : ''}
-                          onChange={(e) => setSplitTotalAmount(e.target.value.replace(/\D/g, ''))}
+                          onChange={(e) => handleSplitTotalAmountChange(e.target.value)}
                         />
                         <div className="amount-chips-row">
                           {[200000, 500000, 1000000, 2000000, 5000000].map(val => (
@@ -2542,7 +2790,7 @@ function App() {
                               key={val}
                               type="button" 
                               className="amount-chip"
-                              onClick={() => setSplitTotalAmount(String(val))}
+                              onClick={() => handleSplitTotalAmountChange(String(val))}
                             >
                               {val >= 1000000 ? `${val / 1000000}tr` : `${val / 1000}k`}
                             </button>
@@ -2550,7 +2798,7 @@ function App() {
                           <button 
                             type="button" 
                             className="amount-chip chip-clear"
-                            onClick={() => setSplitTotalAmount('')}
+                            onClick={() => handleSplitTotalAmountChange('')}
                           >
                             ✕ Xóa
                           </button>
@@ -2564,7 +2812,7 @@ function App() {
                           min="1" 
                           max="20"
                           value={splitPeopleCount}
-                          onChange={(e) => setSplitPeopleCount(Math.max(1, Number(e.target.value) || 1))}
+                          onChange={(e) => handleSplitPeopleCountChange(Number(e.target.value) || 1)}
                         />
                       </div>
 
@@ -2590,7 +2838,7 @@ function App() {
                           type="text" 
                           placeholder="Ví dụ: Bàn 05"
                           value={receiptTableNo}
-                          onChange={(e) => setReceiptTableNo(e.target.value)}
+                          onChange={(e) => handleReceiptTableNoChange(e.target.value)}
                         />
                       </div>
                       <div className="field">
@@ -2598,7 +2846,7 @@ function App() {
                         <select 
                           className="form-control"
                           value={splitMethod}
-                          onChange={(e) => setSplitMethod(e.target.value as any)}
+                          onChange={(e) => handleSplitMethodChange(e.target.value as SplitMethod)}
                           style={{ height: '48px', borderRadius: '12px', background: 'var(--surface-input)', border: '1px solid var(--border)', color: 'var(--text)', padding: '0 12px' }}
                         >
                           <option value="equal">Chia đều</option>
@@ -2728,7 +2976,8 @@ function App() {
                           src={qrUrl} 
                           alt="VietQR Code" 
                           className={`qr-img ${isQrLoading ? 'loading' : ''}`}
-                          onLoad={() => setIsQrLoading(false)}
+                          onLoad={() => setLoadedQrUrl(qrUrl)}
+                          onError={() => setLoadedQrUrl(qrUrl)}
                           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                         />
                         {isQrLoading && <Loader2 className="loader qr-spinner" size={32} style={{ position: 'absolute', color: 'var(--blue)' }} />}
@@ -2854,16 +3103,16 @@ function App() {
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                           <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Tông màu nền:</span>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            {[
+                            {([
                               { key: 'blue', color: '#3b82f6' },
                               { key: 'green', color: '#10b981' },
                               { key: 'black', color: '#4b5563' },
                               { key: 'gold', color: '#d97706' }
-                            ].map((t) => (
+                            ] as const).map((t) => (
                               <button 
                                 key={t.key}
                                 type="button"
-                                onClick={() => setReceiptTheme(t.key as any)}
+                                onClick={() => setReceiptTheme(t.key)}
                                 style={{ 
                                   width: '22px', 
                                   height: '22px', 
@@ -3017,12 +3266,14 @@ function App() {
                 <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
               </button>
             </div>
-            <PayrollCreator 
-              gasUrl={gasUrl} 
-              spreadsheetId={spreadsheetId} 
-              operatorName="Kế toán trưởng" 
-              showToast={showToast} 
-            />
+            <Suspense fallback={<LoadingState message="Đang tải phân hệ Tính Lương..." />}>
+              <PayrollCreator 
+                gasUrl={gasUrl} 
+                spreadsheetId={spreadsheetId} 
+                operatorName="Kế toán trưởng" 
+                showToast={showToast} 
+              />
+            </Suspense>
           </div>
         )}
 
@@ -3047,18 +3298,22 @@ function App() {
                 <span>Chuyển Tiền Ngân Hàng Hàng Loạt</span>
               </button>
             </div>
-            <TransferFileTool showToast={showToast} />
+            <Suspense fallback={<LoadingState message="Đang tải phân hệ Lệnh Chuyển Khoản..." />}>
+              <TransferFileTool showToast={showToast} />
+            </Suspense>
           </div>
         )}
 
         {/* VIEW 6: TEXT-TO-SPEECH (TTS) TOOL */}
         {currentView === 'tts' && (
           <div className="screen active">
-            <TTSPage 
-              showToast={showToast} 
-              gasUrl={gasUrl} 
-              spreadsheetId={spreadsheetId} 
-            />
+            <Suspense fallback={<LoadingState message="Đang tải phân hệ Đọc TTS AI..." />}>
+              <TTSPage 
+                showToast={showToast} 
+                gasUrl={gasUrl} 
+                spreadsheetId={spreadsheetId} 
+              />
+            </Suspense>
           </div>
         )}
 
@@ -3214,60 +3469,56 @@ function App() {
         )}
 
         {currentView === 'hikvision' && (
-          <HikvisionSync 
-            gasUrl={gasUrl} 
-            spreadsheetId={spreadsheetId} 
-            showToast={showToast} 
-            onNavigate={(v) => setCurrentView(v)}
-          />
+          <Suspense fallback={<LoadingState message="Đang tải phân hệ Máy Chấm Công Hikvision..." />}>
+            <HikvisionSync 
+              gasUrl={gasUrl} 
+              spreadsheetId={spreadsheetId} 
+              showToast={showToast} 
+              onNavigate={(v) => setCurrentView(v)}
+            />
+          </Suspense>
         )}
 
         {/* Global Command Palette */}
         <CommandPalette 
           isOpen={isCommandPaletteOpen}
           onClose={() => setIsCommandPaletteOpen(false)}
-          onNavigateTab={(tab) => setCurrentView(tab as any)}
+          onNavigateTab={(tab) => setCurrentView(tab as AppViewTab)}
           onTriggerAction={(action) => {
             if (action === 'open_payroll_config') {
+              localStorage.setItem('kg_tool_pending_open_payroll_config', '1');
               setCurrentView('payroll');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('kg_open_payroll_config'));
-              }, 80);
+              window.dispatchEvent(new CustomEvent('kg_open_payroll_config'));
             } else if (action === 'pipe_attendance_payroll') {
               handlePipeAttendanceToPayroll();
             } else if (action === 'pipe_payroll_transfer') {
+              localStorage.setItem('kg_tool_pending_payroll_transfer', '1');
               setCurrentView('transfer');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('kg-import-payroll-to-transfer'));
-              }, 120);
+              window.dispatchEvent(new CustomEvent('kg-import-payroll-to-transfer'));
             } else if (action === 'preset_k80') {
+              localStorage.setItem('kg_tool_pending_preset_k80', '1');
               setCurrentView('payroll');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('kg-preset-k80'));
-              }, 100);
+              window.dispatchEvent(new CustomEvent('kg-preset-k80'));
             } else if (action === 'print_payroll') {
               setCurrentView('payroll');
               showToast('Đang mở lệnh in phiếu lương...', 'info');
-              setTimeout(() => window.print(), 300);
+              window.setTimeout(() => window.print(), 350);
             } else if (action === 'normalize_names') {
+              localStorage.setItem('kg_tool_pending_normalize_transfer', '1');
               setCurrentView('transfer');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('kg-normalize-transfer-names'));
-              }, 120);
+              window.dispatchEvent(new CustomEvent('kg-normalize-transfer-names'));
             } else if (action === 'sync_cloud') {
               if (currentView === 'attendance') {
-                handleFetchAndProcessFromSheet();
+                void handleFetchAndProcessFromSheet();
               } else {
-                testConnection();
+                void testConnection();
               }
             } else if (action === 'toggle_theme') {
               toggleTheme();
             } else if (action === 'toggle_extension_mode') {
-              setIsExtensionMode(prev => {
-                const next = !prev;
-                showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
-                return next;
-              });
+              const next = !isExtensionMode;
+              setIsExtensionMode(next);
+              showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Studio đầy đủ', 'info');
             } else if (action === 'open_extension_guide') {
               setShowExtensionGuideModal(true);
             }

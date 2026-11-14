@@ -78,17 +78,31 @@ export const StatCard: React.FC<StatCardProps> = ({
   value, 
   subtext, 
   hasData = false,
-  accentColor = 'var(--green)'
+  accentColor = 'var(--status-success)'
 }) => {
   return (
-    <div className="card kpi">
+    <div
+      className="card kpi"
+      style={{ '--kpi-accent': hasData ? accentColor : 'var(--accent-primary)' } as React.CSSProperties}
+    >
       <div className="kpi-top-row">
         <small>{label}</small>
-        <div className="kpi-icon-badge">
+        <div
+          className="kpi-icon-badge"
+          style={
+            hasData
+              ? {
+                  color: accentColor,
+                  borderColor: 'rgba(255, 255, 255, 0.12)',
+                  background: 'var(--bg-hover)'
+                }
+              : undefined
+          }
+        >
           {icon}
         </div>
       </div>
-      <b className="tabular-nums">{value}</b>
+      <b className="tabular-nums kpi-value-mono">{value}</b>
       <span style={{ color: hasData ? accentColor : 'var(--text-muted)' }}>
         <span
           style={{
@@ -104,6 +118,14 @@ export const StatCard: React.FC<StatCardProps> = ({
           {subtext}
         </span>
       </span>
+      <div
+        className="kpi-accent-bar"
+        style={{
+          background: hasData
+            ? `linear-gradient(90deg, ${accentColor} 0%, transparent 90%)`
+            : 'linear-gradient(90deg, var(--accent-primary) 0%, transparent 85%)'
+        }}
+      />
     </div>
   );
 };
