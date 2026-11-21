@@ -213,6 +213,36 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
+let cachedBingClockOffsetSec: number | null = null;
+let cachedBingClockExpiresAt = 0;
+
+async function getEdgeServerEpochSeconds(): Promise<number> {
+  const localSec = Math.floor(Date.now() / 1000);
+  if (cachedBingClockOffsetSec !== null && Date.now() < cachedBingClockExpiresAt) {
+    return localSec + cachedBingClockOffsetSec;
+  }
+  try {
+    const bingRes = await fetch('https://www.bing.com', {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(2500),
+    });
+    const dateHeader = bingRes.headers.get('date');
+    if (dateHeader) {
+      const serverSec = Math.floor(new Date(dateHeader).getTime() / 1000);
+      if (Number.isFinite(serverSec) && serverSec > 0) {
+        cachedBingClockOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+        cachedBingClockExpiresAt = Date.now() + 15 * 60 * 1000;
+        return serverSec;
+      }
+    }
+  } catch {
+    // Fallback to local clock and avoid retrying on every request for 2 minutes
+    cachedBingClockOffsetSec = 0;
+    cachedBingClockExpiresAt = Date.now() + 2 * 60 * 1000;
+  }
+  return localSec;
+}
+
 async function synthesizeEdgeMp3(
   text: string,
   voice = 'vi-VN-HoaiMyNeural',
@@ -220,14 +250,7 @@ async function synthesizeEdgeMp3(
   pitchMultiplier = 1.0,
   volumeMultiplier = 1.0
 ): Promise<Buffer> {
-  let serverEpochSec = Math.floor(Date.now() / 1000);
-  try {
-    const bingRes = await fetch('https://www.bing.com', { method: 'HEAD' });
-    const dateHeader = bingRes.headers.get('date');
-    if (dateHeader) serverEpochSec = Math.floor(new Date(dateHeader).getTime() / 1000);
-  } catch {
-    // Use local clock
-  }
+  const serverEpochSec = await getEdgeServerEpochSeconds();
 
   const secMsGec = generateSecMsGecV2(serverEpochSec);
   const connectId = crypto.randomUUID().replace(/-/g, '');
@@ -630,16 +653,49 @@ function createTtsReverseProxyPlugin(): Plugin {
       return;
     }
 
+    const MAX_BODY_BYTES = 64 * 1024;
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let receivedBytes = 0;
+    let aborted = false;
+
+    req.on('data', (chunk: Buffer) => {
+      if (aborted) return;
+      receivedBytes += chunk.length;
+      if (receivedBytes > MAX_BODY_BYTES) {
+        aborted = true;
+        res.writeHead(413, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify({ success: false, error: 'Payload vượt quá giới hạn 64KB' }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', async () => {
+      if (aborted) return;
       try {
         const bodyRaw = Buffer.concat(chunks).toString('utf8');
-        const body = bodyRaw ? JSON.parse(bodyRaw) : {};
+        const body = (bodyRaw ? JSON.parse(bodyRaw) : {}) as Record<string, unknown>;
         const provider = String(body.provider || 'edge').toLowerCase();
+
+        if (provider === 'capcut_token') {
+          const { token, appKey } = await getCapCutServerToken();
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(JSON.stringify({ success: true, token, appKey }));
+          return;
+        }
+
         const text = String(body.text || '').trim();
         if (!text) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.writeHead(400, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
           res.end(JSON.stringify({ success: false, error: 'Thiếu văn bản cần đọc (text)' }));
           return;
         }
@@ -647,7 +703,7 @@ function createTtsReverseProxyPlugin(): Plugin {
         if (provider === 'edge') {
           const mp3 = await synthesizeEdgeMp3(
             text,
-            body.voice || 'vi-VN-HoaiMyNeural',
+            String(body.voice || 'vi-VN-HoaiMyNeural'),
             Number(body.rate ?? 1.0),
             Number(body.pitch ?? 1.0),
             Number(body.volume ?? 1.0)
@@ -664,7 +720,7 @@ function createTtsReverseProxyPlugin(): Plugin {
         if (provider === 'capcut') {
           const wav = await synthesizeCapCutWav(
             text,
-            body.voice || 'BV074_streaming',
+            String(body.voice || 'BV074_streaming'),
             Number(body.rate ?? 10),
             Number(body.pitch ?? 10),
             Math.round(Number(body.volume ?? 1.0) * 10)
@@ -681,10 +737,10 @@ function createTtsReverseProxyPlugin(): Plugin {
         if (provider === 'openaifm') {
           const { buffer, fallbackUsed } = await synthesizeOpenAIFm({
             text,
-            voice: body.voice,
-            prompt: body.prompt,
-            apiKey: body.apiKey,
-            endpoint: body.endpoint,
+            voice: body.voice ? String(body.voice) : undefined,
+            prompt: body.prompt ? String(body.prompt) : undefined,
+            apiKey: body.apiKey ? String(body.apiKey) : undefined,
+            endpoint: body.endpoint ? String(body.endpoint) : undefined,
             rate: Number(body.rate ?? 1.0),
           });
           const headers: Record<string, string> = {
@@ -709,14 +765,18 @@ function createTtsReverseProxyPlugin(): Plugin {
           return;
         }
 
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
         res.end(JSON.stringify({ success: false, error: `Provider không hợp lệ: ${provider}` }));
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Lỗi xử lý TTS Proxy';
         res.writeHead(502, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         });
-        res.end(JSON.stringify({ success: false, error: err?.message || 'Lỗi xử lý TTS Proxy' }));
+        res.end(JSON.stringify({ success: false, error: message }));
       }
     });
   };
@@ -736,7 +796,7 @@ function createTtsReverseProxyPlugin(): Plugin {
 export default defineConfig({
   plugins: [react(), createTtsReverseProxyPlugin()],
   build: {
-    chunkSizeWarningLimit: 900,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -745,6 +805,9 @@ export default defineConfig({
             if (id.includes('jspdf') || id.includes('html2canvas')) return 'vendor-pdf';
             if (id.includes('jszip') || id.includes('papaparse')) return 'vendor-data';
             if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('\\react\\') || id.includes('\\react-dom\\') || id.includes('scheduler')) {
+              return 'vendor-react';
+            }
           }
         },
       },

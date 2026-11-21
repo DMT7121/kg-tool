@@ -1,41 +1,202 @@
 {
-  "projectName": "KG Studio v3.0 — Kings Grill Operations & FinTech Hub",
-  "stitchProjectId": "projects/9248036041257582824",
-  "stitchDesignSystemId": "assets/eeb72f1a5b9e407dbf41812cbed780c4",
-  "displayName": "KG Studio Operations",
-  "aesthetic": "Refined Dark-First SaaS & High-Density FinTech Cockpit (Linear / Raycast / Stripe)",
-  "typography": {
-    "sans": "Be Vietnam Pro",
-    "mono": "JetBrains Mono",
-    "numericVariant": "tabular-nums"
+  "schemaVersion": "1.0.0",
+  "isolatedProjectLock": true,
+  "createdAt": "2026-11-21T13:30:48.858Z",
+  "productIdentity": {
+    "name": "KG Studio Operations Sheet",
+    "slug": "kg-studio-operations-sheet",
+    "domain": "hospitality-pos-hr-payroll",
+    "surfaceMode": "Operate",
+    "locale": "vi-VN"
   },
-  "tokens": {
-    "surfaceContainerLowest": "#0a0e17",
-    "surface": "#0f131c",
-    "surfaceContainerLow": "#181b25",
-    "surfaceContainer": "#1c1f29",
-    "surfaceContainerHigh": "#262a34",
-    "surfaceContainerHighest": "#31353f",
-    "outlineVariant": "#424754",
-    "outline": "#8c909f",
-    "primary": "#adc6ff",
-    "primaryContainer": "#4d8eff",
-    "secondary": "#4cd7f6",
-    "tertiary": "#4edea3",
-    "error": "#ffb4ab"
+  "designDirection": {
+    "archetypeId": "utilitarian-grid-sheet",
+    "archetypeName": "Utilitarian Freeze-Pane Sheet (Ribbon Filter + Spreadsheet-Native Grid)",
+    "tasteDials": {
+      "designVariance": 2,
+      "motionIntensity": 2,
+      "visualDensity": 10
+    },
+    "axes": {
+      "layoutComposition": "edge-to-edge-freeze-pane-grid-with-top-ribbon-toolbar",
+      "informationArchitecture": "dense-tabular-sheet-inline-summary-footer-pinned-totals",
+      "navigationModel": "compact-dual-tier-workspace-tabs-and-formula-filter-ribbon",
+      "typographySystem": "neutral-grotesk-condensed-headers-monospace-ledger-cells",
+      "visualHierarchy": "zebra-subtle-cell-matrix-pinned-header-and-footer-totals",
+      "contentDensity": "maximum-tabular-32px-rows",
+      "colorArchitecture": "warm-alabaster-sheet-olive-moss-ink-accent",
+      "componentAnatomy": "sharp-2px-radius-spreadsheet-cells-inline-editable-inputs",
+      "interactionModel": "arrow-key-cell-navigation-bulk-checkbox-toolbar",
+      "surfaceIdentity": "high-legibility-ledger-paper"
+    },
+    "grayscaleSilhouette": "Stacked dual-tier top toolbar and filter ribbon; edge-to-edge frozen data grid spanning 100% viewport width with sticky bottom total bar."
   },
-  "screens": [
-    {
-      "id": "6abc67c0159445d9b16cfc57bca293fb",
-      "title": "KG Studio — Quản Lý Bảng Lương & Phiếu Lương K80"
+  "typographyScale": {
+    "display": {
+      "size": "1.75rem",
+      "lineHeight": 1.28,
+      "weight": 700,
+      "tracking": "-0.02em"
     },
-    {
-      "id": "c532424d173f41e6902cf7cd4e19aae2",
-      "title": "KG Studio — Quản Lý Chấm Công Ca Đêm & Máy Chấm Công Cloud"
+    "h1": {
+      "size": "1.375rem",
+      "lineHeight": 1.32,
+      "weight": 700,
+      "tracking": "-0.015em"
     },
-    {
-      "id": "a77f7e6f844b41a0bbc5e2b1a3423715",
-      "title": "KG Studio — Tạo Mã QR Thu Ngân POS & Lệnh Chuyển Khoản Ngân Hàng Hàng Loạt"
+    "h2": {
+      "size": "1.0625rem",
+      "lineHeight": 1.36,
+      "weight": 600,
+      "tracking": "-0.01em"
+    },
+    "body": {
+      "size": "0.875rem",
+      "lineHeight": 1.5,
+      "weight": 400,
+      "tracking": "0"
+    },
+    "caption": {
+      "size": "0.75rem",
+      "lineHeight": 1.45,
+      "weight": 500,
+      "tracking": "0.01em"
+    },
+    "numericMetric": {
+      "size": "1.5rem",
+      "lineHeight": 1.2,
+      "weight": 700,
+      "fontVariantNumeric": "tabular-nums"
     }
-  ]
+  },
+  "fontPairing": {
+    "heading": "'IBM Plex Sans', 'Be Vietnam Pro', sans-serif",
+    "body": "'Be Vietnam Pro', 'IBM Plex Sans', sans-serif",
+    "mono": "'IBM Plex Mono', monospace",
+    "vietnameseDiacriticsVerified": true
+  },
+  "colorPalette": {
+    "light": {
+      "canvas": "#F3F5F2",
+      "surface": "#FFFFFF",
+      "subtle": "#E7ECE5",
+      "inkPrimary": "#141913",
+      "inkSecondary": "#4B5549",
+      "border": "#CFD5CC",
+      "accent": "#3F6212",
+      "accentContrast": "#FFFFFF",
+      "success": "#15803D",
+      "warning": "#B45309",
+      "danger": "#B42318"
+    },
+    "dark": {
+      "canvas": "#0F120E",
+      "surface": "#171C15",
+      "subtle": "#222A20",
+      "inkPrimary": "#EAEFE8",
+      "inkSecondary": "#9CA898",
+      "border": "#2F3A2B",
+      "accent": "#84CC16",
+      "accentContrast": "#141913",
+      "success": "#4ADE80",
+      "warning": "#F59E0B",
+      "danger": "#F87171"
+    }
+  },
+  "spacingSystem": {
+    "baseUnitPx": 4,
+    "scalePx": [
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      32,
+      48,
+      64
+    ],
+    "rowHeight": "32px"
+  },
+  "layoutGrid": {
+    "composition": "edge-to-edge-freeze-pane-grid-with-top-ribbon-toolbar",
+    "maxContentWidth": "1600px",
+    "containerQueriesEnabled": true
+  },
+  "borderRadius": {
+    "sm": "2px",
+    "md": "3px",
+    "lg": "4px",
+    "pill": "9999px"
+  },
+  "surfaceTreatment": {
+    "style": "high-legibility-ledger-paper",
+    "glassmorphismAllowed": false
+  },
+  "shadowAndElevation": {
+    "level0": "none",
+    "level1": "0 1px 2px rgba(16, 24, 40, 0.04)",
+    "level2": "0 8px 20px rgba(16, 24, 40, 0.08)"
+  },
+  "iconography": {
+    "primaryFamily": "lucide",
+    "strokeWidth": 1.75,
+    "sizesPx": [
+      16,
+      18,
+      20
+    ],
+    "banMixedFamiliesAndDecorativeEmoji": true
+  },
+  "componentAnatomy": {
+    "density": "maximum-tabular-32px-rows",
+    "requiredInteractiveStates": [
+      "default",
+      "hover",
+      "focus-visible",
+      "active",
+      "selected",
+      "disabled",
+      "loading",
+      "error",
+      "success"
+    ],
+    "singlePrimaryActionPerZone": true
+  },
+  "navigationPatterns": {
+    "desktop": "compact-dual-tier-workspace-tabs-and-formula-filter-ribbon",
+    "mobile": "adaptive-bottom-navigation-plus-contextual-sheet"
+  },
+  "interactionPrinciples": {
+    "model": "arrow-key-cell-navigation-bulk-checkbox-toolbar",
+    "tabularCurrencyAlignment": "right-aligned with tabular-nums and non-breaking ₫ suffix"
+  },
+  "responsiveBehaviors": {
+    "viewportsVerified": [
+      "390x844",
+      "768x1024",
+      "1440x900",
+      "1920x1080"
+    ],
+    "mobileTableAdaptation": "structured-priority-card-rows-or-pinned-key-column-zero-page-overflow"
+  },
+  "accessibilityRequirements": {
+    "standard": "WCAG 2.2 AA",
+    "minNormalContrast": 4.5,
+    "minTouchTargetMobilePx": 44,
+    "keyboardNavigation": true
+  },
+  "motionPolicy": {
+    "durationFastMs": 140,
+    "durationBaseMs": 200,
+    "easing": "cubic-bezier(0.2, 0, 0, 1)",
+    "propertiesAllowed": [
+      "opacity",
+      "transform"
+    ],
+    "respectPrefersReducedMotion": true
+  },
+  "decisionsAndRationale": {
+    "selectedReason": "Option A (Utilitarian Freeze-Pane Sheet with Olive Moss #3F6212 & Alabaster #F3F5F2): Dual-tier top ribbon, edge-to-edge ledger grid, live K80/QR right inspector, and sticky bottom totals bar."
+  }
 }

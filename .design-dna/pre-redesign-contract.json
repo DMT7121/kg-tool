@@ -1,0 +1,50 @@
+{
+  "capturedAt": "2026-11-21T13:30:30.847Z",
+  "projectDir": "g:\\01_KingsGrill_Core_Platform\\kg-tool",
+  "scannedFilesCount": 20,
+  "routesAndLinks": [
+    "/KG-Studio-Extension-v2.5.0.zip",
+    "/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${EDGE_TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${EDGE_SEC_MS_GEC_VERSION}&ConnectionId=${connectId}",
+    "/favicon.svg",
+    "/manifest.webmanifest",
+    "https://console.fpt.ai",
+    "https://fonts.googleapis.com",
+    "https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap",
+    "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
+    "https://fonts.gstatic.com",
+    "https://viettelai.vn",
+    "https://zalo.ai"
+  ],
+  "formFields": [],
+  "eventHandlers": [
+    "addEventListener(\"close\", ()",
+    "addEventListener(\"error\", ()",
+    "addEventListener(\"error\", (e)",
+    "addEventListener(\"message\", (ev)",
+    "addEventListener('afterprint', handleAfterPrint)",
+    "addEventListener('keydown', handleKeyDown)",
+    "addEventListener('kg-import-attendance-to-payroll', onImportAtt)",
+    "addEventListener('kg-import-payroll-to-transfer', onImportEvent)",
+    "addEventListener('kg-navigate-tab', handleNavigateTab as EventListener)",
+    "addEventListener('kg-normalize-transfer-names', onNormalizeEvent)",
+    "addEventListener('kg-preset-k80', onPresetK80)",
+    "addEventListener('kg_open_payroll_config', handleOpenConfig)",
+    "addEventListener('mousedown', handleClickOutside)",
+    "addEventListener('resize', handleResize)",
+    "onChange",
+    "onClick",
+    "onKeyDown",
+    "onSubmit"
+  ],
+  "apiEndpoints": [
+    "${req.gasUrl}?action=tts_proxy&provider=${encodeURIComponent(req.provider)}&text=${encodeURIComponent(\n          req.text\n        )}&voice=${encodeURIComponent(req.voice || ",
+    "${req.gasUrl}?action=tts_proxy&provider=capcut_token",
+    "/templates/myvib-transfer-template.xlsx",
+    "/templates/vietcombank-transfer-template.xlsx",
+    "https://api.vietqr.io/v2/banks",
+    "https://edit-api-sg.capcut.com/lv/v1/common/tts/token",
+    "https://sami-sg1.byteintlapi.com/internal/api/v1/ws",
+    "https://www.bing.com",
+    "https://www.openai.fm/api/generate"
+  ]
+}

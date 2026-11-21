@@ -93,8 +93,8 @@ export const StatCard: React.FC<StatCardProps> = ({
             hasData
               ? {
                   color: accentColor,
-                  borderColor: 'rgba(255, 255, 255, 0.12)',
-                  background: 'var(--bg-hover)'
+                  borderColor: 'var(--border-default)',
+                  background: 'var(--bg-subtle)'
                 }
               : undefined
           }
@@ -102,30 +102,24 @@ export const StatCard: React.FC<StatCardProps> = ({
           {icon}
         </div>
       </div>
-      <b className="tabular-nums kpi-value-mono">{value}</b>
-      <span style={{ color: hasData ? accentColor : 'var(--text-muted)' }}>
-        <span
-          style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            background: hasData ? accentColor : 'var(--text-disabled)',
-            display: 'inline-block',
-            flexShrink: 0
-          }}
-        />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {subtext}
+      <div className="kpi-bottom-row">
+        <b className="tabular-nums kpi-value-mono">{value}</b>
+        <span className="kpi-subtext-inline" style={{ color: hasData ? accentColor : 'var(--text-muted)' }}>
+          <span
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: hasData ? accentColor : 'var(--text-disabled)',
+              display: 'inline-block',
+              flexShrink: 0
+            }}
+          />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {subtext}
+          </span>
         </span>
-      </span>
-      <div
-        className="kpi-accent-bar"
-        style={{
-          background: hasData
-            ? `linear-gradient(90deg, ${accentColor} 0%, transparent 90%)`
-            : 'linear-gradient(90deg, var(--accent-primary) 0%, transparent 85%)'
-        }}
-      />
+      </div>
     </div>
   );
 };
@@ -152,11 +146,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   return (
     <div style={{ 
-      padding: '2.75rem 1.5rem', 
+      padding: '2.25rem 1.5rem', 
       textAlign: 'center', 
       background: 'var(--surface-subtle)', 
       border: '1px dashed var(--border-strong)', 
-      borderRadius: '12px',
+      borderRadius: 'var(--radius-lg)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -166,11 +160,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       ...style
     }}>
       <div style={{ 
-        width: '48px',
-        height: '48px',
-        borderRadius: '12px',
+        width: '44px',
+        height: '44px',
+        borderRadius: 'var(--radius-md)',
         background: 'var(--accent-primary-subtle)',
-        border: '1px solid rgba(59, 130, 246, 0.2)',
+        border: '1px solid var(--border-default)',
         color: 'var(--accent-primary)',
         display: 'flex',
         alignItems: 'center',
@@ -301,16 +295,16 @@ export const GuidePanel: React.FC<GuidePanelProps> = ({
 
   return (
     <div className="card guide-panel-card" style={{ 
-      marginBottom: '1.25rem', 
+      marginBottom: '0.85rem', 
       background: 'var(--bg-elevated)', 
       border: '1px solid var(--border-default)',
-      borderRadius: '10px',
+      borderRadius: 'var(--radius-md)',
       overflow: 'hidden'
     }}>
       <div 
         onClick={() => setIsOpen(!isOpen)} 
         style={{ 
-          padding: '0.75rem 1.1rem', 
+          padding: '0.48rem 0.9rem', 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 

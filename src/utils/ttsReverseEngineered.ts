@@ -257,7 +257,11 @@ export function synthesizeCapCutBrowserWS(params: {
     const timer = window.setTimeout(() => {
       if (!settled) {
         settled = true;
-        try { ws.close(); } catch {}
+        try {
+          ws.close();
+        } catch {
+          // Ignore close error on timeout
+        }
         reject(new Error('Quá thời gian kết nối WebSocket CapCut (12s)'));
       }
     }, 12000);
@@ -460,8 +464,8 @@ export async function synthesizeReverseEngineeredTTS(req: ReverseTtsRequest): Pr
         if (blob.size > 100) {
           return { blob };
         }
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err : new Error(String(err));
       }
     }
   }
@@ -510,14 +514,14 @@ export async function synthesizeReverseEngineeredTTS(req: ReverseTtsRequest): Pr
       } else if (response.status !== 404 && response.status !== 405) {
         const errText = await response.text().catch(() => '');
         try {
-          const errJson = JSON.parse(errText);
+          const errJson = JSON.parse(errText) as { error?: string; message?: string };
           lastError = new Error(errJson.error || errJson.message || `HTTP ${response.status}`);
         } catch {
           lastError = new Error(`Proxy trả về HTTP ${response.status}`);
         }
       }
-    } catch (err: any) {
-      lastError = err;
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
     }
   }
 

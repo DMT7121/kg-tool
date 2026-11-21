@@ -1107,17 +1107,17 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               alignItems: 'center',
               justifyContent: 'flex-start',
               gap: '12px',
-              padding: '14px 18px', 
-              borderRadius: '10px', 
+              padding: '12px 16px', 
+              borderRadius: 'var(--radius-md)', 
               background: bankTemplate === 'vib' 
                 ? 'var(--accent-primary-subtle)' 
                 : 'var(--bg-elevated)',
               border: bankTemplate === 'vib' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-default)',
               color: 'var(--text-primary)',
               cursor: 'pointer',
-              transition: 'all 0.16s ease',
+              transition: 'background-color 140ms ease, border-color 140ms ease',
               textAlign: 'left',
-              boxShadow: bankTemplate === 'vib' ? '0 2px 10px rgba(59, 130, 246, 0.12)' : 'none'
+              boxShadow: 'none'
             }}
           >
             <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 132, 199, 0.14)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '10px', flexShrink: 0 }}>
@@ -1143,17 +1143,17 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               alignItems: 'center',
               justifyContent: 'flex-start',
               gap: '12px',
-              padding: '14px 18px', 
-              borderRadius: '10px', 
+              padding: '12px 16px', 
+              borderRadius: 'var(--radius-md)', 
               background: bankTemplate === 'vcb' 
                 ? 'var(--status-success-bg)' 
                 : 'var(--bg-elevated)',
               border: bankTemplate === 'vcb' ? '1.5px solid var(--status-success)' : '1px solid var(--border-default)',
               color: 'var(--text-primary)',
               cursor: 'pointer',
-              transition: 'all 0.16s ease',
+              transition: 'background-color 140ms ease, border-color 140ms ease',
               textAlign: 'left',
-              boxShadow: bankTemplate === 'vcb' ? '0 2px 10px rgba(16, 185, 129, 0.12)' : 'none'
+              boxShadow: 'none'
             }}
           >
             <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.14)', border: '1px solid var(--status-success-border)', borderRadius: '10px', flexShrink: 0 }}>

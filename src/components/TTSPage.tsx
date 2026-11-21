@@ -2178,15 +2178,15 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     style={{
                       height: '28px',
                       padding: '0 10px',
-                      borderRadius: '999px',
+                      borderRadius: 'var(--radius-sm)',
                       fontSize: '11.5px',
                       whiteSpace: 'nowrap',
                       border: suggestionCategory === cat.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       cursor: 'pointer',
                       background: suggestionCategory === cat.id ? 'var(--accent-primary)' : 'var(--surface-subtle)',
-                      color: suggestionCategory === cat.id ? '#ffffff' : 'var(--text-secondary)',
+                      color: suggestionCategory === cat.id ? 'var(--accent-contrast)' : 'var(--text-secondary)',
                       fontWeight: suggestionCategory === cat.id ? 600 : 500,
-                      transition: 'all 0.15s ease'
+                      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
                     }}
                   >
                     {cat.label}

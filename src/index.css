@@ -1,83 +1,79 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-:root {
+:root,
+[data-theme="light"] {
   /* ==========================================================================
-     1. PRIMITIVE COLOR TOKENS (Google Stitch — "KG Studio Operations" Scale)
-     Stitch Design System ID: assets/eeb72f1a5b9e407dbf41812cbed780c4
+     1. DESIGN DNA TOKENS — OPTION A: UTILITARIAN FREEZE-PANE SHEET
+     Olive Moss (#3F6212) & Alabaster Ledger (#F3F5F2)
      ========================================================================== */
-  --slate-950: #0a0e17; /* surface-container-lowest */
-  --slate-900: #0f131c; /* surface / background */
-  --slate-850: #181b25; /* surface-container-low (Sidebar) */
-  --slate-800: #1c1f29; /* surface-container (Cards & Panels) */
-  --slate-750: #262a34; /* surface-container-high (Hover / Selected) */
-  --slate-700: #31353f; /* surface-container-highest */
-  --slate-600: #424754; /* outline-variant */
-  --slate-500: #8c909f; /* outline */
-  --slate-400: #94a3b8;
-  --slate-300: #c2c6d6; /* on-surface-variant */
-  --slate-200: #dfe2ef; /* on-surface */
-  --slate-100: #f1f5f9;
-  --slate-50:  #f8fafc;
+  color-scheme: light;
 
-  /* ==========================================================================
-     2. SEMANTIC DESIGN TOKENS (Stitch Dark-First FinTech Cockpit)
-     ========================================================================== */
-  --bg-base: #0f131c;
-  --bg-lowest: #0a0e17;
-  --bg-elevated: #181b25;
-  --bg-panel: #1c1f29;
-  --bg-hover: #262a34;
-  --bg-active: #31353f;
-  --bg-glass: rgba(24, 27, 37, 0.88);
+  --bg-canvas: #F3F5F2;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #E7ECE5;
+  --bg-zebra: #F8FAF7;
+  --bg-ribbon: #1A2118;
+  --bg-ribbon-elevated: #252F22;
+  --bg-ribbon-border: #2F3A2B;
+  --ink-ribbon: #E7ECE5;
+  --ink-ribbon-muted: #A7B3A3;
 
-  /* Surface Aliases */
-  --surface-card: var(--bg-panel);
-  --surface-hover: rgba(255, 255, 255, 0.045);
-  --surface-subtle: rgba(255, 255, 255, 0.028);
-  --surface-input: #0a0e17;
+  --bg-base: #F3F5F2;
+  --bg-lowest: #E7ECE5;
+  --bg-elevated: #FFFFFF;
+  --bg-panel: #FFFFFF;
+  --bg-hover: #EDF2EA;
+  --bg-active: #E1EBD8;
+  --bg-glass: #FFFFFF;
+
+  --surface-card: #FFFFFF;
+  --surface-hover: rgba(63, 98, 18, 0.055);
+  --surface-subtle: #F7F9F6;
+  --surface-input: #FFFFFF;
 
   /* Typography Hierarchy */
-  --text-primary: #dfe2ef;
-  --text-secondary: #c2c6d6;
-  --text-muted: #8c909f;
-  --text-disabled: #64748b;
+  --ink-primary: #141913;
+  --ink-secondary: #3E473C;
+  --text-primary: #141913;
+  --text-secondary: #3E473C;
+  --text-muted: #4E5A4C;
+  --text-disabled: #727E6F;
 
-  /* Hairline Borders & Dividers (Stitch Tonal Containment) */
-  --border-subtle: rgba(66, 71, 84, 0.38);
-  --border-default: rgba(66, 71, 84, 0.65);
-  --border-strong: rgba(140, 144, 159, 0.38);
-  --border-focus: #4d8eff;
+  /* Crisp 1px Structural Grid Hairlines */
+  --border-subtle: #E2E7DF;
+  --border-default: #CFD5CC;
+  --border-strong: #AAB4A6;
+  --border-focus: #3F6212;
 
-  /* Brand & Semantic Accents (Stitch Primary #4d8eff/#adc6ff, Secondary #4cd7f6, Tertiary #4edea3) */
-  --accent-primary: #4d8eff;
-  --accent-primary-light: #adc6ff;
-  --accent-primary-hover: #3b82f6;
-  --accent-primary-subtle: rgba(77, 142, 255, 0.14);
+  /* Olive Moss Accent & Semantic Status */
+  --accent-primary: #3F6212;
+  --accent-primary-light: #4D7C0F;
+  --accent-primary-hover: #365314;
+  --accent-primary-subtle: #ECF3E1;
+  --accent-contrast: #FFFFFF;
+  --accent-lime: #84CC16;
 
-  --accent-secondary: #4cd7f6;
-  --accent-secondary-subtle: rgba(76, 215, 246, 0.14);
+  --accent-secondary: #155E75;
+  --accent-secondary-subtle: #ECFEFF;
 
-  /* Semantic Status */
-  --status-success: #4edea3;
-  --status-success-bg: rgba(78, 222, 163, 0.12);
-  --status-success-border: rgba(78, 222, 163, 0.28);
+  --status-success: #15803D;
+  --status-success-bg: #DCFCE7;
+  --status-success-border: rgba(21, 128, 61, 0.28);
 
-  --status-warning: #f59e0b;
-  --status-warning-bg: rgba(245, 158, 11, 0.12);
-  --status-warning-border: rgba(245, 158, 11, 0.28);
+  --status-warning: #B45309;
+  --status-warning-bg: #FEF3C7;
+  --status-warning-border: rgba(180, 83, 9, 0.28);
 
-  --status-danger: #ffb4ab;
-  --status-danger-solid: #ef4444;
-  --status-danger-bg: rgba(239, 68, 68, 0.14);
-  --status-danger-border: rgba(255, 180, 171, 0.28);
+  --status-danger: #B42318;
+  --status-danger-solid: #DC2626;
+  --status-danger-bg: #FEE2E2;
+  --status-danger-border: rgba(180, 35, 24, 0.28);
 
-  --status-purple: #a78bfa;
-  --status-purple-bg: rgba(167, 139, 250, 0.14);
-  --status-purple-border: rgba(167, 139, 250, 0.28);
+  --status-purple: #5B21B6;
+  --status-purple-bg: #EDE9FE;
+  --status-purple-border: rgba(91, 33, 182, 0.24);
 
-  /* ==========================================================================
-     3. LEGACY ALIASES (100% Backward Compatibility & Truthful Color Mapping)
-     ========================================================================== */
+  /* Legacy Aliases (Preserving existing child module compatibility) */
   --bg: var(--bg-base);
   --bg-2: var(--bg-elevated);
   --panel: var(--bg-panel);
@@ -91,19 +87,17 @@
   --muted: var(--text-muted);
 
   --primary: var(--accent-primary);
-  --blue: #4d8eff;
-  --blue-2: #2563eb;
-  --cyan: #4cd7f6;
-  --cyan-glow: rgba(76, 215, 246, 0.18);
-  --green: #10b981;
+  --blue: var(--accent-primary);
+  --blue-2: var(--accent-primary-hover);
+  --cyan: var(--accent-secondary);
+  --cyan-glow: rgba(63, 98, 18, 0.14);
+  --green: var(--status-success);
   --orange: var(--status-warning);
   --gold: var(--status-warning);
-  --red: #ef4444;
+  --red: var(--status-danger-solid);
   --purple: var(--status-purple);
 
-  /* ==========================================================================
-     4. SPACING, RADIUS, SHADOWS & TYPOGRAPHY
-     ========================================================================== */
+  /* Spacing, Crisp 2-4px Sheet Radii, Zero Heavy Shadows */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -114,30 +108,33 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
   --radius-full: 9999px;
+  --row-height: 34px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 6px 16px -3px rgba(5, 8, 16, 0.55), 0 2px 6px -1px rgba(5, 8, 16, 0.35);
-  --shadow-lg: 0 16px 36px -6px rgba(5, 8, 16, 0.72), 0 4px 12px -2px rgba(5, 8, 16, 0.45);
-  --shadow-inset: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-  --shadow: var(--shadow-md);
+  --shadow-sm: 0 1px 2px rgba(20, 25, 19, 0.04);
+  --shadow-md: 0 3px 10px rgba(20, 25, 19, 0.06);
+  --shadow-lg: 0 10px 24px rgba(20, 25, 19, 0.12);
+  --shadow-inset: none;
+  --shadow: var(--shadow-sm);
 
-  --font-sans: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-heading: 'IBM Plex Sans', 'Be Vietnam Pro', -apple-system, sans-serif;
+  --font-sans: 'Be Vietnam Pro', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 140ms;
   --duration-normal: 200ms;
+  --motion-fast: 140ms var(--ease-out);
+  --motion-base: 200ms var(--ease-out);
 
   font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: dark;
   color: var(--text-primary);
   background-color: var(--bg-base);
   font-synthesis: none;
@@ -147,65 +144,84 @@
 }
 
 /* ==========================================================================
-   5. DAYLIGHT ALABASTER THEME ([data-theme="light"])
+   2. DARK OLIVE LEDGER THEME ([data-theme="dark"])
    ========================================================================== */
-[data-theme="light"] {
-  color-scheme: light;
+[data-theme="dark"] {
+  color-scheme: dark;
 
-  --bg-base: #f4f6f9;
-  --bg-elevated: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-hover: #f1f5f9;
-  --bg-active: #e2e8f0;
-  --bg-glass: rgba(255, 255, 255, 0.9);
+  --bg-canvas: #0F120E;
+  --bg-surface: #171C15;
+  --bg-subtle: #20271D;
+  --bg-zebra: #131812;
+  --bg-ribbon: #0B0E0A;
+  --bg-ribbon-elevated: #182016;
+  --bg-ribbon-border: #283324;
+  --ink-ribbon: #EAEFE8;
+  --ink-ribbon-muted: #9CA898;
 
-  --surface-card: #ffffff;
-  --surface-hover: rgba(15, 23, 42, 0.04);
-  --surface-subtle: rgba(15, 23, 42, 0.025);
-  --surface-input: #ffffff;
+  --bg-base: #0F120E;
+  --bg-lowest: #0B0E0A;
+  --bg-elevated: #171C15;
+  --bg-panel: #171C15;
+  --bg-hover: #21291E;
+  --bg-active: #2B3627;
+  --bg-glass: #171C15;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-disabled: #94a3b8;
+  --surface-card: #171C15;
+  --surface-hover: rgba(132, 204, 22, 0.08);
+  --surface-subtle: #1B2219;
+  --surface-input: #0F120E;
 
-  --border-subtle: #f1f5f9;
-  --border-default: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --border-focus: #2563eb;
+  --ink-primary: #EAEFE8;
+  --ink-secondary: #B8C4B4;
+  --text-primary: #EAEFE8;
+  --text-secondary: #B8C4B4;
+  --text-muted: #8E9C8A;
+  --text-disabled: #5D6959;
 
-  --accent-primary: #2563eb;
-  --accent-primary-hover: #1d4ed8;
-  --accent-primary-subtle: rgba(37, 99, 235, 0.08);
+  --border-subtle: #242D21;
+  --border-default: #2F3A2B;
+  --border-strong: #44533E;
+  --border-focus: #84CC16;
 
-  --accent-secondary: #0891b2;
-  --accent-secondary-subtle: rgba(8, 145, 178, 0.08);
+  --accent-primary: #84CC16;
+  --accent-primary-light: #A3E635;
+  --accent-primary-hover: #A3E635;
+  --accent-primary-subtle: rgba(132, 204, 22, 0.14);
+  --accent-contrast: #141913;
+  --accent-lime: #84CC16;
 
-  --status-success: #059669;
-  --status-success-bg: rgba(5, 150, 105, 0.08);
-  --status-success-border: rgba(5, 150, 105, 0.22);
+  --accent-secondary: #38BDF8;
+  --accent-secondary-subtle: rgba(56, 189, 248, 0.12);
 
-  --status-warning: #d97706;
-  --status-warning-bg: rgba(217, 119, 6, 0.08);
-  --status-warning-border: rgba(217, 119, 6, 0.22);
+  --status-success: #4ADE80;
+  --status-success-bg: rgba(74, 222, 128, 0.12);
+  --status-success-border: rgba(74, 222, 128, 0.28);
 
-  --status-danger: #dc2626;
-  --status-danger-bg: rgba(220, 38, 38, 0.08);
-  --status-danger-border: rgba(220, 38, 38, 0.22);
+  --status-warning: #F59E0B;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-border: rgba(245, 158, 11, 0.28);
 
-  --status-purple: #7c3aed;
-  --status-purple-bg: rgba(124, 58, 237, 0.08);
-  --status-purple-border: rgba(124, 58, 237, 0.22);
+  --status-danger: #F87171;
+  --status-danger-solid: #EF4444;
+  --status-danger-bg: rgba(248, 113, 113, 0.14);
+  --status-danger-border: rgba(248, 113, 113, 0.28);
 
-  --blue: #2563eb;
-  --blue-2: #1d4ed8;
-  --cyan: #0891b2;
-  --cyan-glow: rgba(8, 145, 178, 0.14);
+  --status-purple: #A78BFA;
+  --status-purple-bg: rgba(167, 139, 250, 0.14);
+  --status-purple-border: rgba(167, 139, 250, 0.28);
 
-  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 12px 24px -4px rgba(15, 23, 42, 0.1), 0 4px 8px -2px rgba(15, 23, 42, 0.05);
-  --shadow-inset: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  --blue: #84CC16;
+  --blue-2: #65A30D;
+  --cyan: #38BDF8;
+  --cyan-glow: rgba(132, 204, 22, 0.16);
+  --green: #4ADE80;
+  --red: #F87171;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.48);
+  --shadow-lg: 0 14px 32px rgba(0, 0, 0, 0.65);
+  --shadow-inset: none;
 }
 
 /* Light Mode Contrast Normalization for Legacy Inline Styles */
@@ -235,6 +251,16 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: var(--accent-primary);
+  color: var(--accent-contrast);
+}
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -251,20 +277,20 @@ html, body {
   min-height: 100vh;
 }
 
-/* Custom Subtle Scrollbars */
+/* Custom Crisp Sheet Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-subtle);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.22);
-  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: var(--text-muted);
 }
 
 /* Tabular Numbers Utility */

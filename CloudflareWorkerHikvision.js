@@ -21,23 +21,36 @@ const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyCetIZ7cBHfLOF5
 // Khóa bí mật trùng khớp với cài đặt trong Apps Script
 const WEBHOOK_SECRET = "KINGS_GRILL_HIKVISION_SECRET_2026"; 
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400"
+};
+
+const JSON_CORS_HEADERS = {
+  ...CORS_HEADERS,
+  "Content-Type": "application/json"
+};
+
 export default {
   async fetch(request, env, ctx) {
     // 0. XỬ LÝ CORS PREFLIGHT
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Max-Age": "86400"
-        }
+        headers: CORS_HEADERS
       });
     }
 
     if (request.method !== "POST") {
-      return new Response("Chỉ hỗ trợ phương thức POST.", { status: 405 });
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Chỉ hỗ trợ phương thức POST."
+      }), {
+        status: 405,
+        headers: JSON_CORS_HEADERS
+      });
     }
 
     try {
@@ -97,10 +110,7 @@ export default {
               const syncResult = await handleOfflineSync(data, env);
               return new Response(JSON.stringify(syncResult), {
                 status: 200,
-                headers: { 
-                  "Content-Type": "application/json",
-                  "Access-Control-Allow-Origin": "*"
-                }
+                headers: JSON_CORS_HEADERS
               });
             }
             if (data.action === "tts_proxy") {
@@ -128,7 +138,7 @@ export default {
           debug_raw: rawText.substring(0, 500)
         }), { 
           status: 200, 
-          headers: { "Content-Type": "application/json" } 
+          headers: JSON_CORS_HEADERS
         });
       }
 
@@ -164,7 +174,7 @@ export default {
  
       return new Response(responseText, {
         status: gasResponse.status,
-        headers: { "Content-Type": "application/json" }
+        headers: JSON_CORS_HEADERS
       });
 
     } catch (error) {
@@ -173,7 +183,7 @@ export default {
         message: "Lỗi xử lý Proxy Worker: " + error.message
       }), { 
         status: 500, 
-        headers: { "Content-Type": "application/json" } 
+        headers: JSON_CORS_HEADERS
       });
     }
   },
@@ -267,47 +277,77 @@ async function handleOfflineSync(data, env) {
     formattedUrl = "http://" + formattedUrl;
   }
   const targetUrl = `${formattedUrl.replace(/\/$/, "")}/ISAPI/AccessControl/AcsEvent?format=json`;
-  
-  const requestBody = {
-    AcsEventCond: {
-      searchID: "1",
-      searchResultPosition: 0,
-      maxResults: 1000,
-      startTime: startTime,
-      endTime: endTime
-    }
-  };
+  const searchId = crypto.randomUUID();
+  const PAGE_SIZE = 50;
+  const MAX_PAGES = 40;
+  const MAX_EVENTS = 5000;
+  const digestSession = { params: null, nc: 0 };
 
   try {
-    const response = await fetchWithDigest(
-      targetUrl,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody)
-      },
-      username || "admin",
-      password
-    );
+    const infoList = [];
+    let searchResultPosition = 0;
 
-    if (response.status !== 200) {
-      let diagnostic = "Kiểm tra lại địa chỉ kết nối, tài khoản và mật khẩu.";
-      if (response.status === 403) {
-        diagnostic = "Lỗi 403 Forbidden: Thường do chưa kích hoạt giao thức ISAPI/CGI trên máy chấm công, tài khoản bị khóa tạm thời (30 phút) do nhập sai pass nhiều lần, hoặc tài khoản không có quyền Admin.";
-      } else if (response.status === 401) {
-        diagnostic = "Lỗi 401 Unauthorized: Sai tài khoản hoặc mật khẩu máy chấm công.";
-      }
-      return { 
-        success: false, 
-        message: `Kết nối máy chấm công thất bại. HTTP Status: ${response.status}. ${diagnostic}` 
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const requestBody = {
+        AcsEventCond: {
+          searchID: searchId,
+          searchResultPosition: searchResultPosition,
+          maxResults: PAGE_SIZE,
+          startTime: startTime,
+          endTime: endTime
+        }
       };
-    }
 
-    const resJson = await response.json();
-    const acsEvent = resJson.AcsEvent || {};
-    const infoList = acsEvent.InfoList || [];
+      const response = await fetchWithDigest(
+        targetUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        },
+        username || "admin",
+        password,
+        digestSession
+      );
+
+      if (response.status !== 200) {
+        let diagnostic = "Kiểm tra lại địa chỉ kết nối, tài khoản và mật khẩu.";
+        if (response.status === 403) {
+          diagnostic = "Lỗi 403 Forbidden: Thường do chưa kích hoạt giao thức ISAPI/CGI trên máy chấm công, tài khoản bị khóa tạm thời (30 phút) do nhập sai pass nhiều lần, hoặc tài khoản không có quyền Admin.";
+        } else if (response.status === 401) {
+          diagnostic = "Lỗi 401 Unauthorized: Sai tài khoản hoặc mật khẩu máy chấm công.";
+        }
+        return { 
+          success: false, 
+          message: `Kết nối máy chấm công thất bại (trang ${page + 1}). HTTP Status: ${response.status}. ${diagnostic}` 
+        };
+      }
+
+      const resJson = await response.json();
+      const acsEvent = resJson.AcsEvent || {};
+      const pageItems = Array.isArray(acsEvent.InfoList) ? acsEvent.InfoList : [];
+      if (pageItems.length === 0) {
+        break;
+      }
+
+      infoList.push(...pageItems);
+      searchResultPosition += pageItems.length;
+
+      const statusStr = String(acsEvent.responseStatusStrg || "").toUpperCase();
+      const totalMatches = Number(acsEvent.totalMatches || 0);
+      const hasMore =
+        statusStr === "MORE" ||
+        (totalMatches > 0 &&
+          searchResultPosition < totalMatches &&
+          statusStr !== "OK" &&
+          statusStr !== "NO MATCH");
+
+      if (!hasMore || infoList.length >= MAX_EVENTS) {
+        break;
+      }
+    }
 
     // Lọc các sự kiện có mã nhân viên
     const eventsToSync = infoList
@@ -357,32 +397,18 @@ async function handleOfflineSync(data, env) {
 }
 
 /**
- * Hàm hỗ trợ Digest Authentication cho fetch
+ * Tạo chuỗi header Authorization Digest chuẩn RFC 2617
  */
-async function fetchWithDigest(url, options = {}, username, password) {
-  // Gửi request lần đầu để lấy challenge (401)
-  let response = await fetch(url, options);
-  if (response.status !== 401) {
-    return response;
-  }
-
-  const authHeader = response.headers.get("www-authenticate");
-  if (!authHeader || !authHeader.startsWith("Digest")) {
-    return response;
-  }
-
-  const params = parseDigestHeader(authHeader);
-  const realm = params.realm;
-  const nonce = params.nonce;
-  const qop = params.qop;
+async function buildDigestAuthorization(params, method, uri, username, password, ncCount) {
+  const realm = params.realm || "";
+  const nonce = params.nonce || "";
+  const rawQop = params.qop || "";
+  const qopTokens = rawQop.split(",").map(s => s.trim()).filter(Boolean);
+  const qop = qopTokens.includes("auth") ? "auth" : (qopTokens[0] || "");
   const opaque = params.opaque;
 
-  const parsedUrl = new URL(url);
-  const uri = parsedUrl.pathname + parsedUrl.search;
-  const method = options.method || "GET";
-
-  const cn = "0a4f113b"; // Client nonce ngẫu nhiên
-  const nc = "00000001"; // Nonce count
+  const cn = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  const nc = ncCount.toString(16).padStart(8, "0");
 
   const HA1 = await md5(`${username}:${realm}:${password}`);
   const HA2 = await md5(`${method}:${uri}`);
@@ -401,6 +427,65 @@ async function fetchWithDigest(url, options = {}, username, password) {
   if (opaque) {
     authStr += `, opaque="${opaque}"`;
   }
+  return authStr;
+}
+
+/**
+ * Hàm hỗ trợ Digest Authentication cho fetch (hỗ trợ tái sử dụng nonce qua nhiều trang ISAPI)
+ */
+async function fetchWithDigest(url, options = {}, username, password, digestSession = null) {
+  const parsedUrl = new URL(url);
+  const uri = parsedUrl.pathname + parsedUrl.search;
+  const method = options.method || "GET";
+
+  let response;
+  if (digestSession && digestSession.params) {
+    digestSession.nc += 1;
+    const cachedAuth = await buildDigestAuthorization(
+      digestSession.params,
+      method,
+      uri,
+      username,
+      password,
+      digestSession.nc
+    );
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        "Authorization": cachedAuth
+      }
+    });
+    if (response.status !== 401) {
+      return response;
+    }
+  } else {
+    // Gửi request lần đầu để lấy challenge (401)
+    response = await fetch(url, options);
+    if (response.status !== 401) {
+      return response;
+    }
+  }
+
+  const authHeader = response.headers.get("www-authenticate");
+  if (!authHeader || !authHeader.startsWith("Digest")) {
+    return response;
+  }
+
+  const params = parseDigestHeader(authHeader);
+  if (digestSession) {
+    digestSession.params = params;
+    digestSession.nc = 1;
+  }
+
+  const authStr = await buildDigestAuthorization(
+    params,
+    method,
+    uri,
+    username,
+    password,
+    digestSession ? digestSession.nc : 1
+  );
 
   const authOptions = {
     ...options,
@@ -426,14 +511,83 @@ function parseDigestHeader(header) {
 }
 
 /**
- * Hàm tính MD5 hash
+ * Hàm tính MD5 hash (ưu tiên WebCrypto trên Cloudflare Workers, tự động fallback sang chuẩn RFC 1321 trên Node/Edge)
  */
+const MD5_S = [
+  7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+  5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+];
+const MD5_K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0);
+
+function md5PureBytes(bytes) {
+  const bitLen = bytes.length * 8;
+  const padLen = ((56 - ((bytes.length + 1) % 64)) + 64) % 64;
+  const buf = new Uint8Array(bytes.length + 1 + padLen + 8);
+  buf.set(bytes, 0);
+  buf[bytes.length] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(buf.length - 8, bitLen >>> 0, true);
+  dv.setUint32(buf.length - 4, Math.floor(bitLen / 4294967296) >>> 0, true);
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let off = 0; off < buf.length; off += 64) {
+    const M = new Uint32Array(16);
+    for (let j = 0; j < 16; j++) M[j] = dv.getUint32(off + j * 4, true);
+
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16) {
+        F = (B & C) | (~B & D);
+        g = i;
+      } else if (i < 32) {
+        F = (D & B) | (~D & C);
+        g = (5 * i + 1) % 16;
+      } else if (i < 48) {
+        F = B ^ C ^ D;
+        g = (3 * i + 5) % 16;
+      } else {
+        F = C ^ (B | ~D);
+        g = (7 * i) % 16;
+      }
+      const sum = (A + F + MD5_K[i] + M[g]) >>> 0;
+      const s = MD5_S[i];
+      const rot = ((sum << s) | (sum >>> (32 - s))) >>> 0;
+      A = D;
+      D = C;
+      C = B;
+      B = (B + rot) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0;
+    b0 = (b0 + B) >>> 0;
+    c0 = (c0 + C) >>> 0;
+    d0 = (d0 + D) >>> 0;
+  }
+
+  const out = new Uint8Array(16);
+  const outDv = new DataView(out.buffer);
+  outDv.setUint32(0, a0, true);
+  outDv.setUint32(4, b0, true);
+  outDv.setUint32(8, c0, true);
+  outDv.setUint32(12, d0, true);
+  return Array.from(out).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function md5(string) {
   const msgUint8 = new TextEncoder().encode(string);
-  const hashBuffer = await crypto.subtle.digest("MD5", msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-  return hashHex;
+  try {
+    const hashBuffer = await crypto.subtle.digest("MD5", msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return md5PureBytes(msgUint8);
+  }
 }
 
 /**
@@ -631,11 +785,7 @@ function generateEdgeSecMsGecV2(unixSec) {
 }
 
 async function handleTtsProxy(data) {
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
+  const corsHeaders = CORS_HEADERS;
 
   try {
     const provider = String(data.provider || "edge").toLowerCase();
@@ -648,13 +798,15 @@ async function handleTtsProxy(data) {
         method: "POST",
         headers: {
           "Appvr": "5.8.0",
+          "Content-Type": "application/json",
           "Device-Time": deviceTime,
           "Origin": "https://www.capcut.com",
           "Pf": "7",
           "Sign": sign,
           "Sign-Ver": "1",
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
+        },
+        body: JSON.stringify({ scenes: ["normal"] })
       });
       const tokenJson = await tokenRes.json();
       const token = tokenJson?.data?.token;

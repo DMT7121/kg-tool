@@ -3348,14 +3348,14 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       key={emp.id} 
                       style={{ 
                         background: isCurrent ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
-                        borderRadius: '10px', 
+                        borderRadius: 'var(--radius-md)', 
                         border: isCurrent 
                           ? '1px solid var(--accent-primary)' 
                           : hasError 
                             ? '1px solid var(--status-danger-border)' 
                             : '1px solid var(--border-default)',
-                        transition: 'all 0.15s ease',
-                        boxShadow: isCurrent ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : 'none',
+                        transition: 'background-color 140ms ease, border-color 140ms ease',
+                        boxShadow: 'none',
                         overflow: 'hidden'
                       }}
                     >
@@ -3807,12 +3807,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       padding: '0 12px',
                       fontSize: '12px',
                       fontWeight: 600,
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       border: 'none',
                       cursor: 'pointer',
                       background: activeView === 'receipt' ? 'var(--accent-primary)' : 'transparent',
-                      color: activeView === 'receipt' ? '#fff' : 'var(--text-muted)',
-                      transition: 'all 0.15s ease'
+                      color: activeView === 'receipt' ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                      transition: 'background-color 140ms ease, color 140ms ease'
                     }}
                     onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
                   >
@@ -3825,12 +3825,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                       padding: '0 12px',
                       fontSize: '12px',
                       fontWeight: 600,
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       border: 'none',
                       cursor: 'pointer',
                       background: activeView === 'summary' ? 'var(--accent-primary)' : 'transparent',
-                      color: activeView === 'summary' ? '#fff' : 'var(--text-muted)',
-                      transition: 'all 0.15s ease'
+                      color: activeView === 'summary' ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                      transition: 'background-color 140ms ease, color 140ms ease'
                     }}
                     onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
                   >
@@ -3838,7 +3838,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   </button>
                 </div>
 
-                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)' }}>
                   {(['standard', 'modern', 'k80'] as const).map((t) => (
                     <button
                       key={t}
@@ -3848,12 +3848,12 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                         padding: '0 10px',
                         fontSize: '11.5px',
                         fontWeight: 600,
-                        borderRadius: '6px',
+                        borderRadius: 'var(--radius-sm)',
                         border: 'none',
                         cursor: 'pointer',
                         background: activeTemplate === t ? 'var(--accent-primary)' : 'transparent',
-                        color: activeTemplate === t ? '#ffffff' : 'var(--text-muted)',
-                        transition: 'all 0.15s ease'
+                        color: activeTemplate === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                        transition: 'background-color 140ms ease, color 140ms ease'
                       }}
                       onClick={() => {
                         setActiveTemplate(t);

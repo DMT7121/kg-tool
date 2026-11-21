@@ -109,10 +109,16 @@ function doGet(e) {
       res.data = fetchAttendanceLogs(ss, ssId);
       res.success = true;
     } else if (action === "init_sheets") {
-      var brevoKey = e.parameter.brevo_key || "";
-      var brevoSender = e.parameter.brevo_sender || "";
-      res.data = initSystemSheets(ss, brevoKey, brevoSender);
-      res.success = true;
+      var initLock = LockService.getScriptLock();
+      initLock.waitLock(20000);
+      try {
+        var brevoKey = e.parameter.brevo_key || "";
+        var brevoSender = e.parameter.brevo_sender || "";
+        res.data = initSystemSheets(ss, brevoKey, brevoSender);
+        res.success = true;
+      } finally {
+        initLock.releaseLock();
+      }
     } else {
       throw new Error("Hành động GET không hợp lệ: " + action);
     }
@@ -272,44 +278,7 @@ function doPost(e) {
                            .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 1. LƯU THÔNG TIN TÀI KHOẢN VIETQR
-    if (action === "save_bank_account") {
-      var sheet = ss.getSheetByName("DATA2");
-      if (!sheet) {
-        sheet = ss.insertSheet("DATA2");
-      }
-      
-      var account = data.account;
-      if (!account) {
-        return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Không có dữ liệu tài khoản" }))
-                             .setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      if (sheet.getLastRow() === 0) {
-        sheet.appendRow(['Thời gian tạo', 'Ngân hàng', 'Mã ngân hàng', 'Số tài khoản', 'Tên chủ tài khoản', 'Số tiền', 'Nội dung chuyển khoản', 'Link mã QR']);
-        sheet.getRange(1, 1, 1, 8).setFontWeight('bold').setBackground('#f1f5f9');
-      }
-      
-      var row = [
-        account.createdAt || new Date().toISOString(),
-        account.bankName || "",
-        account.bankId || "",
-        String(account.accountNo || ""),
-        account.accountHolder || "",
-        account.amount || 0,
-        account.memo || "",
-        account.qrUrl || ""
-      ];
-      
-      sheet.appendRow(row);
-      return ContentService.createTextOutput(JSON.stringify({
-        status: "success",
-        success: true,
-        message: "Lưu thông tin tài khoản và mã QR thành công!"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // 2. LƯU CHẤM CÔNG (ATTENDANCE)
+    // Các tác vụ tự quản lý LockService riêng (hikvision_sync, hikvision_bulk_sync)
     if (action === "hikvision_sync") {
       return ContentService.createTextOutput(JSON.stringify(externalHikvisionSync(data, ss)))
                            .setMimeType(ContentService.MimeType.JSON);
@@ -320,118 +289,7 @@ function doPost(e) {
                            .setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (action === "save_attendance") {
-      var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
-      if (!sheet) {
-        sheet = ss.insertSheet("Bang_Cham_Cong_Log");
-      }
-      
-      var records = data.records;
-      if (!records || !records.length) {
-        return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Không có dữ liệu chấm công" }))
-                             .setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      if (sheet.getLastRow() === 0) {
-        sheet.appendRow(['Tên nhân viên', 'Ngày', 'Giờ vào', 'Giờ ra', 'Ghi chú']);
-        sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
-      }
-      
-      var rows = records.map(function(r) {
-        var notes = [];
-        if (r.overtime) notes.push('Tăng ca');
-        if (r.checkIn && !r.checkOut) {
-          notes.push('Quên chấm công ra ca');
-        } else if (!r.checkIn && r.checkOut) {
-          notes.push('Quên chấm công vào ca');
-        }
-        return [
-          r.employeeName,
-          r.logicalDate,
-          r.checkIn ? new Date(r.checkIn).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
-          r.checkOut ? new Date(r.checkOut).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
-          notes.join(', ')
-        ];
-      });
-      
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true, inserted: rows.length }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 3. LƯU PHIẾU LƯƠNG NHÂN VIÊN (PAYROLL)
-    if (action === "savePayroll") {
-      var sheets = getOrCreateSheets(ssId);
-      var month = data.month;
-      var dataStr = data.data; 
-      var operator = data.operator || "Hệ thống";
-      
-      if (!month || !dataStr) {
-        return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Thiếu dữ liệu tháng hoặc cấu trúc phiếu lương." }))
-                             .setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      savePayrollData(sheets.dataSheet, month, dataStr, operator, ssId);
-      writeLog(sheets.logSheet, operator, "Lưu phiếu lương", month, "Đã cập nhật/tạo mới phiếu lương cho tháng " + month, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 4. XÓA PHIẾU LƯƠNG NHÂN VIÊN
-    if (action === "deletePayroll") {
-      var sheets = getOrCreateSheets(ssId);
-      var month = data.month;
-      var operator = data.operator || "Hệ thống";
-      if (!month) {
-        return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Thiếu tham số tháng cần xóa." }))
-                             .setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      deletePayrollData(sheets.dataSheet, month, ssId);
-      writeLog(sheets.logSheet, operator, "Xóa phiếu lương", month, "Đã xóa toàn bộ phiếu lương của tháng " + month, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 5. LƯU / ĐỒNG BỘ MẪU CÂU TTS
-    if (action === "save_tts_template") {
-      var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
-      var template = data.template;
-      if (!template || !template.id) {
-        throw new Error("Thiếu dữ liệu template hoặc ID.");
-      }
-      saveTtsTemplateRow(templatesSheet, template, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 6. XÓA MẪU CÂU TTS
-    if (action === "delete_tts_template") {
-      var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
-      var id = data.id;
-      if (!id) throw new Error("Thiếu ID template cần xóa.");
-      deleteTtsTemplateRow(templatesSheet, id, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 7. LƯU LỊCH SỬ PHÁT TTS
-    if (action === "save_tts_history") {
-      var historySheet = getOrCreateTtsSheets(ss).historySheet;
-      var log = data.log;
-      if (!log) throw new Error("Thiếu thông tin lịch sử.");
-      saveTtsHistoryRow(historySheet, log, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 8. LƯU CẤU HÌNH TTS
-    if (action === "save_tts_settings") {
-      var settingsSheet = getOrCreateTtsSheets(ss).settingsSheet;
-      var settingsList = data.settings; 
-      if (!settingsList || !settingsList.length) throw new Error("Thiếu cấu hình lưu trữ.");
-      saveTtsSettingsRows(settingsSheet, settingsList, ssId);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 9. GỬI EMAIL PHIẾU LƯƠNG NHÂN VIÊN
+    // Gửi email phiếu lương nhân viên (không ghi vào Sheet nên không giữ ScriptLock khi gọi SMTP)
     if (action === "send_payroll_emails") {
       var emailList = data.emails || [];
       if (!emailList.length) {
@@ -465,7 +323,172 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    throw new Error("Hành động POST không hợp lệ: " + action);
+    // Khóa đồng bộ (ScriptLock) cho toàn bộ các thao tác đọc-ghi Google Sheets để chống ghi đè dữ liệu
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(20000);
+    } catch (lockErr) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "error",
+        success: false,
+        message: "Hệ thống đang bận xử lý yêu cầu khác, vui lòng thử lại sau."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    try {
+      // 1. LƯU THÔNG TIN TÀI KHOẢN VIETQR
+      if (action === "save_bank_account") {
+        var sheet = ss.getSheetByName("DATA2");
+        if (!sheet) {
+          sheet = ss.insertSheet("DATA2");
+        }
+        
+        var account = data.account;
+        if (!account) {
+          return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Không có dữ liệu tài khoản" }))
+                               .setMimeType(ContentService.MimeType.JSON);
+        }
+        
+        if (sheet.getLastRow() === 0) {
+          sheet.appendRow(['Thời gian tạo', 'Ngân hàng', 'Mã ngân hàng', 'Số tài khoản', 'Tên chủ tài khoản', 'Số tiền', 'Nội dung chuyển khoản', 'Link mã QR']);
+          sheet.getRange(1, 1, 1, 8).setFontWeight('bold').setBackground('#f1f5f9');
+        }
+        
+        var row = [
+          account.createdAt || new Date().toISOString(),
+          account.bankName || "",
+          account.bankId || "",
+          String(account.accountNo || ""),
+          account.accountHolder || "",
+          account.amount || 0,
+          account.memo || "",
+          account.qrUrl || ""
+        ];
+        
+        sheet.appendRow(row);
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "success",
+          success: true,
+          message: "Lưu thông tin tài khoản và mã QR thành công!"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      // 2. LƯU CHẤM CÔNG (ATTENDANCE)
+      if (action === "save_attendance") {
+        var sheet = ss.getSheetByName("Bang_Cham_Cong_Log");
+        if (!sheet) {
+          sheet = ss.insertSheet("Bang_Cham_Cong_Log");
+        }
+        
+        var records = data.records;
+        if (!records || !records.length) {
+          return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Không có dữ liệu chấm công" }))
+                               .setMimeType(ContentService.MimeType.JSON);
+        }
+        
+        if (sheet.getLastRow() === 0) {
+          sheet.appendRow(['Tên nhân viên', 'Ngày', 'Giờ vào', 'Giờ ra', 'Ghi chú']);
+          sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
+        }
+        
+        var rows = records.map(function(r) {
+          var notes = [];
+          if (r.overtime) notes.push('Tăng ca');
+          if (r.checkIn && !r.checkOut) {
+            notes.push('Quên chấm công ra ca');
+          } else if (!r.checkIn && r.checkOut) {
+            notes.push('Quên chấm công vào ca');
+          }
+          return [
+            r.employeeName,
+            r.logicalDate,
+            r.checkIn ? new Date(r.checkIn).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
+            r.checkOut ? new Date(r.checkOut).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '',
+            notes.join(', ')
+          ];
+        });
+        
+        sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true, inserted: rows.length }))
+                             .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 3. LƯU PHIẾU LƯƠNG NHÂN VIÊN (PAYROLL)
+      if (action === "savePayroll") {
+        var sheets = getOrCreateSheets(ssId);
+        var month = data.month;
+        var dataStr = data.data; 
+        var operator = data.operator || "Hệ thống";
+        
+        if (!month || !dataStr) {
+          return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Thiếu dữ liệu tháng hoặc cấu trúc phiếu lương." }))
+                               .setMimeType(ContentService.MimeType.JSON);
+        }
+        
+        savePayrollData(sheets.dataSheet, month, dataStr, operator, ssId);
+        writeLog(sheets.logSheet, operator, "Lưu phiếu lương", month, "Đã cập nhật/tạo mới phiếu lương cho tháng " + month, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true }))
+                             .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 4. XÓA PHIẾU LƯƠNG NHÂN VIÊN
+      if (action === "deletePayroll") {
+        var sheets = getOrCreateSheets(ssId);
+        var month = data.month;
+        var operator = data.operator || "Hệ thống";
+        if (!month) {
+          return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: "Thiếu tham số tháng cần xóa." }))
+                               .setMimeType(ContentService.MimeType.JSON);
+        }
+        
+        deletePayrollData(sheets.dataSheet, month, ssId);
+        writeLog(sheets.logSheet, operator, "Xóa phiếu lương", month, "Đã xóa toàn bộ phiếu lương của tháng " + month, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true }))
+                             .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 5. LƯU / ĐỒNG BỘ MẪU CÂU TTS
+      if (action === "save_tts_template") {
+        var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
+        var template = data.template;
+        if (!template || !template.id) {
+          throw new Error("Thiếu dữ liệu template hoặc ID.");
+        }
+        saveTtsTemplateRow(templatesSheet, template, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 6. XÓA MẪU CÂU TTS
+      if (action === "delete_tts_template") {
+        var templatesSheet = getOrCreateTtsSheets(ss).templatesSheet;
+        var id = data.id;
+        if (!id) throw new Error("Thiếu ID template cần xóa.");
+        deleteTtsTemplateRow(templatesSheet, id, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 7. LƯU LỊCH SỬ PHÁT TTS
+      if (action === "save_tts_history") {
+        var historySheet = getOrCreateTtsSheets(ss).historySheet;
+        var log = data.log;
+        if (!log) throw new Error("Thiếu thông tin lịch sử.");
+        saveTtsHistoryRow(historySheet, log, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 8. LƯU CẤU HÌNH TTS
+      if (action === "save_tts_settings") {
+        var settingsSheet = getOrCreateTtsSheets(ss).settingsSheet;
+        var settingsList = data.settings; 
+        if (!settingsList || !settingsList.length) throw new Error("Thiếu cấu hình lưu trữ.");
+        saveTtsSettingsRows(settingsSheet, settingsList, ssId);
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", success: true })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      throw new Error("Hành động POST không hợp lệ: " + action);
+    } finally {
+      lock.releaseLock();
+    }
 
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", success: false, message: err.toString() }))
@@ -481,6 +504,15 @@ function isSheetsApiEnabled() {
   return (typeof Sheets !== 'undefined' && Sheets.Spreadsheets && Sheets.Spreadsheets.Values);
 }
 
+function colLettersToIndex(letters) {
+  var col = 0;
+  var upper = String(letters || "A").toUpperCase();
+  for (var i = 0; i < upper.length; i++) {
+    col = col * 26 + (upper.charCodeAt(i) - 64);
+  }
+  return Math.max(1, col);
+}
+
 function getSheetValues(sheet, ssId, rangeName) {
   var ss = sheet.getParent();
   var sheetName = sheet.getName();
@@ -494,6 +526,22 @@ function getSheetValues(sheet, ssId, rangeName) {
       console.warn("Sheets API v4 error: " + err.message + ". Falling back.");
     }
   }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow === 0) return [];
+
+  if (rangeName) {
+    var m = String(rangeName).match(/^([A-Za-z]+)(\d+)?(?::([A-Za-z]+)(\d+)?)?$/);
+    if (m) {
+      var startCol = colLettersToIndex(m[1]);
+      var startRow = m[2] ? parseInt(m[2], 10) : 1;
+      var endCol = m[3] ? colLettersToIndex(m[3]) : startCol;
+      var endRow = m[4] ? Math.min(lastRow, parseInt(m[4], 10)) : lastRow;
+      if (endRow < startRow) return [];
+      return sheet.getRange(startRow, startCol, endRow - startRow + 1, Math.max(1, endCol - startCol + 1)).getValues();
+    }
+  }
+
   return sheet.getDataRange().getValues();
 }
 
@@ -649,6 +697,17 @@ function fetchActionLogs(logSheet, ssId) {
 // BUSINESS LOGIC METHODS FOR TTS
 // ==========================================
 
+function safeParseJsonArray(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    var parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function fetchTtsTemplates(ss, ssId) {
   var sheet = ss.getSheetByName("TTS_Templates");
   if (!sheet) return [];
@@ -661,14 +720,14 @@ function fetchTtsTemplates(ss, ssId) {
         title: rows[i][1],
         category: rows[i][2],
         text: rows[i][3],
-        variables: rows[i][4] ? JSON.parse(rows[i][4]) : [],
+        variables: safeParseJsonArray(rows[i][4]),
         providerId: rows[i][5],
         voiceId: rows[i][6],
         gender: rows[i][7],
         lang: rows[i][8],
-        rate: Number(rows[i][9]) || 1.0,
-        pitch: Number(rows[i][10]) || 1.0,
-        volume: Number(rows[i][11]) || 1.0,
+        rate: rows[i][9] !== "" && rows[i][9] !== undefined && !isNaN(Number(rows[i][9])) ? Number(rows[i][9]) : 1.0,
+        pitch: rows[i][10] !== "" && rows[i][10] !== undefined && !isNaN(Number(rows[i][10])) ? Number(rows[i][10]) : 1.0,
+        volume: rows[i][11] !== "" && rows[i][11] !== undefined && !isNaN(Number(rows[i][11])) ? Number(rows[i][11]) : 1.0,
         isFavorite: rows[i][12] === "TRUE" || rows[i][12] === true,
         createdAt: rows[i][13],
         updatedAt: rows[i][14],
@@ -700,9 +759,9 @@ function saveTtsTemplateRow(sheet, template, ssId) {
     template.voiceId || "",
     template.gender || "",
     template.lang || "vi-VN",
-    template.rate || 1.0,
-    template.pitch || 1.0,
-    template.volume || 1.0,
+    template.rate !== undefined ? template.rate : 1.0,
+    template.pitch !== undefined ? template.pitch : 1.0,
+    template.volume !== undefined ? template.volume : 1.0,
     template.isFavorite ? "TRUE" : "FALSE",
     template.createdAt || new Date().toISOString(),
     new Date().toISOString(),
@@ -734,24 +793,26 @@ function deleteTtsTemplateRow(sheet, id, ssId) {
 function fetchTtsHistory(ss, ssId) {
   var sheet = ss.getSheetByName("TTS_History");
   if (!sheet) return [];
-  var rows = getSheetValues(sheet, ssId, "A2:L");
+  var rows = getSheetValues(sheet, ssId, "A2:N");
   var list = [];
   var start = Math.max(0, rows.length - 100);
   for (var i = rows.length - 1; i >= start; i--) {
     if (rows[i][0]) {
       list.push({
         id: rows[i][0],
-        templateId: rows[i][1],
-        text: rows[i][2],
-        providerId: rows[i][3],
-        voiceId: rows[i][4],
-        gender: rows[i][5],
-        rate: Number(rows[i][6]) || 1.0,
-        pitch: Number(rows[i][7]) || 1.0,
-        volume: Number(rows[i][8]) || 1.0,
-        playedAt: rows[i][9],
-        status: rows[i][10],
-        errorMessage: rows[i][11]
+        templateId: rows[i][1] || "",
+        text: rows[i][2] || "",
+        normalizedText: rows[i][3] || "",
+        providerId: rows[i][4] || "",
+        voiceId: rows[i][5] || "",
+        gender: rows[i][6] || "",
+        rate: rows[i][7] !== "" && rows[i][7] !== undefined && !isNaN(Number(rows[i][7])) ? Number(rows[i][7]) : 1.0,
+        pitch: rows[i][8] !== "" && rows[i][8] !== undefined && !isNaN(Number(rows[i][8])) ? Number(rows[i][8]) : 1.0,
+        volume: rows[i][9] !== "" && rows[i][9] !== undefined && !isNaN(Number(rows[i][9])) ? Number(rows[i][9]) : 1.0,
+        playedAt: rows[i][10] || "",
+        status: rows[i][11] || "success",
+        errorMessage: rows[i][12] || "",
+        user: rows[i][13] || ""
       });
     }
   }
@@ -767,9 +828,9 @@ function saveTtsHistoryRow(sheet, log, ssId) {
     log.providerId || "",
     log.voiceId || "",
     log.gender || "",
-    log.rate || 1.0,
-    log.pitch || 1.0,
-    log.volume || 1.0,
+    log.rate !== undefined ? log.rate : 1.0,
+    log.pitch !== undefined ? log.pitch : 1.0,
+    log.volume !== undefined ? log.volume : 1.0,
     log.playedAt || new Date().toISOString(),
     log.status || "success",
     log.errorMessage || "",
@@ -807,8 +868,10 @@ function saveTtsSettingsRows(sheet, settingsList, ssId) {
     var rowData = [item.key, String(item.value), timestamp];
     if (targetRowIndex !== -1) {
       updateSheetValues(sheet, ssId, "A" + targetRowIndex + ":C" + targetRowIndex, [rowData]);
+      rows[targetRowIndex - 2][1] = String(item.value);
     } else {
       sheet.appendRow(rowData);
+      rows.push([item.key, String(item.value)]);
     }
   });
 }
@@ -924,8 +987,8 @@ function processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStrin
 
         if (!isBulk) {
           sendTelegram("🔴 <b>[KING'S GRILL - HIKVISION RA CA]</b>\n" +
-                       "Nhân viên: <b>" + employeeName + "</b>\n" +
-                       "Giờ ra: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+                       "Nhân viên: <b>" + escapeHtmlGas(employeeName) + "</b>\n" +
+                       "Giờ ra: <b>" + escapeHtmlGas(gioString) + " (" + escapeHtmlGas(dateStringObj) + ")</b>", ss);
           sendGoogleChat("🔴 *[KING'S GRILL - HIKVISION RA CA]*\n" +
                          "Nhân viên: *" + employeeName + "*\n" +
                          "Giờ ra: *" + gioString + " (" + dateStringObj + ")*", ss);
@@ -959,8 +1022,8 @@ function processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStrin
 
         if (!isBulk) {
           sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
-                       "Nhân viên: <b>" + employeeName + "</b>\n" +
-                       "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+                       "Nhân viên: <b>" + escapeHtmlGas(employeeName) + "</b>\n" +
+                       "Giờ vào: <b>" + escapeHtmlGas(gioString) + " (" + escapeHtmlGas(dateStringObj) + ")</b>", ss);
           sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
                          "Nhân viên: *" + employeeName + "*\n" +
                          "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
@@ -988,8 +1051,8 @@ function processCheckInEvent(ss, sheet, existingRecords, employeeName, dateStrin
 
     if (!isBulk) {
       sendTelegram("🟢 <b>[KING'S GRILL - HIKVISION VÀO CA]</b>\n" +
-                   "Nhân viên: <b>" + employeeName + "</b>\n" +
-                   "Giờ vào: <b>" + gioString + " (" + dateStringObj + ")</b>", ss);
+                   "Nhân viên: <b>" + escapeHtmlGas(employeeName) + "</b>\n" +
+                   "Giờ vào: <b>" + escapeHtmlGas(gioString) + " (" + escapeHtmlGas(dateStringObj) + ")</b>", ss);
       sendGoogleChat("🟢 *[KING'S GRILL - HIKVISION VÀO CA]*\n" +
                    "Nhân viên: *" + employeeName + "*\n" +
                    "Giờ vào: *" + gioString + " (" + dateStringObj + ")*", ss);
@@ -1199,7 +1262,7 @@ function externalHikvisionBulkSync(data, ss) {
     if (importedCount > 0) {
       var summaryMsg = "🔄 <b>[KING'S GRILL - ĐỒNG BỘ BÙ THÀNH CÔNG]</b>\n" +
                        "Đã đồng bộ bổ sung thành công <b>" + importedCount + "</b> lượt chấm công:\n" +
-                       bulkDetails.slice(0, 15).map(function(d) { return "- " + d; }).join("\n");
+                       bulkDetails.slice(0, 15).map(function(d) { return "- " + escapeHtmlGas(d); }).join("\n");
       if (bulkDetails.length > 15) {
         summaryMsg += "\n... và " + (bulkDetails.length - 15) + " lượt khác.";
       }
@@ -1333,6 +1396,16 @@ function getEmployeeEmail(employeeName, ss) {
   return null;
 }
 
+function escapeHtmlGas(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Gửi email thông báo chấm công cho nhân viên
  */
@@ -1349,6 +1422,9 @@ function sendAttendanceEmail(employeeName, dateString, gioString, type, ss) {
     var color = isCheckIn ? "#10b981" : "#ef4444";
     
     var subject = "[King's Grill] Thông báo chấm công " + (isCheckIn ? "Vào ca" : "Ra ca") + " - " + employeeName;
+    var safeEmployeeName = escapeHtmlGas(employeeName);
+    var safeGioString = escapeHtmlGas(gioString);
+    var safeDateString = escapeHtmlGas(dateString);
     
     var htmlContent = '<div style="font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">' +
       '<div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">' +
@@ -1356,7 +1432,7 @@ function sendAttendanceEmail(employeeName, dateString, gioString, type, ss) {
         '<p style="color: #64748b; font-size: 14px; margin: 5px 0 0 0;">Hệ Thống Chấm Công Tự Động</p>' +
       '</div>' +
       '<div style="margin-bottom: 25px;">' +
-        '<p style="color: #334155; font-size: 16px;">Xin chào <strong>' + employeeName + '</strong>,</p>' +
+        '<p style="color: #334155; font-size: 16px;">Xin chào <strong>' + safeEmployeeName + '</strong>,</p>' +
         '<p style="color: #334155; font-size: 15px; line-height: 1.5;">Hệ thống ghi nhận bạn đã chấm công thành công trên thiết bị:</p>' +
         '<div style="background-color: #f8fafc; border-left: 4px solid ' + color + '; padding: 15px; border-radius: 4px; margin: 20px 0;">' +
           '<table style="width: 100%; border-collapse: collapse;">' +
@@ -1366,11 +1442,11 @@ function sendAttendanceEmail(employeeName, dateString, gioString, type, ss) {
             '</tr>' +
             '<tr>' +
               '<td style="color: #64748b; padding: 5px 0; font-size: 14px;">Thời gian:</td>' +
-              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + gioString + '</td>' +
+              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + safeGioString + '</td>' +
             '</tr>' +
             '<tr>' +
               '<td style="color: #64748b; padding: 5px 0; font-size: 14px;">Ngày:</td>' +
-              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + dateString + '</td>' +
+              '<td style="color: #1e293b; padding: 5px 0; font-weight: bold; font-size: 15px;">' + safeDateString + '</td>' +
             '</tr>' +
           '</table>' +
         '</div>' +
