@@ -14,11 +14,14 @@ import {
   Sparkles,
   ClipboardCheck,
   Edit2,
-  Info
+  Info,
+  Landmark,
+  SlidersHorizontal,
+  X
 } from 'lucide-react';
 import { VIB_BANKS } from '../constants/vibBanks';
 import { VCB_BANKS } from '../constants/vcbBanks';
-import { StatCard, GuidePanel, EmptyState, PageHeader } from './Shared';
+import { StatCard, EmptyState, PageHeader, Badge } from './Shared';
 import {
   removeVietnameseAccents,
   normalizeVietnameseName,
@@ -1072,316 +1075,188 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
     setBankSearchQuery('');
   };
 
+  const [showMemoConfig, setShowMemoConfig] = useState(false);
+
   return (
     <div className="transfer-file-tool">
       
       {/* HEADER SECTION */}
       <PageHeader
-        icon={<FileSpreadsheet size={26} />}
-        title="Tạo File Chuyển Tiền Hàng Loạt"
-        subtitle="Tạo file chuyển tiền hàng loạt theo đúng khuôn mẫu chuẩn của các ngân hàng (MyVIB, Vietcombank)"
-        badgeText="Chuyển khoản"
-        badgeVariant="info"
+        icon={<FileSpreadsheet size={22} />}
+        title="Chuyển Khoản Theo Lô (MyVIB / VCB)"
+        subtitle="Nạp danh sách từ Bảng lương hoặc Excel, đối soát STK & mã ngân hàng và xuất file chuẩn nạp cổng ngân hàng."
+        badgeText={bankTemplate === 'vib' ? 'MyVIB 2.0' : 'Vietcombank A222'}
+        badgeVariant={bankTemplate === 'vib' ? 'info' : 'success'}
         actions={
-          <button 
-            className="primary" 
-            onClick={handleExportClick}
-            disabled={employees.length === 0 || stats.invalidCount > 0 || isExporting}
-            style={{ height: '40px', padding: '0 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            {isExporting ? <RefreshCw className="spinner" size={16} /> : <Download size={16} />}
-            <span>Tải File Chuyển Tiền</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="studio-seg-bar" role="group" aria-label="Mẫu ngân hàng xuất file">
+              <button
+                type="button"
+                className={bankTemplate === 'vib' ? 'active' : ''}
+                onClick={() => handleSwitchBankTemplate('vib')}
+              >
+                <Landmark size={14} />
+                <span>MyVIB 2.0</span>
+              </button>
+              <button
+                type="button"
+                className={bankTemplate === 'vcb' ? 'active' : ''}
+                onClick={() => handleSwitchBankTemplate('vcb')}
+              >
+                <Landmark size={14} />
+                <span>Vietcombank (A222)</span>
+              </button>
+            </div>
+            <button 
+              type="button"
+              className="primary" 
+              onClick={handleExportClick}
+              disabled={employees.length === 0 || stats.invalidCount > 0 || isExporting}
+            >
+              {isExporting ? <RefreshCw className="spinner" size={15} /> : <Download size={15} />}
+              <span>Xuất File Ngân Hàng</span>
+            </button>
+          </div>
         }
       />
 
-      {/* BANK TEMPLATE SELECTOR TABS */}
-      <div className="card panel" style={{ marginBottom: '1.25rem', background: 'var(--bg-panel)', padding: '0.75rem', border: '1px solid var(--border-default)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-          <button 
-            type="button" 
-            onClick={() => handleSwitchBankTemplate('vib')}
-            style={{ 
-              height: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              gap: '12px',
-              padding: '12px 16px', 
-              borderRadius: 'var(--radius-md)', 
-              background: bankTemplate === 'vib' 
-                ? 'var(--accent-primary-subtle)' 
-                : 'var(--bg-elevated)',
-              border: bankTemplate === 'vib' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-default)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              transition: 'background-color 140ms ease, border-color 140ms ease',
-              textAlign: 'left',
-              boxShadow: 'none'
-            }}
-          >
-            <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 132, 199, 0.14)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '10px', flexShrink: 0 }}>
-              🏦
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Mẫu MyVIB 2.0 (iVIB)</span>
-                {bankTemplate === 'vib' && <span className="badge badge-info" style={{ fontSize: '10px', padding: '2px 7px' }}>Đang chọn</span>}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: 500 }}>
-                Chuẩn hóa STK text, chi lương lô VIB Doanh Nghiệp
-              </div>
-            </div>
-          </button>
-
-          <button 
-            type="button" 
-            onClick={() => handleSwitchBankTemplate('vcb')}
-            style={{ 
-              height: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              gap: '12px',
-              padding: '12px 16px', 
-              borderRadius: 'var(--radius-md)', 
-              background: bankTemplate === 'vcb' 
-                ? 'var(--status-success-bg)' 
-                : 'var(--bg-elevated)',
-              border: bankTemplate === 'vcb' ? '1.5px solid var(--status-success)' : '1px solid var(--border-default)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              transition: 'background-color 140ms ease, border-color 140ms ease',
-              textAlign: 'left',
-              boxShadow: 'none'
-            }}
-          >
-            <div style={{ fontSize: '22px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.14)', border: '1px solid var(--status-success-border)', borderRadius: '10px', flexShrink: 0 }}>
-              💚
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Mẫu Vietcombank (A222)</span>
-                {bankTemplate === 'vcb' && <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 7px' }}>Đang chọn</span>}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: 500 }}>
-                Bắt buộc IN HOA KHÔNG DẤU, mã liên ngân hàng VCB
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-
       {/* STAT CARDS SECTION */}
-      <div className="kpis" style={{ marginBottom: '1.5rem' }}>
+      <div className="kpis" style={{ marginBottom: '1rem' }}>
         <StatCard 
           icon={<FileSpreadsheet size={18} />} 
           label="Tổng tiền chuyển" 
           value={`${stats.totalAmount.toLocaleString('vi-VN')} đ`} 
-          subtext={`Chuyển khoản cho ${stats.total} dòng nhân viên`}
+          subtext={`Chi cho ${stats.total} nhân viên`}
           hasData={employees.length > 0} 
         />
         <StatCard 
           icon={<CheckCircle size={18} />} 
-          label="Người thụ hưởng hợp lệ" 
+          label="Thụ hưởng hợp lệ" 
           value={`${stats.validCount} / ${stats.total}`} 
-          subtext={`Đạt chuẩn mẫu ${bankTemplate.toUpperCase()}`}
+          subtext={`Đạt chuẩn mẫu ${bankTemplate === 'vib' ? 'MyVIB 2.0' : 'VCB A222'}`}
           hasData={employees.length > 0} 
         />
         <StatCard 
           icon={<AlertTriangle size={18} />} 
-          label="Số dòng bị lỗi" 
+          label="Dòng cần kiểm tra" 
           value={`${stats.invalidCount} dòng`} 
-          subtext="Cần chỉnh sửa ngay"
+          subtext={stats.invalidCount > 0 ? 'Cần sửa trước khi xuất' : 'Sẵn sàng xuất file'}
           hasData={employees.length > 0}
-          accentColor={stats.invalidCount > 0 ? 'var(--red)' : 'var(--green)'}
+          accentColor={stats.invalidCount > 0 ? 'var(--status-danger)' : 'var(--status-success)'}
         />
       </div>
 
-      {/* INSTRUCTIONS PANEL */}
-      {bankTemplate === 'vib' ? (
-        <GuidePanel 
-          title="File Chuyển Tiền MyVIB 2.0"
-          purpose="Module hỗ trợ kết hợp bảng tính lương, tự động phân tích và chuyển định dạng số tài khoản/ngân hàng thành định dạng bảng nạp tiền chuẩn của Ngân hàng Quốc tế VIB."
-          steps={[
-            "Bấm 'Lấy từ Phiếu Lương' để tự động nạp danh sách thực nhận và đối chiếu tài khoản đã lưu, hoặc bấm 'Import Excel/CSV' để tải danh sách khác.",
-            "Kiểm tra cột 'Trạng thái' trong bảng. Bất kỳ dòng nào báo đỏ (Thiếu thông tin hoặc Ngân hàng không khớp mẫu VIB) cần được cập nhật.",
-            "Nhấp 'Tải File Chuyển Tiền' để xuất tệp Excel nạp vào cổng ngân hàng VIB."
-          ]}
-          notes={[
-            "Số tài khoản nhận luôn được lưu dưới dạng text để không làm mất số 0 ở đầu (ví dụ: '0200...').",
-            "Ký tự đặc biệt cho phép trong Tên và Nội dung bao gồm: , . - + ( ) : _ & ?"
-          ]}
-          errors={[
-            "Mã lỗi 'Ngân hàng không khớp danh mục': VIB yêu cầu điền đúng chuỗi dạng 'Mã - Tên ngắn' (ví dụ: '203 - Vietcombank'). Hãy nhấp vào ô ngân hàng bị lỗi và chọn lại từ Bank Selector."
-          ]}
-        />
-      ) : (
-        <GuidePanel 
-          title="File Chuyển Tiền Vietcombank A222"
-          purpose="Tự động chuẩn hóa toàn bộ họ tên thụ hưởng sang chữ IN HOA KHÔNG DẤU, map mã ngân hàng interbank (ACB, MB, VIB...) theo định dạng Vietcombank yêu cầu và xuất tệp Excel nạp cổng."
-          steps={[
-            "Nạp danh sách nhân viên từ Phiếu Lương hoặc tệp CSV/Excel.",
-            "Tất cả họ tên sẽ được chuẩn hóa sang định dạng IN HOA KHÔNG DẤU (ví dụ: 'DAO MINH TRI') tự động khi ghi file.",
-            "Kiểm tra cột lỗi và sử dụng Bank Selector của Vietcombank để chọn đúng format (ví dụ: '(ACB) Á Châu').",
-            "Bấm 'Tải File Chuyển Tiền' để download tệp tin mẫu đã được điền đầy đủ."
-          ]}
-          notes={[
-            "Định dạng xuất file là .xlsx. Nếu cổng Vietcombank yêu cầu file .xls nhị phân nguyên bản, bạn hãy đổi tên đuôi file hoặc mở bằng Excel và lưu lại dạng Excel 97-2003 (.xls).",
-            "Cột 'ten nguoi huong' (tên người hưởng) bắt buộc là chữ viết hoa không có dấu."
-          ]}
-          errors={[
-            "Lỗi 'Ngân hàng không khớp danh mục VCB': Yêu cầu đúng chuỗi dạng '(ShortName) FullName' (ví dụ: '(MB) Quân Đội'). Hãy nhấp ô ngân hàng và chỉnh lại."
-          ]}
-        />
-      )}
+      {/* SINGLE-ROW STUDIO ACTION BAR */}
+      <div className="studio-action-bar">
+        <div className="studio-bar-group">
+          <button 
+            type="button"
+            className="primary" 
+            onClick={handleLoadFromPayroll} 
+          >
+            <Sparkles size={15} />
+            <span>Lấy từ Bảng lương</span>
+          </button>
 
-      {/* OPERATIONS & ACTION BUTTONS PANEL */}
-      <div className="card panel" style={{ marginBottom: '1.5rem', background: 'var(--panel-bg)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '8px' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.05rem', margin: 0 }}>
-            <span>🛠️ Thao Tác Xử Lý Dữ Liệu</span>
-            <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>
-              ({employees.length} nhân viên)
-            </span>
-          </h2>
+          <button 
+            type="button"
+            className="btn-outline" 
+            onClick={handleTriggerFileInput} 
+            disabled={isImporting}
+          >
+            {isImporting ? <RefreshCw className="spinner" size={14} /> : <Upload size={14} />}
+            <span>Nhập Excel/CSV</span>
+          </button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{ display: 'none' }} 
+            accept=".xlsx,.csv" 
+            onChange={handleImportFileChange}
+          />
+
+          <button 
+            type="button"
+            className="btn-outline" 
+            onClick={() => setShowBulkModal(true)}
+          >
+            <ClipboardCheck size={14} />
+            <span>Dán nhanh</span>
+          </button>
+
+          <button 
+            type="button"
+            className="btn-outline" 
+            onClick={handleAddManualRow}
+          >
+            <Plus size={14} />
+            <span>Thêm dòng</span>
+          </button>
+        </div>
+
+        <div className="studio-bar-group">
+          <button 
+            type="button"
+            className="btn-outline" 
+            onClick={handleNormalizeAllNames}
+            disabled={employees.length === 0}
+            title="Chuẩn hóa toàn bộ họ tên thụ hưởng sang IN HOA KHÔNG DẤU"
+          >
+            <Sparkles size={14} />
+            <span>Chuẩn hóa Tên</span>
+          </button>
+
+          <button 
+            type="button"
+            className="btn-outline" 
+            onClick={handleBulkFillMissingBank}
+            disabled={employees.length === 0}
+            title="Gán nhanh ngân hàng mặc định cho các dòng đang trống"
+          >
+            <CheckCircle size={14} />
+            <span>Gán NH trống</span>
+          </button>
+
+          <button
+            type="button"
+            className={showMemoConfig ? 'primary' : 'btn-outline'}
+            onClick={() => setShowMemoConfig((v) => !v)}
+          >
+            <SlidersHorizontal size={14} />
+            <span>Mẫu nội dung</span>
+          </button>
+
           {employees.length > 0 && (
             <button 
               type="button"
               className="btn-ghost" 
               onClick={handleClearAll}
-              style={{ color: '#f87171', fontSize: '12px', padding: '4px 10px', height: '28px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              style={{ color: 'var(--status-danger)' }}
               title="Xóa toàn bộ danh sách để nạp lại"
             >
               <Trash2 size={14} />
-              <span>Xóa tất cả</span>
+              <span>Xóa hết</span>
             </button>
           )}
         </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
-          {/* Nhóm 1: Nạp nguồn */}
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>BƯỚC 1: NẠP DỮ LIỆU ĐẦU VÀO</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              <button 
-                type="button"
-                className="primary" 
-                onClick={handleLoadFromPayroll} 
-                style={{ 
-                  flex: '1 1 auto',
-                  minWidth: '150px',
-                  background: bankTemplate === 'vib' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'linear-gradient(135deg, #10b981, #059669)',
-                  height: '38px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Sparkles size={16} />
-                <span>Lấy từ Phiếu Lương</span>
-              </button>
+      </div>
 
-              <button 
-                type="button"
-                className="btn-outline" 
-                onClick={handleTriggerFileInput} 
-                disabled={isImporting}
-                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                {isImporting ? <RefreshCw className="spinner" size={15} /> : <Upload size={15} />}
-                <span>Import Excel/CSV</span>
-              </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                style={{ display: 'none' }} 
-                accept=".xlsx,.csv" 
-                onChange={handleImportFileChange}
-              />
-
-              <button 
-                type="button"
-                className="btn-outline" 
-                onClick={() => setShowBulkModal(true)}
-                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <ClipboardCheck size={15} />
-                <span>Dán dữ liệu</span>
-              </button>
-            </div>
+      {/* COLLAPSIBLE MEMO & TEMPLATE CONFIG */}
+      {showMemoConfig && (
+        <div className="studio-collapsible-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '8px' }}>
+            <h3 className="studio-section-title" style={{ margin: 0 }}>
+              <SlidersHorizontal size={16} color="var(--accent-primary)" />
+              Mẫu nội dung chuyển khoản ({bankTemplate === 'vib' ? 'MyVIB 2.0' : 'Vietcombank A222'})
+            </h3>
+            <button type="button" className="btn-ghost" onClick={() => setShowMemoConfig(false)}>
+              <X size={14} />
+              <span>Thu gọn</span>
+            </button>
           </div>
-
-          {/* Nhóm 2: Tinh chỉnh & Chuẩn hóa */}
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--status-warning)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>BƯỚC 2: CHUẨN HÓA & TINH CHỈNH</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              <button 
-                type="button"
-                className="btn-outline" 
-                onClick={handleNormalizeAllNames}
-                disabled={employees.length === 0}
-                title="Chuẩn hóa toàn bộ họ tên thụ hưởng sang IN HOA KHÔNG DẤU (Khuyến nghị cho cổng Vietcombank & VIB)"
-                style={{ 
-                  flex: '1 1 auto',
-                  height: '38px', 
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderColor: 'var(--status-warning-border)', 
-                  background: 'var(--status-warning-bg)',
-                  color: 'var(--status-warning)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Sparkles size={15} style={{ color: 'var(--status-warning)' }} />
-                <span>Chuẩn hóa Tên (IN HOA)</span>
-              </button>
-
-              <button 
-                type="button"
-                className="btn-outline" 
-                onClick={handleBulkFillMissingBank}
-                disabled={employees.length === 0}
-                title="Gán nhanh ngân hàng mặc định (Vietcombank) cho các dòng đang bị trống ngân hàng"
-                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <CheckCircle size={15} style={{ color: 'var(--green)' }} />
-                <span>Gán NH dòng trống</span>
-              </button>
-
-              <button 
-                type="button"
-                className="btn-outline" 
-                onClick={handleAddManualRow}
-                style={{ height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Plus size={15} />
-                <span>Thêm nhân viên</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* MEMO CONFIGURATION ROW */}
-        <div className="form-group" style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border-default)', paddingTop: '1rem' }}>
-          <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Nội dung chuyển khoản mặc định ({bankTemplate === 'vib' ? 'MyVIB' : 'Vietcombank'})</span>
-            <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Các biến hỗ trợ: &#123;ten_nhan_vien&#125;, &#123;thang_luong&#125;, &#123;bo_phan&#125;</span>
-          </label>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input 
               type="text" 
-              className="form-control" 
               placeholder={bankTemplate === 'vib' ? "VD: KINGS GRILL thanh toan luong {ten_nhan_vien} {thang_luong}" : "VD: KG LUONG NV T{thang_luong}"}
               value={bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate}
               onChange={e => {
@@ -1391,10 +1266,11 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   setVcbMemoTemplate(e.target.value);
                 }
               }}
-              style={{ flexGrow: 1 }}
+              style={{ flex: '1 1 280px' }}
             />
             <button 
-              className="btn-outline"
+              type="button"
+              className="primary"
               onClick={() => {
                 if (confirm('Bạn có muốn áp dụng nội dung mẫu này cho toàn bộ dòng hiện có?')) {
                   const templateToUse = bankTemplate === 'vib' ? defaultMemoTemplate : vcbMemoTemplate;
@@ -1415,93 +1291,103 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                 }
               }}
             >
-              Áp dụng tất cả
+              Áp dụng cho toàn bảng
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* TECHNICAL WARNING FOR VIETCOMBANK */}
-      {bankTemplate === 'vcb' && (
-        <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Info size={16} />
-            <span>Thông báo định dạng Vietcombank (.xls / .xlsx)</span>
-          </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.45 }}>
-            Do giới hạn kỹ thuật phía client, file xuất ra từ webapp sẽ có định dạng hiện đại **.xlsx**. Nếu trang tải file của Vietcombank báo lỗi hoặc từ chối do bắt buộc định dạng **.xls** cũ, bạn chỉ cần mở file đã tải bằng ứng dụng Excel trên máy tính, bấm **File &rarr; Save As** và chọn lưu lại dưới định dạng **Excel 97-2003 Workbook (*.xls)** là có thể upload bình thường.
-          </p>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between' }}>
+            <span>Biến hỗ trợ: <code>&#123;ten_nhan_vien&#125;</code>, <code>&#123;thang_luong&#125;</code>, <code>&#123;bo_phan&#125;</code></span>
+            {bankTemplate === 'vcb' && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--accent-primary)' }}>
+                <Info size={13} />
+                Nếu cổng VCB yêu cầu định dạng .xls cũ, mở file .xlsx bằng Excel rồi Save As *.xls.
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* DATA VALIDATION & ERROR REPORT PANEL */}
+      {/* COMPACT VALIDATION BANNER */}
       {stats.invalidCount > 0 && (
-        <div className="card panel" style={{ marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: 'var(--red)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={18} />
-            <span>Phát hiện {stats.invalidCount} lỗi dữ liệu chuyển khoản</span>
-          </h3>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)', lineHeight: 1.4 }}>
-            Vui lòng kiểm tra các dòng bị lỗi đỏ dưới đây và cập nhật lại thông tin tài khoản, hoặc sửa ngân hàng tương ứng để đạt điều kiện xuất file.
-          </p>
+        <div style={{
+          marginBottom: '1rem',
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--status-danger-bg)',
+          border: '1px solid var(--status-danger-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-danger)', fontSize: '0.82rem', fontWeight: 600 }}>
+            <AlertTriangle size={16} />
+            <span>Phát hiện {stats.invalidCount} dòng thiếu thông tin hoặc chưa khớp mã ngân hàng {bankTemplate.toUpperCase()}.</span>
+          </div>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => setTableFilter(tableFilter === 'invalid' ? 'all' : 'invalid')}
+            style={{ height: '32px', padding: '0 10px', fontSize: '0.76rem', borderColor: 'var(--status-danger)', color: 'var(--status-danger)' }}
+          >
+            {tableFilter === 'invalid' ? 'Hiện tất cả' : 'Lọc dòng cần sửa'}
+          </button>
         </div>
       )}
 
       {/* TABLE VIEW OF ENTRIES */}
-      <div className="card panel" style={{ padding: '1rem 0', background: 'var(--panel-bg)', overflow: 'visible' }}>
-        <div style={{ padding: '0 1.25rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>📋 Preview danh sách xuất file ({filteredEmployees.length}/{employees.length})</h2>
-            <span style={{ fontSize: '0.78rem', opacity: 0.6, fontStyle: 'italic' }}>
-              * Ghi từ hàng {bankTemplate === 'vib' ? '5' : '2'} của Sheet
-            </span>
+      <div className="card panel" style={{ padding: '1rem 0', overflow: 'visible' }}>
+        <div style={{ padding: '0 1.15rem', marginBottom: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h2 className="studio-section-title" style={{ margin: 0 }}>
+              <FileSpreadsheet size={17} color="var(--accent-primary)" />
+              Danh sách chuyển khoản ({filteredEmployees.length}/{employees.length})
+            </h2>
+            <Badge variant="neutral">Ghi từ hàng {bankTemplate === 'vib' ? '5' : '2'}</Badge>
           </div>
 
           {employees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', width: '210px' }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+              <div className="studio-search-box" style={{ minWidth: '210px' }}>
+                <Search size={14} />
                 <input
                   type="text"
                   placeholder="Tìm tên, số TK, ngân hàng..."
                   value={tableSearch}
                   onChange={e => setTableSearch(e.target.value)}
-                  style={{ height: '32px', fontSize: '12px', paddingLeft: '30px', paddingRight: '24px' }}
                 />
                 {tableSearch && (
                   <button
                     type="button"
                     onClick={() => setTableSearch('')}
-                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
+                    aria-label="Xóa tìm kiếm"
+                    style={{ position: 'absolute', right: '6px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', height: 'auto', minHeight: 'auto' }}
                   >
-                    ✕
+                    <X size={13} />
                   </button>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
+              <div className="studio-seg-bar">
                 <button
                   type="button"
-                  className={`filter-tag ${tableFilter === 'all' ? 'active' : ''}`}
+                  className={tableFilter === 'all' ? 'active' : ''}
                   onClick={() => setTableFilter('all')}
-                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
                 >
                   Tất cả ({stats.total})
                 </button>
                 <button
                   type="button"
-                  className={`filter-tag ${tableFilter === 'valid' ? 'active' : ''}`}
+                  className={tableFilter === 'valid' ? 'active' : ''}
                   onClick={() => setTableFilter('valid')}
-                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
                 >
-                  ✅ Hợp lệ ({stats.validCount})
+                  Hợp lệ ({stats.validCount})
                 </button>
                 <button
                   type="button"
-                  className={`filter-tag ${tableFilter === 'invalid' ? 'active' : ''}`}
+                  className={tableFilter === 'invalid' ? 'active' : ''}
                   onClick={() => setTableFilter('invalid')}
-                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
                 >
-                  ⚠️ Cần sửa ({stats.invalidCount})
+                  Cần sửa ({stats.invalidCount})
                 </button>
               </div>
             </div>
@@ -1510,15 +1396,15 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
         {employees.length === 0 ? (
           <EmptyState 
-            icon={<FileSpreadsheet size={32} />}
+            icon={<FileSpreadsheet size={30} />}
             title="Chưa có dữ liệu chuyển tiền"
-            description="Hãy nạp dữ liệu từ module Phiếu Lương hiện tại hoặc import file excel để bắt đầu tạo hồ sơ chuyển khoản."
-            actionLabel="Lấy từ Phiếu Lương"
+            description="Nạp danh sách trực tiếp từ module Bảng Lương hoặc nhập file Excel/CSV để bắt đầu đối soát và xuất file ngân hàng."
+            actionLabel="Lấy từ Bảng lương"
             onAction={handleLoadFromPayroll}
           />
         ) : isMobileScreen ? (
           /* Mobile Card list view */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0 1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', padding: '0 1rem' }}>
             {filteredEmployees.map((emp, idx) => {
               const hasSelector = showBankSelectorForId === emp.id;
 
@@ -1526,78 +1412,71 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                 <div 
                   key={emp.id} 
                   style={{ 
-                    background: 'rgba(255, 255, 255, 0.01)', 
-                    border: '1px solid rgba(255, 255, 255, 0.05)', 
-                    borderRadius: '12px', 
-                    padding: '1rem', 
+                    background: 'var(--bg-subtle)', 
+                    border: `1px solid ${emp.isValid ? 'var(--border-default)' : 'var(--status-danger-border)'}`, 
+                    borderRadius: 'var(--radius-md)', 
+                    padding: '0.9rem', 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    gap: '0.75rem',
+                    gap: '0.65rem',
                     position: 'relative'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>#{idx + 1}</span>
+                    <span style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>#{idx + 1}</span>
                     {emp.isValid ? (
-                      <span style={{ color: 'var(--green)', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '12px' }}>
-                        <CheckCircle size={10} /> Hợp lệ
-                      </span>
+                      <Badge variant="success">Hợp lệ</Badge>
                     ) : (
-                      <span 
-                        title={emp.errors.join('\n')}
-                        style={{ color: 'var(--red)', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(239, 68, 68, 0.08)', padding: '2px 8px', borderRadius: '12px' }}
-                      >
-                        <XCircle size={10} /> Lỗi
-                      </span>
+                      <Badge variant="danger">Lỗi</Badge>
                     )}
                   </div>
 
                   <div>
                     {bankTemplate === 'vcb' ? (
                       <>
-                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{normalizeVietnameseName(emp.name)}</h4>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', fontStyle: 'italic' }}>Tên gốc: {emp.name}</span>
+                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{normalizeVietnameseName(emp.name)}</h4>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'block' }}>Tên gốc: {emp.name}</span>
                       </>
                     ) : (
-                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{emp.name}</h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{emp.name}</h4>
                     )}
                     {emp.source === 'payroll' && (
-                      <span className="badge" style={{ display: 'inline-block', fontSize: '9px', padding: '1px 4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--green)', borderRadius: '4px', marginTop: '2px' }}>
-                        Phiếu lương
-                      </span>
+                      <div style={{ marginTop: '4px' }}>
+                        <Badge variant="info">Từ Phiếu lương</Badge>
+                      </div>
                     )}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.82rem' }}>
                     <div>
-                      <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Số tài khoản:</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{emp.accountNo || <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Trống</span>}</span>
+                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Số tài khoản</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{emp.accountNo || <span style={{ color: 'var(--status-danger)' }}>Trống</span>}</span>
                     </div>
-                    <div>
-                      <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Số tiền:</span>
-                      <span style={{ fontWeight: 700, color: 'var(--cyan)' }}>{emp.amount.toLocaleString('vi-VN')} đ</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Số tiền</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--accent-primary)' }}>{emp.amount.toLocaleString('vi-VN')} đ</span>
                     </div>
                   </div>
 
                   {bankTemplate === 'vcb' && (emp.idNo || emp.refNo) && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '4px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', borderTop: '1px solid var(--border-default)', paddingTop: '6px' }}>
                       {emp.idNo && (
                         <div>
-                          <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>CMND/CCCD:</span>
+                          <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>CMND/CCCD</span>
                           <span>{emp.idNo}</span>
                         </div>
                       )}
                       {emp.refNo && (
                         <div>
-                          <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Số Ref:</span>
+                          <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Số Ref</span>
                           <span>{emp.refNo}</span>
                         </div>
                       )}
                     </div>
                   )}
 
-                  <div style={{ fontSize: '0.85rem' }}>
-                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Ngân hàng nhận:</span>
+                  <div style={{ fontSize: '0.82rem' }}>
+                    <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Ngân hàng nhận</span>
                     <div 
                       onClick={() => {
                         setShowBankSelectorForId(emp.id);
@@ -1607,18 +1486,19 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                         display: 'flex', 
                         justifyContent: 'space-between', 
                         alignItems: 'center', 
-                        padding: '6px 10px', 
-                        background: 'rgba(255,255,255,0.02)', 
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        borderRadius: '6px',
+                        padding: '8px 10px', 
+                        minHeight: '40px',
+                        background: 'var(--bg-surface)', 
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         marginTop: '4px'
                       }}
                     >
-                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {emp.bankCodeName || <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Chưa chọn ngân hàng</span>}
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+                        {emp.bankCodeName || <span style={{ color: 'var(--status-danger)' }}>Chưa chọn ngân hàng</span>}
                       </span>
-                      <ChevronDown size={14} style={{ opacity: 0.5 }} />
+                      <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
                     </div>
                     
                     {hasSelector && (
@@ -1633,22 +1513,22 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                           background: 'var(--bg-elevated)', 
                           border: '1px solid var(--border-strong)', 
                           boxShadow: 'var(--shadow-lg)',
-                          borderRadius: '8px',
+                          borderRadius: 'var(--radius-md)',
                           padding: '8px',
-                          maxHeight: '200px',
+                          maxHeight: '220px',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '6px'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '4px 8px' }}>
-                          <Search size={12} style={{ opacity: 0.5 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '4px 8px' }}>
+                          <Search size={13} style={{ color: 'var(--text-muted)' }} />
                           <input 
                             type="text" 
                             placeholder="Tìm ngân hàng..."
                             value={bankSearchQuery}
                             onChange={e => setBankSearchQuery(e.target.value)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none', height: '30px', padding: 0 }}
                             autoFocus
                           />
                         </div>
@@ -1665,12 +1545,13 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                                 background: 'transparent', 
                                 border: 'none', 
                                 color: 'var(--text-primary)', 
-                                fontSize: '0.7rem',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
+                                fontSize: '0.76rem',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                justifyContent: 'flex-start'
                               }}
                             >
-                              <strong>{bank.codeName}</strong> - <span style={{ opacity: 0.7 }}>{bank.fullName}</span>
+                              <strong>{bank.codeName}</strong> — <span style={{ color: 'var(--text-muted)' }}>{bank.fullName}</span>
                             </button>
                           ))}
                         </div>
@@ -1678,32 +1559,36 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     )}
                   </div>
 
-                  <div style={{ fontSize: '0.85rem' }}>
-                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>Nội dung chuyển:</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{emp.memo}</span>
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Nội dung chuyển</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{emp.memo}</span>
                   </div>
 
                   {!emp.isValid && (
-                    <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)', borderRadius: '6px', padding: '6px 8px', fontSize: '0.75rem', color: 'var(--red)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ background: 'var(--status-danger-bg)', border: '1px solid var(--status-danger-border)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', fontSize: '0.75rem', color: 'var(--status-danger)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       {emp.errors.map((err, errIdx) => (
                         <span key={errIdx}>• {err}</span>
                       ))}
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                     <button 
+                      type="button"
                       className="btn-outline" 
                       onClick={() => handleEditRowClick(emp)}
-                      style={{ flexGrow: 1, fontSize: '0.8rem', padding: '6px', height: '32px' }}
+                      style={{ flexGrow: 1 }}
                     >
+                      <Edit2 size={14} />
                       Sửa
                     </button>
                     <button 
+                      type="button"
                       className="btn-outline" 
                       onClick={() => handleDeleteRow(emp.id)}
-                      style={{ flexGrow: 1, fontSize: '0.8rem', padding: '6px', height: '32px', color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                      style={{ flexGrow: 1, color: 'var(--status-danger)', borderColor: 'var(--status-danger-border)' }}
                     >
+                      <Trash2 size={14} />
                       Xóa
                     </button>
                   </div>
@@ -1715,20 +1600,20 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
           <div style={{ overflowX: 'auto', position: 'relative' }}>
             
             {/* Desktop Table View */}
-            <table className="emp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '50px' }}>STT</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Người nhận (Gốc)</th>
-                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>Tên xuất file (IN HOA)</th>}
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Số tài khoản</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Số tiền</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nội dung</th>
-                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>CMND</th>}
-                  {bankTemplate === 'vcb' && <th style={{ padding: '12px 16px', textAlign: 'left' }}>Ref</th>}
-                  <th style={{ padding: '12px 16px', textAlign: 'left', width: '220px' }}>Ngân hàng xuất</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Trạng thái</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center', width: '90px' }}>Thao tác</th>
+                <tr>
+                  <th style={{ padding: '10px 14px', textAlign: 'center', width: '50px' }}>STT</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left' }}>Người nhận (Gốc)</th>
+                  {bankTemplate === 'vcb' && <th style={{ padding: '10px 14px', textAlign: 'left' }}>Tên xuất file (IN HOA)</th>}
+                  <th style={{ padding: '10px 14px', textAlign: 'left' }}>Số tài khoản</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Số tiền</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left' }}>Nội dung</th>
+                  {bankTemplate === 'vcb' && <th style={{ padding: '10px 14px', textAlign: 'left' }}>CMND</th>}
+                  {bankTemplate === 'vcb' && <th style={{ padding: '10px 14px', textAlign: 'left' }}>Ref</th>}
+                  <th style={{ padding: '10px 14px', textAlign: 'left', width: '220px' }}>Ngân hàng xuất</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center', width: '100px' }}>Trạng thái</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center', width: '90px' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -1736,73 +1621,78 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                   const hasSelector = showBankSelectorForId === emp.id;
                   
                   return (
-                    <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: emp.isValid ? 'transparent' : 'rgba(239, 68, 68, 0.02)' }}>
-                      <td style={{ padding: '12px 16px', color: 'var(--muted)' }}>{idx + 1}</td>
+                    <tr key={emp.id} style={{ background: emp.isValid ? 'transparent' : 'var(--status-danger-bg)' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>{idx + 1}</td>
                       
-                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>
+                      <td style={{ padding: '8px 10px', fontWeight: 600 }}>
                         <input
                           type="text"
                           value={emp.name}
                           onChange={e => handleInlineFieldChange(emp.id, 'name', e.target.value)}
                           style={{
-                            height: '32px',
+                            height: '34px',
                             fontWeight: 600,
-                            fontSize: '0.84rem',
+                            fontSize: '0.83rem',
                             minWidth: '145px'
                           }}
                         />
-                        {emp.source === 'payroll' && <span className="badge" style={{ display: 'inline-block', fontSize: '10px', padding: '1px 4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--green)', borderRadius: '4px', marginTop: '2px' }}>Phiếu lương</span>}
+                        {emp.source === 'payroll' && (
+                          <div style={{ marginTop: '3px' }}>
+                            <Badge variant="info">Phiếu lương</Badge>
+                          </div>
+                        )}
                       </td>
 
                       {bankTemplate === 'vcb' && (
-                        <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--cyan)' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.82rem' }}>
                           {normalizeVietnameseName(emp.name)}
                         </td>
                       )}
 
-                      <td style={{ padding: '8px 12px' }}>
+                      <td style={{ padding: '8px 10px' }}>
                         <input
                           type="text"
                           value={emp.accountNo}
                           placeholder="Nhập số TK..."
                           onChange={e => handleInlineFieldChange(emp.id, 'accountNo', e.target.value)}
                           style={{
-                            height: '32px',
+                            height: '34px',
                             fontFamily: 'var(--font-mono)',
-                            fontWeight: 700,
+                            fontWeight: 600,
                             fontSize: '0.82rem',
-                            borderColor: !emp.accountNo ? 'rgba(239, 68, 68, 0.45)' : 'var(--border)',
+                            borderColor: !emp.accountNo ? 'var(--status-danger)' : 'var(--border-default)',
                             minWidth: '135px'
                           }}
                         />
                       </td>
 
-                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                      <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                         <input
                           type="text"
                           value={emp.amount ? emp.amount.toLocaleString('vi-VN') : ''}
                           placeholder="0"
                           onChange={e => handleInlineFieldChange(emp.id, 'amount', e.target.value)}
                           style={{
-                            height: '32px',
+                            height: '34px',
                             textAlign: 'right',
+                            fontFamily: 'var(--font-mono)',
+                            fontVariantNumeric: 'tabular-nums',
                             fontWeight: 700,
-                            color: 'var(--primary)',
+                            color: 'var(--accent-primary)',
                             fontSize: '0.84rem',
                             minWidth: '115px'
                           }}
                         />
                       </td>
 
-                      <td style={{ padding: '8px 12px' }}>
+                      <td style={{ padding: '8px 10px' }}>
                         <input
                           type="text"
                           value={emp.memo}
                           onChange={e => handleInlineFieldChange(emp.id, 'memo', e.target.value)}
                           style={{
-                            height: '32px',
+                            height: '34px',
                             fontSize: '0.8rem',
-                            color: 'var(--text)',
                             minWidth: '170px'
                           }}
                         />
@@ -1810,15 +1700,15 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
                       {bankTemplate === 'vcb' && (
                         <>
-                          <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{emp.idNo || '-'}</td>
-                          <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{emp.refNo || '-'}</td>
+                          <td style={{ padding: '10px 14px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>{emp.idNo || '—'}</td>
+                          <td style={{ padding: '10px 14px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>{emp.refNo || '—'}</td>
                         </>
                       )}
 
                       {/* Bank selection dropdown */}
-                      <td style={{ padding: '12px 16px', position: 'relative' }}>
+                      <td style={{ padding: '8px 10px', position: 'relative' }}>
                         <div 
-                          className={`form-control select-trigger ${!emp.bankCodeName ? 'error' : ''}`}
+                          className={`select-trigger ${!emp.bankCodeName ? 'error' : ''}`}
                           onClick={() => {
                             setShowBankSelectorForId(emp.id);
                             setBankSearchQuery('');
@@ -1827,18 +1717,19 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                             display: 'flex', 
                             justifyContent: 'space-between', 
                             alignItems: 'center', 
-                            padding: '6px 10px', 
-                            background: 'rgba(255,255,255,0.02)', 
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: '6px',
+                            height: '34px',
+                            padding: '0 10px', 
+                            background: 'var(--bg-subtle)', 
+                            border: `1px solid ${!emp.bankCodeName ? 'var(--status-danger)' : 'var(--border-default)'}`,
+                            borderRadius: 'var(--radius-sm)',
                             cursor: 'pointer',
-                            fontSize: '0.85rem'
+                            fontSize: '0.8rem'
                           }}
                         >
-                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                            {emp.bankCodeName || <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Chưa chọn ngân hàng</span>}
+                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+                            {emp.bankCodeName || <span style={{ color: 'var(--status-danger)' }}>Chưa chọn ngân hàng</span>}
                           </span>
-                          <ChevronDown size={14} style={{ opacity: 0.5 }} />
+                          <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                         </div>
 
                         {hasSelector && (
@@ -1847,13 +1738,13 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                             style={{ 
                               position: 'absolute', 
                               top: '100%', 
-                              left: '12px', 
-                              right: '12px', 
+                              left: '10px', 
+                              right: '10px', 
                               zIndex: 1000, 
                               background: 'var(--bg-elevated)', 
                               border: '1px solid var(--border-strong)', 
                               boxShadow: 'var(--shadow-lg)',
-                              borderRadius: '8px',
+                              borderRadius: 'var(--radius-md)',
                               padding: '8px',
                               maxHeight: '280px',
                               display: 'flex',
@@ -1861,14 +1752,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                               gap: '6px'
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '4px 8px' }}>
-                              <Search size={14} style={{ opacity: 0.5 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '4px 8px' }}>
+                              <Search size={14} style={{ color: 'var(--text-muted)' }} />
                               <input 
                                 type="text" 
                                 placeholder="Tìm mã hoặc tên..."
                                 value={bankSearchQuery}
                                 onChange={e => setBankSearchQuery(e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none' }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none', height: '28px', padding: 0 }}
                                 autoFocus
                               />
                             </div>
@@ -1881,58 +1772,60 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                                   style={{ 
                                     width: '100%', 
                                     textAlign: 'left', 
+                                    justifyContent: 'flex-start',
                                     padding: '6px 8px', 
+                                    height: 'auto',
                                     background: 'transparent', 
                                     border: 'none', 
-                                    color: 'var(--text)', 
-                                    fontSize: '0.75rem',
-                                    borderRadius: '4px',
+                                    color: 'var(--text-primary)', 
+                                    fontSize: '0.76rem',
+                                    borderRadius: 'var(--radius-sm)',
                                     cursor: 'pointer'
                                   }}
-                                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                 >
-                                  <strong>{bank.codeName}</strong> - <span style={{ opacity: 0.7 }}>{bank.fullName}</span>
+                                  <strong>{bank.codeName}</strong> — <span style={{ color: 'var(--text-muted)' }}>{bank.fullName}</span>
                                 </button>
                               ))}
                               {filteredBanks.length === 0 && (
-                                <span style={{ fontSize: '0.75rem', opacity: 0.5, textAlign: 'center', display: 'block', padding: '8px' }}>Không tìm thấy ngân hàng.</span>
+                                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textAlign: 'center', display: 'block', padding: '8px' }}>Không tìm thấy ngân hàng.</span>
                               )}
                             </div>
                           </div>
                         )}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                         {emp.isValid ? (
-                          <span style={{ color: 'var(--green)', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '12px' }}>
-                            <CheckCircle size={12} /> Hợp lệ
-                          </span>
+                          <Badge variant="success">Hợp lệ</Badge>
                         ) : (
-                          <span 
-                            title={emp.errors.join('\n')}
-                            style={{ color: 'var(--red)', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(239, 68, 68, 0.08)', padding: '2px 8px', borderRadius: '12px', cursor: 'help' }}
-                          >
-                            <XCircle size={12} /> Bị lỗi
+                          <span title={emp.errors.join('\n')} style={{ cursor: 'help' }}>
+                            <Badge variant="danger">
+                              <XCircle size={11} style={{ marginRight: '3px' }} />
+                              Lỗi
+                            </Badge>
                           </span>
                         )}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                           <button 
+                            type="button"
                             className="btn-outline" 
                             onClick={() => handleEditRowClick(emp)}
-                            style={{ padding: '4px 8px', minWidth: '0', fontSize: '11px', height: '28px' }}
+                            aria-label="Sửa dòng"
+                            style={{ padding: '0 8px', minWidth: '32px', height: '32px' }}
                           >
-                            <Edit2 size={12} />
+                            <Edit2 size={13} />
                           </button>
                           <button 
+                            type="button"
                             className="btn-outline" 
                             onClick={() => handleDeleteRow(emp.id)}
-                            style={{ padding: '4px 8px', minWidth: '0', fontSize: '11px', height: '28px', color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                            aria-label="Xóa dòng"
+                            style={{ padding: '0 8px', minWidth: '32px', height: '32px', color: 'var(--status-danger)', borderColor: 'var(--status-danger-border)' }}
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -1947,29 +1840,33 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       {/* MODAL FOR BULK DATA PASTE */}
       {showBulkModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="card panel modal-box" style={{ maxWidth: '640px', width: '100%', padding: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>📋 Dán dữ liệu hàng loạt</span>
-              <button onClick={() => setShowBulkModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
-            </h3>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(15, 28, 42, 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div className="card panel modal-box" style={{ maxWidth: '640px', width: '100%', padding: '1.35rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <h3 className="studio-section-title" style={{ margin: 0 }}>
+                <ClipboardCheck size={18} color="var(--accent-primary)" />
+                Dán dữ liệu hàng loạt (Copy từ Excel)
+              </h3>
+              <button type="button" className="btn-ghost" onClick={() => setShowBulkModal(false)} aria-label="Đóng">
+                <X size={16} />
+              </button>
+            </div>
             
-            <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem', lineHeight: 1.4 }}>
-              Dán các cột dữ liệu phân cách bằng phím Tab (copy từ Excel) theo định dạng thứ tự: <br />
-              <strong style={{ color: 'var(--cyan)' }}>Tên nhân viên | Số tài khoản | Số tiền chuyển | Nội dung (tùy chọn) | Ngân hàng (tùy chọn)</strong>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.9rem', lineHeight: 1.5 }}>
+              Dán các cột phân cách bằng phím Tab theo thứ tự:<br />
+              <strong style={{ color: 'var(--accent-primary)' }}>Tên nhân viên | Số tài khoản | Số tiền chuyển | Nội dung (tùy chọn) | Ngân hàng (tùy chọn)</strong>
             </p>
 
             <textarea 
-              className="form-control"
               placeholder="VD: Nguyen Van A	0000000001	100000	Thanh toan luong	(ACB) Á Châu"
-              style={{ width: '100%', height: '200px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '1rem', background: 'var(--surface-input)', color: 'var(--text)' }}
+              style={{ width: '100%', height: '200px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', marginBottom: '1rem', padding: '10px' }}
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
             />
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button className="btn-outline" onClick={() => setShowBulkModal(false)}>Hủy bỏ</button>
-              <button className="primary" onClick={handleBulkPasteSave} disabled={!bulkText.trim()}>Nạp dữ liệu</button>
+              <button type="button" className="btn-outline" onClick={() => setShowBulkModal(false)}>Hủy bỏ</button>
+              <button type="button" className="primary" onClick={handleBulkPasteSave} disabled={!bulkText.trim()}>Nạp dữ liệu</button>
             </div>
           </div>
         </div>
@@ -1977,54 +1874,55 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
 
       {/* FORM MODAL FOR ADD/EDIT EMPLOYEE */}
       {activeEmployeeEdit && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="card panel modal-box" style={{ maxWidth: '480px', width: '100%', padding: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', overflow: 'visible' }}>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{isAdding ? '➕ Thêm nhân viên chuyển tiền' : '✏️ Sửa thông tin nhân viên'}</span>
-              <button onClick={() => setActiveEmployeeEdit(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
-            </h3>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(15, 28, 42, 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div className="card panel modal-box" style={{ maxWidth: '480px', width: '100%', padding: '1.35rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', overflow: 'visible' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 className="studio-section-title" style={{ margin: 0 }}>
+                {isAdding ? <Plus size={18} color="var(--accent-primary)" /> : <Edit2 size={17} color="var(--accent-primary)" />}
+                {isAdding ? 'Thêm nhân viên chuyển tiền' : 'Sửa thông tin chuyển tiền'}
+              </h3>
+              <button type="button" className="btn-ghost" onClick={() => setActiveEmployeeEdit(null)} aria-label="Đóng">
+                <X size={16} />
+              </button>
+            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
-              <div className="form-group">
-                <label className="form-label">Họ và tên người nhận</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
+              <div className="field">
+                <label>Họ và tên người nhận</label>
                 <input 
                   type="text" 
-                  className="form-control" 
                   value={activeEmployeeEdit.name}
                   onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, name: e.target.value }))}
                 />
                 {bankTemplate === 'vcb' && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--cyan)' }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--accent-primary)' }}>
                     Sẽ xuất file: {normalizeVietnameseName(activeEmployeeEdit.name)}
                   </span>
                 )}
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Số tài khoản nhận</label>
+              <div className="field">
+                <label>Số tài khoản nhận</label>
                 <input 
                   type="text" 
-                  className="form-control" 
                   value={activeEmployeeEdit.accountNo}
                   onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, accountNo: e.target.value.replace(/\s+/g, '') }))}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Số tiền chuyển (đ)</label>
+              <div className="field">
+                <label>Số tiền chuyển (đ)</label>
                 <input 
                   type="number" 
-                  className="form-control" 
                   value={activeEmployeeEdit.amount || ''}
                   onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, amount: Number(e.target.value) || 0 }))}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Nội dung chuyển khoản</label>
+              <div className="field">
+                <label>Nội dung chuyển khoản</label>
                 <input 
                   type="text" 
-                  className="form-control" 
                   value={activeEmployeeEdit.memo}
                   onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, memo: bankTemplate === 'vcb' ? e.target.value.toUpperCase() : e.target.value }))}
                 />
@@ -2033,49 +1931,44 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               {/* Extra VCB columns in modal */}
               {bankTemplate === 'vcb' && (
                 <>
-                  <div className="form-group">
-                    <label className="form-label">Số CMND/CCCD (D)</label>
+                  <div className="field">
+                    <label>Số CMND/CCCD (D)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       value={activeEmployeeEdit.idNo || ''}
                       onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, idNo: e.target.value }))}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Ngày cấp (E)</label>
+                  <div className="field">
+                    <label>Ngày cấp (E)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       value={activeEmployeeEdit.issuedDate || ''}
                       placeholder="VD: 15/06/2020"
                       onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, issuedDate: e.target.value }))}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Nơi cấp (F)</label>
+                  <div className="field">
+                    <label>Nơi cấp (F)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       value={activeEmployeeEdit.issuedPlace || ''}
                       placeholder="VD: CA HA NOI"
                       onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, issuedPlace: e.target.value }))}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Số Ref (B)</label>
+                  <div className="field">
+                    <label>Số Ref (B)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       value={activeEmployeeEdit.refNo || ''}
                       onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, refNo: e.target.value }))}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Địa chỉ người thụ hưởng (H)</label>
+                  <div className="field">
+                    <label>Địa chỉ người thụ hưởng (H)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       value={activeEmployeeEdit.address || ''}
                       onChange={e => setActiveEmployeeEdit(prev => ({ ...prev!, address: e.target.value }))}
                     />
@@ -2084,10 +1977,10 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               )}
 
               {/* Bank selector */}
-              <div className="form-group" style={{ position: 'relative' }}>
-                <label className="form-label">Ngân hàng nhận</label>
+              <div className="field" style={{ position: 'relative' }}>
+                <label>Ngân hàng nhận</label>
                 <div 
-                  className="form-control select-trigger"
+                  className="select-trigger"
                   onClick={() => {
                     setShowBankSelectorForId('active-edit');
                     setBankSearchQuery('');
@@ -2096,11 +1989,17 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
-                    cursor: 'pointer'
+                    height: '40px',
+                    padding: '0 12px',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontSize: '0.84rem'
                   }}
                 >
                   <span>{activeEmployeeEdit.bankCodeName || 'Chọn ngân hàng...'}</span>
-                  <ChevronDown size={16} />
+                  <ChevronDown size={15} />
                 </div>
 
                 {showBankSelectorForId === 'active-edit' && (
@@ -2115,7 +2014,7 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                       background: 'var(--bg-elevated)', 
                       border: '1px solid var(--border-strong)', 
                       boxShadow: 'var(--shadow-lg)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       padding: '8px',
                       maxHeight: '220px',
                       display: 'flex',
@@ -2123,14 +2022,14 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                       gap: '6px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '4px 8px' }}>
-                      <Search size={14} style={{ opacity: 0.5 }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '4px 8px' }}>
+                      <Search size={14} style={{ color: 'var(--text-muted)' }} />
                       <input 
                         type="text" 
                         placeholder="Tìm mã hoặc tên..."
                         value={bankSearchQuery}
                         onChange={e => setBankSearchQuery(e.target.value)}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none' }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', outline: 'none', height: '28px', padding: 0 }}
                         autoFocus
                       />
                     </div>
@@ -2143,18 +2042,18 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
                           style={{ 
                             width: '100%', 
                             textAlign: 'left', 
+                            justifyContent: 'flex-start',
                             padding: '6px 8px', 
+                            height: 'auto',
                             background: 'transparent', 
                             border: 'none', 
-                            color: 'var(--text)', 
-                            fontSize: '0.75rem',
-                            borderRadius: '4px',
+                            color: 'var(--text-primary)', 
+                            fontSize: '0.76rem',
+                            borderRadius: 'var(--radius-sm)',
                             cursor: 'pointer'
                           }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
-                          <strong>{bank.codeName}</strong> - <span style={{ opacity: 0.7 }}>{bank.fullName}</span>
+                          <strong>{bank.codeName}</strong> — <span style={{ color: 'var(--text-muted)' }}>{bank.fullName}</span>
                         </button>
                       ))}
                     </div>
@@ -2163,9 +2062,9 @@ export default function TransferFileTool({ showToast }: TransferFileToolProps) {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-              <button className="btn-outline" onClick={() => setActiveEmployeeEdit(null)}>Hủy</button>
-              <button className="primary" onClick={handleSaveActiveEdit}>Lưu thay đổi</button>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button type="button" className="btn-outline" onClick={() => setActiveEmployeeEdit(null)}>Hủy</button>
+              <button type="button" className="primary" onClick={handleSaveActiveEdit}>Lưu thay đổi</button>
             </div>
           </div>
         </div>

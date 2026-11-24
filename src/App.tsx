@@ -32,11 +32,14 @@ import {
   Home,
   ArrowRight,
   MoreHorizontal,
-  Printer
+  Printer,
+  RefreshCw,
+  Building2,
+  Clock
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, summarizeAttendanceForPayroll, type ProcessedRecord, type TimeRecord } from './processor';
-import { StatCard, EmptyState, GuidePanel, PageHeader, Badge, LoadingState } from './components/Shared';
+import { StatCard, EmptyState, PageHeader, Badge, LoadingState } from './components/Shared';
 import { CommandPalette } from './components/CommandPalette';
 import { allocateEqualSplit, escapeHtml, getLocalYMD, removeVietnameseAccents } from './utils/numberUtils';
 
@@ -1879,47 +1882,54 @@ function App() {
         {/* VIEW 1: ATTENDANCE PROCESSOR */}
         {currentView === 'attendance' && (
           <div className="screen active">
-            <div className="stitch-breadcrumb">
-              <span>F&amp;B HR SUITE</span>
-              <span>/</span>
-              <b>QUẢN LÝ CHẤM CÔNG &amp; THIẾT BỊ</b>
-            </div>
             <PageHeader
-              icon={<FileText size={26} />}
-              title="Quản Lý Chấm Công & Thiết Bị"
-              subtitle="Chuẩn hóa dữ liệu máy chấm công Hikvision, tự động gộp ca đêm (< 06:00 sáng về ca tối hôm trước) & đẩy thẳng sang bảng lương"
-              badgeText="Attendance Hub v3.0"
+              icon={<Calendar size={22} />}
+              title="Xử Lý Chấm Công & Phân Ca"
+              subtitle="Chuẩn hóa dữ liệu máy chấm công, tự động gộp ca đêm (< 06:00 sáng về ca tối hôm trước) và đẩy 1 chạm sang Bảng lương."
+              badgeText="Attendance Studio v4.0"
               badgeVariant="info"
+              actions={
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => setCurrentView('hikvision')}
+                  >
+                    <Cpu size={15} />
+                    <span>Máy Hikvision Cloud</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={handleDownloadTemplate}
+                  >
+                    <Download size={15} />
+                    <span>File mẫu Excel</span>
+                  </button>
+                  {processedRecords.length > 0 ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={handlePipeAttendanceToPayroll}
+                    >
+                      <ArrowRight size={15} />
+                      <span>Đẩy sang Bảng lương</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={handleFetchAndProcessFromSheet}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? <Loader2 className="loader" size={15} /> : <Sparkles size={15} />}
+                      <span>{isProcessing ? 'Đang đồng bộ...' : 'Nạp từ Google Sheet'}</span>
+                    </button>
+                  )}
+                </div>
+              }
             />
-            <div className="hub-subtab-row">
-              <div className="hub-subtab-bar">
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn active"
-                  onClick={() => setCurrentView('attendance')}
-                >
-                  <FileText size={15} />
-                  <span>Xử lý Chấm Công & Phân Ca</span>
-                </button>
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn"
-                  onClick={() => setCurrentView('hikvision')}
-                >
-                  <Cpu size={15} />
-                  <span>Máy Chấm Công Cloud (Hikvision)</span>
-                </button>
-              </div>
-              <div className="hub-subtab-meta">
-                <span>Kỳ đối soát: <strong style={{ color: 'var(--text-primary)' }}>Hiện hành</strong></span>
-                <span>•</span>
-                <span className="live-device-tag">
-                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
-                  Thiết bị: Trực tuyến (Ping 24ms)
-                </span>
-              </div>
-            </div>
-            <div className="head" style={{ marginBottom: '1.5rem' }}>
+            <div className="head" style={{ marginBottom: '1rem' }}>
               <div className="kpis">
                 <StatCard 
                   icon={<Users size={18} />} 
@@ -1952,26 +1962,6 @@ function App() {
               </div>
             </div>
 
-            {/* Instruction module */}
-            <GuidePanel 
-              title="Xử lý Chấm Công"
-              purpose="Tải tệp chấm công thô từ máy chấm công nhà hàng, tự động làm sạch, xử lý ca làm việc kéo dài qua đêm (ca đêm), nội suy lịch làm việc và xuất báo cáo chuẩn để tính lương."
-              steps={[
-                "Tải file chấm công thô định dạng Excel (.xlsx, .xls) hoặc tệp phẳng (.csv) lên hệ thống.",
-                "Hệ thống sẽ tự động quét, phân tích và chuẩn hóa tên nhân viên, các mốc thời gian vào/ra.",
-                "Hệ thống tự động phát hiện và xử lý ca đêm (mốc giờ sau 0h và trước 6h sáng được quy về ca tối của ngày hôm trước).",
-                "Tải file kết quả chuẩn hóa về máy hoặc chọn nút đồng bộ lên Google Sheet."
-              ]}
-              notes={[
-                "Dữ liệu thô phải có các cột cơ bản chứa tên nhân viên và thời gian Check-In/Check-Out rõ ràng.",
-                "Các mốc giờ đi làm muộn hoặc về sớm sẽ được giữ nguyên trạng để phục vụ tính lương phạt."
-              ]}
-              errors={[
-                "Lỗi 'Không đọc được file' -> Đảm bảo tệp của bạn không bị khóa password và có phần mở rộng đúng chuẩn.",
-                "Lỗi 'Thiếu cột dữ liệu bắt buộc' -> Hãy kiểm tra lại tiêu đề cột trong file Excel xem có trùng khớp không."
-              ]}
-            />
-
             {!file ? (
               <div 
                 className="card upload"
@@ -1983,12 +1973,12 @@ function App() {
                   <div className="file-icon">
                     <UploadCloud size={22} />
                   </div>
-                  <h2 style={{ fontSize: '1.15rem', marginBottom: '0.25rem' }}>Xử lý chấm công nhân viên</h2>
-                  <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-                    Chọn tải tệp thô từ máy tính hoặc đồng bộ dữ liệu trực tuyến từ Google Sheets
+                  <h2 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Chọn nguồn dữ liệu chấm công</h2>
+                  <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    Kéo thả file Excel/CSV từ máy tính hoặc lấy trực tiếp dữ liệu máy chấm công từ Google Sheets
                   </p>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', width: '100%', maxWidth: '640px', margin: '1rem auto 1.25rem', zIndex: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', width: '100%', maxWidth: '640px', margin: '1rem auto 1rem', zIndex: 10 }}>
                     {/* Option 1: Local file upload */}
                     <label 
                       style={{ 
@@ -1996,7 +1986,7 @@ function App() {
                         flexDirection: 'column', 
                         alignItems: 'center', 
                         gap: '8px', 
-                        padding: '18px 16px', 
+                        padding: '20px 16px', 
                         borderRadius: 'var(--radius-lg)', 
                         border: '1px solid var(--border-strong)', 
                         background: 'var(--bg-panel)', 
@@ -2007,12 +1997,12 @@ function App() {
                       }}
                       className="upload-source-card"
                     >
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: 'var(--radius-md)', background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <FileText size={20} />
                       </div>
-                      <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Tải file từ máy tính</strong>
+                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>Tải file từ máy tính</strong>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Nhận file thô Excel (.xlsx, .xls) hoặc CSV</span>
-                      <span className="btn-outline" style={{ marginTop: '6px', fontSize: '12px', height: '32px', padding: '0 14px', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', pointerEvents: 'none' }}>
+                      <span className="btn-outline" style={{ marginTop: '6px', fontSize: '12px', height: '34px', padding: '0 14px', borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', pointerEvents: 'none' }}>
                         Chọn tệp máy tính...
                       </span>
                       <input 
@@ -2025,71 +2015,59 @@ function App() {
                     </label>
 
                     {/* Option 2: Cloud Sync */}
-                    <div 
+                    <button
+                      type="button"
                       onClick={!isProcessing ? handleFetchAndProcessFromSheet : undefined}
+                      disabled={isProcessing}
                       style={{ 
+                        height: 'auto',
                         display: 'flex', 
                         flexDirection: 'column', 
                         alignItems: 'center', 
                         gap: '8px', 
-                        padding: '18px 16px', 
+                        padding: '20px 16px', 
                         borderRadius: 'var(--radius-lg)', 
-                        border: '1px solid var(--accent-primary)', 
+                        border: '2px solid var(--accent-primary)', 
                         background: 'var(--accent-primary-subtle)', 
                         cursor: isProcessing ? 'wait' : 'pointer',
-                        transition: 'border-color 140ms ease, transform 140ms ease',
                         textAlign: 'center',
                         boxShadow: 'var(--shadow-sm)'
                       }}
                       className="upload-source-card"
                     >
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: 'var(--radius-md)', background: 'var(--accent-primary)', color: 'var(--accent-contrast)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Sparkles size={20} />
                       </div>
-                      <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Đồng bộ từ Google Sheet</strong>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Lấy trực tiếp dữ liệu chấm công đám mây</span>
-                      <button 
-                        type="button" 
-                        className="primary" 
-                        disabled={isProcessing}
-                        style={{ marginTop: '6px', fontSize: '12px', padding: '0 14px', pointerEvents: 'none' }}
-                      >
+                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>Đồng bộ từ Google Sheet</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 400 }}>Lấy trực tiếp dữ liệu chấm công đám mây</span>
+                      <span className="lp-tile-cta is-primary" style={{ marginTop: '6px' }}>
                         {isProcessing ? (
                           <>
-                            <Loader2 className="loader" size={13} />
-                            Đang tải...
+                            <Loader2 className="loader" size={14} />
+                            <span>Đang tải...</span>
                           </>
                         ) : (
-                          'Nạp tự động Cloud'
+                          <span>Nạp tự động Cloud</span>
                         )}
-                      </button>
-                    </div>
+                      </span>
+                    </button>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center', flexWrap: 'wrap', zIndex: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', alignItems: 'center', flexWrap: 'wrap', zIndex: 10 }}>
                     <button
                       type="button"
+                      className="btn-ghost"
                       onClick={handleDownloadTemplate}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--blue)',
-                        textDecoration: 'underline',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: 500,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
+                      style={{ color: 'var(--accent-primary)', fontSize: '0.82rem' }}
                     >
-                      📥 Tải file excel mẫu (.xlsx)
+                      <Download size={14} />
+                      <span>Tải file Excel mẫu (.xlsx)</span>
                     </button>
-                    <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>•</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>🛡 Bảo mật cục bộ 100%</span>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>•</span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Xử lý cục bộ 100% — tự động gom ca đêm &lt; 06:00 sáng</span>
                   </div>
                 </div>
-                {errorMsg && <p style={{ color: '#ff5c7a', marginTop: '1rem', fontWeight: 500, zIndex: 5 }}>{errorMsg}</p>}
+                {errorMsg && <p style={{ color: 'var(--status-danger)', marginTop: '1rem', fontWeight: 600, zIndex: 5 }}>{errorMsg}</p>}
               </div>
             ) : (
               <div className="card panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem' }}>
@@ -2137,49 +2115,49 @@ function App() {
                       <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Xử lý hoàn tất ({processedRecords.length} dòng công)!</span>
                     </div>
                     
-                    <div className="actions-row" style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
+                    <div className="actions-row" style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
                       {/* Primary Action */}
                       <button 
                         className="primary" 
-                        style={{ height: '46px', padding: '0 1.75rem', background: 'linear-gradient(135deg, var(--green), #059669)', boxShadow: '0 0 20px rgba(48,231,151,.25)', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px' }} 
+                        style={{ height: '44px', padding: '0 1.4rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }} 
                         onClick={handleDownload}
                       >
-                        <Download size={18} />
+                        <Download size={16} />
                         <span>Tải File Kết Quả (.xlsx)</span>
                       </button>
 
                       {/* 1-Click Pipeline: Attendance -> Payroll */}
                       <button 
                         className="btn-outline" 
-                        style={{ height: '46px', padding: '0 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', borderColor: 'rgba(245, 158, 11, 0.45)', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--orange)', fontWeight: 700 }}
+                        style={{ height: '44px', padding: '0 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)', fontWeight: 700 }}
                         onClick={handlePipeAttendanceToPayroll}
                         title="Đẩy thẳng số ngày công & tổng giờ làm của từng nhân viên sang Module Tính Lương"
                       >
-                        <Sparkles size={16} />
-                        <span>⚡ Chuyển sang Tính Lương</span>
+                        <Sparkles size={15} />
+                        <span>Chuyển sang Bảng Lương</span>
                       </button>
 
                       {/* Secondary Action */}
                       <button 
                         className="btn-outline" 
-                        style={{ height: '46px', padding: '0 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', borderColor: 'rgba(34, 211, 238, 0.4)', background: 'rgba(34, 211, 238, 0.05)' }}
+                        style={{ height: '44px', padding: '0 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}
                         onClick={handleSyncAttendance}
                         disabled={isSyncingAttendance || attendanceSyncSuccess}
                       >
                         {isSyncingAttendance ? (
                           <>
-                            <Loader2 className="loader" size={16} />
+                            <Loader2 className="loader" size={15} />
                             <span>Đang lưu Cloud...</span>
                           </>
                         ) : attendanceSyncSuccess ? (
                           <>
-                            <CheckCircle size={16} color="var(--green)" />
-                            <span style={{ color: 'var(--green)' }}>Đã Lưu Google Sheet</span>
+                            <CheckCircle size={15} color="var(--status-success)" />
+                            <span style={{ color: 'var(--status-success)' }}>Đã Lưu Google Sheet</span>
                           </>
                         ) : (
                           <>
-                            <Send size={16} style={{ color: 'var(--cyan)' }} />
-                            <span>Lưu Cloud (Google Sheet)</span>
+                            <Send size={15} />
+                            <span>Lưu Google Sheet</span>
                           </>
                         )}
                       </button>
@@ -2188,9 +2166,10 @@ function App() {
                       <button 
                         className="btn-ghost" 
                         onClick={resetState}
-                        style={{ height: '46px', padding: '0 1.25rem', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+                        style={{ height: '44px', padding: '0 1rem', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}
                       >
-                        <span>🔄 Xử lý file khác</span>
+                        <RefreshCw size={14} />
+                        <span>Xử lý file khác</span>
                       </button>
                     </div>
 
@@ -2235,38 +2214,34 @@ function App() {
                             )}
                           </div>
 
-                          <div style={{ display: 'flex', gap: '4px' }}>
+                          <div className="studio-seg-bar">
                             <button 
                               type="button" 
-                              className={`filter-tag ${attendanceFilter === 'all' ? 'active' : ''}`}
+                              className={attendanceFilter === 'all' ? 'active' : ''}
                               onClick={() => { setAttendanceFilter('all'); setAttendancePage(1); }}
-                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
                               Tất cả
                             </button>
                             <button 
                               type="button" 
-                              className={`filter-tag ${attendanceFilter === 'night' ? 'active' : ''}`}
+                              className={attendanceFilter === 'night' ? 'active' : ''}
                               onClick={() => { setAttendanceFilter('night'); setAttendancePage(1); }}
-                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
-                              🌙 Ca đêm ({nightCount})
+                              Ca đêm ({nightCount})
                             </button>
                             <button 
                               type="button" 
-                              className={`filter-tag ${attendanceFilter === 'complete' ? 'active' : ''}`}
+                              className={attendanceFilter === 'complete' ? 'active' : ''}
                               onClick={() => { setAttendanceFilter('complete'); setAttendancePage(1); }}
-                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
-                              ✅ Đủ giờ ({processedCount})
+                              Đủ giờ ({processedCount})
                             </button>
                             <button 
                               type="button" 
-                              className={`filter-tag ${attendanceFilter === 'incomplete' ? 'active' : ''}`}
+                              className={attendanceFilter === 'incomplete' ? 'active' : ''}
                               onClick={() => { setAttendanceFilter('incomplete'); setAttendancePage(1); }}
-                              style={{ padding: '4px 10px', fontSize: '11.5px' }}
                             >
-                              ⚠️ Thiếu giờ ({daysCount - processedCount})
+                              Thiếu giờ ({daysCount - processedCount})
                             </button>
                           </div>
                         </div>
@@ -2320,16 +2295,16 @@ function App() {
                                     </td>
                                     <td>
                                       {isNight ? (
-                                        <Badge variant="purple">🌙 Ca đêm</Badge>
+                                        <Badge variant="purple">Ca đêm</Badge>
                                       ) : (
                                         <Badge variant="info">Ca ngày</Badge>
                                       )}
                                     </td>
                                     <td>
                                       {isComplete ? (
-                                        <Badge variant="success">✅ Đủ giờ</Badge>
+                                        <Badge variant="success">Đủ giờ</Badge>
                                       ) : (
-                                        <Badge variant="warning">⚠️ Thiếu giờ</Badge>
+                                        <Badge variant="warning">Thiếu giờ</Badge>
                                       )}
                                     </td>
                                   </tr>
@@ -2424,112 +2399,92 @@ function App() {
         {/* VIEW 2: VIETQR & BANK ACCOUNTS */}
         {currentView === 'vietqr' && (
           <div className="screen active">
-            <div className="stitch-breadcrumb">
-              <span>FINTECH &amp; CASHIER POS</span>
-              <span>/</span>
-              <b>VIETQR NAPAS 247 &amp; SPLIT BILL</b>
-            </div>
             <PageHeader
-              icon={<QrCode size={26} />}
-              title="VietQR & Quản Lý Thanh Toán"
-              subtitle="Tạo mã QR thanh toán động VietQR Napas247 & Công cụ chia tiền bàn tự động cho Kings Grill"
-              badgeText="Napas 247 Live"
+              icon={<QrCode size={22} />}
+              title="Thu Ngân VietQR & Chia Tiền Bàn"
+              subtitle="Tạo mã QR động chuẩn Napas 247, tách hóa đơn đều hoặc tùy chỉnh theo từng khách và in bill K80 tại quầy."
+              badgeText={`${banks.length} NH Napas 247`}
               badgeVariant="success"
+              actions={
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div className="studio-seg-bar" role="group" aria-label="Chế độ VietQR">
+                    <button
+                      type="button"
+                      className={vietQrViewMode === 'single' ? 'active' : ''}
+                      onClick={() => setVietQrViewMode('single')}
+                    >
+                      <QrCode size={14} />
+                      <span>QR Thanh toán đơn</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={vietQrViewMode === 'split' ? 'active' : ''}
+                      onClick={() => setVietQrViewMode('split')}
+                    >
+                      <Users size={14} />
+                      <span>Chia tiền bàn nhóm</span>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => setShowAddAccountForm(!showAddAccountForm)}
+                  >
+                    <Plus size={15} />
+                    <span>Thêm tài khoản</span>
+                  </button>
+                </div>
+              }
             />
-            <div className="hub-subtab-row">
-              <div className="hub-subtab-bar">
-                <button 
-                  type="button" 
-                  className={`hub-subtab-btn ${vietQrViewMode === 'single' ? 'active' : ''}`}
-                  onClick={() => setVietQrViewMode('single')}
-                >
-                  ⚡ Tạo QR Thanh Toán Đơn
-                </button>
-                <button 
-                  type="button" 
-                  className={`hub-subtab-btn ${vietQrViewMode === 'split' ? 'active' : ''}`}
-                  onClick={() => setVietQrViewMode('split')}
-                >
-                  ✂ Tách & Chia Tiền Bàn (Split Bill)
-                </button>
-              </div>
-              <div className="hub-subtab-meta">
-                <span>Chuẩn EMVCo Napas247</span>
-                <span>•</span>
-                <span className="live-device-tag">
-                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
-                  {banks.length} Ngân hàng kết nối
-                </span>
-              </div>
-            </div>
-            <div className="head" style={{ marginBottom: '1.5rem' }}>
+            <div className="head" style={{ marginBottom: '1rem' }}>
               <div className="kpis">
                 <StatCard 
                   icon={<Users size={18} />} 
                   label="Tài khoản đã lưu" 
                   value={savedAccounts.length} 
-                  subtext="Tài khoản đã được cấu hình"
+                  subtext="Sẵn sàng 1 chạm tạo QR"
                   hasData={savedAccounts.length > 0} 
                 />
                 <StatCard 
                   icon={<QrCode size={18} />} 
-                  label="QR đã tạo hôm nay" 
+                  label="QR tạo hôm nay" 
                   value={qrCreatedToday} 
-                  subtext="Mã QR tạo trong ngày"
+                  subtext="Mã QR phát sinh trong ngày"
                   hasData={totalTransactions > 0} 
                 />
                 <StatCard 
                   icon={<Activity size={18} />} 
                   label="Tổng giao dịch" 
                   value={totalTransactions} 
-                  subtext="Số lần xuất/tạo mã QR"
+                  subtext="Lịch sử tạo QR đã lưu"
                   hasData={totalTransactions > 0} 
                 />
                 <StatCard 
                   icon={<Wallet size={18} />} 
                   label="Tổng tiền nhận" 
-                  value={`${totalAmountReceived.toLocaleString('vi-VN')}đ`} 
+                  value={`${totalAmountReceived.toLocaleString('vi-VN')} ₫`} 
                   subtext="Tổng giá trị các mã QR"
                   hasData={totalTransactions > 0} 
                 />
               </div>
             </div>
 
-            {/* Instruction module */}
-            <GuidePanel 
-              title="VietQR & Tài khoản"
-              purpose="Tạo nhanh mã QR thanh toán động theo chuẩn Napas 247 của ngân hàng Việt Nam, cho phép khách hàng quét chuyển khoản điền sẵn số tài khoản, chủ tài khoản, số tiền và nội dung chuyển khoản tự động."
-              steps={[
-                "Lưu thông tin các số tài khoản ngân hàng thụ hưởng hay dùng tại mục 'Tài khoản của bạn' để không phải gõ lại.",
-                "Nhấp chọn tài khoản ngân hàng thụ hưởng mong muốn trong danh sách thẻ.",
-                "Nhập số tiền cần thanh toán và ghi chú nội dung chuyển khoản ở phần form bên dưới.",
-                "Ảnh QR tương ứng sẽ được tự động vẽ trực tiếp bên khung preview phải.",
-                "Chọn 'Tải ảnh QR', sao chép link hoặc bấm 'Lưu Cloud' để lưu lịch sử giao dịch lên bảng tính Google Sheet."
-              ]}
-              notes={[
-                "Họ tên chủ tài khoản viết hoa không dấu (ví dụ: NGUYEN VAN A).",
-                "VietQR được tạo động qua API mở VietQR và hoàn toàn miễn phí."
-              ]}
-              errors={[
-                "Lỗi ảnh QR không hiển thị -> Vui lòng kiểm tra lại kết nối mạng Internet hoặc kiểm tra tính hợp lệ của Số tài khoản."
-              ]}
-            />
-
             <div className="two-col">
               {/* LEFT COLUMN: Input Forms and Saved Accounts */}
               <div className="card panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '1rem' }}>
                   <div>
-                    <h2 style={{ margin: 0 }}>👥 Tài khoản của bạn</h2>
-                    <p className="sub" style={{ margin: '4px 0 0' }}>Quản lý và sử dụng tài khoản để tạo mã QR thanh toán nhanh.</p>
+                    <h2 style={{ margin: 0 }}>Tài khoản thụ hưởng</h2>
+                    <p className="sub" style={{ margin: '3px 0 0' }}>Chọn nhanh tài khoản để tạo mã VietQR thanh toán.</p>
                   </div>
                   <button 
-                    className="primary" 
-                    style={{ height: '40px', padding: '0 16px', flexShrink: 0 }}
+                    type="button"
+                    className="btn-outline" 
+                    style={{ height: '34px', padding: '0 12px', flexShrink: 0 }}
                     onClick={() => setShowAddAccountForm(!showAddAccountForm)}
                   >
-                    <Plus size={16} />
-                    Thêm tài khoản
+                    <Plus size={15} />
+                    <span>{showAddAccountForm ? 'Đóng form' : 'Thêm TK'}</span>
                   </button>
                 </div>
 
@@ -2579,7 +2534,7 @@ function App() {
                             <input 
                               type="text" 
                               className="form-control bank-search-input" 
-                              placeholder="🔍 Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
+                              placeholder="Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
                               value={newSearchBankQuery}
                               onChange={(e) => { setNewSearchBankQuery(e.target.value); setShowNewBankDropdown(true); }}
                               onFocus={() => setShowNewBankDropdown(true)}
@@ -2753,17 +2708,20 @@ function App() {
                   })}
                   {savedAccounts.length === 0 && !showAddAccountForm && (
                     <EmptyState 
-                      icon="👤"
+                      icon={<Users size={24} />}
                       title="Chưa lưu tài khoản cá nhân"
                       description="Lưu thông tin ngân hàng thụ hưởng hay dùng để tạo mã QR thanh toán nhanh chỉ với 1 click."
-                      actionLabel="💡 Thêm tài khoản mẫu Kings Grill"
+                      actionLabel="Thêm tài khoản mẫu Kings Grill"
                       onAction={addSampleKingsGrillAccount}
-                      style={{ gridColumn: 'span 2', padding: '2rem 1rem' }}
+                      style={{ gridColumn: '1 / -1', padding: '1.75rem 1rem' }}
                     />
                   )}
                 </div>
 
-                <h2 style={{ marginTop: '1.5rem' }}>▣ Thông tin tài khoản nhận</h2>
+                <h2 className="studio-section-title" style={{ marginTop: '1.25rem' }}>
+                  <Building2 size={17} color="var(--accent-primary)" />
+                  Thông tin tài khoản nhận
+                </h2>
                 <div className="form-grid">
                   <div className="field full">
                     <label>Chọn ngân hàng thụ hưởng</label>
@@ -2804,7 +2762,7 @@ function App() {
                           <input 
                             type="text" 
                             className="form-control bank-search-input" 
-                            placeholder="🔍 Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
+                            placeholder="Tìm theo tên viết tắt, tên đầy đủ hoặc mã BIN..."
                             value={searchBankQuery}
                             onChange={(e) => { setSearchBankQuery(e.target.value); setShowBankDropdown(true); }}
                             onFocus={() => setShowBankDropdown(true)}
@@ -2916,11 +2874,11 @@ function App() {
                             <button
                               type="button"
                               className="amount-chip"
-                              style={{ borderColor: 'var(--green)', color: 'var(--green)', background: 'rgba(34, 197, 94, 0.12)' }}
+                              style={{ borderColor: 'var(--status-success)', color: 'var(--status-success)', background: 'var(--status-success-bg)' }}
                               onClick={() => setAmount(`${amount.replace(/\D/g, '')}000`)}
                               title="Nhân 1.000 VNĐ"
                             >
-                              ⚡ {formatVND(`${amount}000`)}đ (.000)
+                              {formatVND(`${amount}000`)}đ (.000)
                             </button>
                           )}
                           {[50000, 100000, 200000, 500000, 1000000, 2000000].map(val => (
@@ -2977,8 +2935,8 @@ function App() {
                           </>
                         ) : (
                           <>
-                            <Send size={18} />
-                            ⚡ Tạo mã QR & Lưu Cloud
+                            <Send size={17} />
+                            Tạo mã QR & Lưu Cloud
                           </>
                         )}
                       </button>
@@ -3026,17 +2984,17 @@ function App() {
                       </div>
 
                       {splitDisparity !== 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'rgba(247, 160, 50, 0.12)', border: '1px solid rgba(247, 160, 50, 0.35)', margin: '4px 0 10px', flexWrap: 'wrap', gap: '8px' }}>
-                          <span style={{ fontSize: '12px', color: 'var(--orange)', fontWeight: 600 }}>
-                            ⚠️ Tổng chia ({formatVND(String(splitCurrentSum))} đ) lệch hóa đơn ({formatVND(String(splitTotalNum))} đ): {splitDisparity > 0 ? `Thiếu ${formatVND(String(splitDisparity))} đ` : `Dư ${formatVND(String(Math.abs(splitDisparity)))} đ`}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-warning-bg)', border: '1px solid var(--status-warning)', margin: '4px 0 10px', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--status-warning)', fontWeight: 600 }}>
+                            Tổng chia ({formatVND(String(splitCurrentSum))} đ) lệch hóa đơn ({formatVND(String(splitTotalNum))} đ): {splitDisparity > 0 ? `Thiếu ${formatVND(String(splitDisparity))} đ` : `Dư ${formatVND(String(Math.abs(splitDisparity)))} đ`}
                           </span>
                           <button 
                             type="button" 
-                            className="amount-chip"
+                            className="btn-outline"
                             onClick={handleAutoBalanceSplit}
-                            style={{ borderColor: 'var(--orange)', color: '#ffffff', background: 'rgba(247, 160, 50, 0.35)' }}
+                            style={{ height: '32px', padding: '0 10px', fontSize: '0.75rem', borderColor: 'var(--status-warning)', color: 'var(--status-warning)' }}
                           >
-                            ⚡ Bù vào khách cuối
+                            Bù vào khách cuối
                           </button>
                         </div>
                       )}
@@ -3065,16 +3023,18 @@ function App() {
 
                       <div className="field full" style={{ marginTop: '0.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--cyan)' }}>
-                            📋 Danh sách phần chia ({splitGuests.length} khách) - Chọn để xem QR:
+                          <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <Users size={15} color="var(--accent-primary)" />
+                            Danh sách phần chia ({splitGuests.length} khách) — Chọn để xem QR
                           </span>
                           <button 
                             type="button" 
                             className="btn-outline" 
                             onClick={handleAddSplitGuest}
-                            style={{ padding: '3px 10px', fontSize: '11px', borderRadius: '6px' }}
+                            style={{ height: '32px', padding: '0 10px', fontSize: '0.76rem' }}
                           >
-                            + Thêm khách
+                            <Plus size={13} />
+                            Thêm khách
                           </button>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -3147,37 +3107,40 @@ function App() {
 
               {/* RIGHT COLUMN: Live QR Code Preview and actions */}
               <div className="card panel qrbox" style={{ overflow: 'visible' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
-                  <h2 style={{ margin: 0 }}>▦ Mã QR thanh toán</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '8px' }}>
+                  <h2 className="studio-section-title" style={{ margin: 0 }}>
+                    <QrCode size={17} color="var(--accent-primary)" />
+                    Mã QR thanh toán
+                  </h2>
                   {qrUrl && (
-                    <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                    <div className="studio-seg-bar">
                       <button 
                         type="button" 
+                        className={!receiptShowBranded ? 'active' : ''}
                         onClick={() => setReceiptShowBranded(false)}
-                        style={{ height: '28px', border: 0, background: !receiptShowBranded ? 'var(--blue)' : 'transparent', color: !receiptShowBranded ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                       >
-                        Mẫu QR thường
+                        QR Chuẩn
                       </button>
                       <button 
                         type="button" 
+                        className={receiptShowBranded ? 'active' : ''}
                         onClick={() => setReceiptShowBranded(true)}
-                        style={{ height: '28px', border: 0, background: receiptShowBranded ? 'var(--blue)' : 'transparent', color: receiptShowBranded ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                       >
-                        Biên lai Kings Grill
+                        Biên lai K80
                       </button>
                     </div>
                   )}
                 </div>
-                <p className="sub" style={{ marginBottom: '1.5rem' }}>Quét mã QR bằng App Ngân hàng hoặc Ví điện tử để chuyển khoản nhanh.</p>
+                <p className="sub" style={{ marginBottom: '1.1rem' }}>Quét mã QR bằng App Ngân hàng hoặc Ví điện tử để chuyển khoản nhanh.</p>
 
                 {qrUrl ? (
                   !receiptShowBranded ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
-                      <div className="template-selector" style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-elevated)', padding: '4px', borderRadius: '8px', width: '100%', border: '1px solid var(--border-default)' }}>
-                        <button className={`template-btn ${selectedTemplate === 'qr_only' ? 'active' : ''}`} onClick={() => setSelectedTemplate('qr_only')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'qr_only' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'qr_only' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Chỉ QR</button>
-                        <button className={`template-btn ${selectedTemplate === 'compact' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'compact' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'compact' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 1</button>
-                        <button className={`template-btn ${selectedTemplate === 'compact2' ? 'active' : ''}`} onClick={() => setSelectedTemplate('compact2')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'compact2' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'compact2' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mẫu 2</button>
-                        <button className={`template-btn ${selectedTemplate === 'print' ? 'active' : ''}`} onClick={() => setSelectedTemplate('print')} style={{ height: '30px', flexGrow: 1, border: 0, background: selectedTemplate === 'print' ? 'var(--blue)' : 'transparent', color: selectedTemplate === 'print' ? '#ffffff' : 'var(--text-secondary)', padding: '0 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Thẻ in</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.15rem', width: '100%' }}>
+                      <div className="studio-seg-bar" style={{ width: '100%' }}>
+                        <button type="button" className={selectedTemplate === 'qr_only' ? 'active' : ''} onClick={() => setSelectedTemplate('qr_only')} style={{ flex: 1 }}>Chỉ QR</button>
+                        <button type="button" className={selectedTemplate === 'compact' ? 'active' : ''} onClick={() => setSelectedTemplate('compact')} style={{ flex: 1 }}>Mẫu 1</button>
+                        <button type="button" className={selectedTemplate === 'compact2' ? 'active' : ''} onClick={() => setSelectedTemplate('compact2')} style={{ flex: 1 }}>Mẫu 2</button>
+                        <button type="button" className={selectedTemplate === 'print' ? 'active' : ''} onClick={() => setSelectedTemplate('print')} style={{ flex: 1 }}>Thẻ in</button>
                       </div>
 
                       <div className="qr-image-frame" style={{ width: '260px', height: '260px', borderRadius: '20px', background: '#ffffff', padding: '12px', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -3304,9 +3267,9 @@ function App() {
                       </div>
 
                       {/* Customizer controls */}
-                      <div style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '16px', padding: '16px', boxSizing: 'border-box' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent-primary)', display: 'block', marginBottom: '12px' }}>
-                          🎨 Tùy chỉnh phong cách biên lai:
+                      <div style={{ width: '100%', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '14px', boxSizing: 'border-box' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', display: 'block', marginBottom: '10px' }}>
+                          Tùy chỉnh phong cách biên lai
                         </span>
                         
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
@@ -3366,31 +3329,33 @@ function App() {
 
                       {/* Download & print actions */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%' }}>
-                        <button className="primary" style={{ height: '44px', fontSize: '12px' }} onClick={handleDownloadReceipt}>
-                          <Download size={14} style={{ marginRight: '6px' }} />
+                        <button className="primary" style={{ height: '44px', fontSize: '0.82rem' }} onClick={handleDownloadReceipt}>
+                          <Download size={15} />
                           Tải Biên lai
                         </button>
-                        <button className="btn-outline" style={{ height: '44px', fontSize: '12px' }} onClick={handlePrintReceipt}>
-                          🖨️ In Biên lai
+                        <button className="btn-outline" style={{ height: '44px', fontSize: '0.82rem' }} onClick={handlePrintReceipt}>
+                          <FileText size={15} />
+                          In Biên lai
                         </button>
                       </div>
                     </div>
                   )
                 ) : (
                   <EmptyState 
-                    icon="▦"
+                    icon={<QrCode size={26} />}
                     title="Chưa có mã QR"
                     description="Nhập đầy đủ thông tin ngân hàng, số tài khoản và họ tên chủ tài khoản ở bảng bên để hệ thống tạo mã QR thanh toán động."
-                    style={{ minHeight: '320px', border: 'none', background: 'transparent' }}
+                    style={{ minHeight: '300px', border: 'none', background: 'transparent' }}
                   />
                 )}
 
                 {/* Recent VietQR Transactions History for 1-click Cashier Reuse */}
                 {qrHistory.length > 0 && (
-                  <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', width: '100%' }}>
+                  <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-default)', width: '100%' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                        🕒 Giao dịch QR gần đây ({qrHistory.length})
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={14} color="var(--accent-primary)" />
+                        Giao dịch QR gần đây ({qrHistory.length})
                       </span>
                       <button
                         type="button"
@@ -3457,34 +3422,6 @@ function App() {
         {/* VIEW 4: EMPLOYEE PAYROLL CREATOR */}
         {currentView === 'payroll' && (
           <div className="screen active">
-            <div className="hub-subtab-row">
-              <div className="hub-subtab-bar">
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn active"
-                  onClick={() => setCurrentView('payroll')}
-                >
-                  <CreditCard size={15} />
-                  <span>Bảng Lương & Phiếu Lương K80</span>
-                </button>
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn"
-                  onClick={() => setCurrentView('transfer')}
-                >
-                  <Send size={15} />
-                  <span>Chuyển Tiền Ngân Hàng Hàng Loạt (MyVIB / VCB)</span>
-                </button>
-              </div>
-              <div className="hub-subtab-meta">
-                <span>Kỳ thanh toán: Hiện hành</span>
-                <span>•</span>
-                <span className="live-device-tag">
-                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
-                  Chi nhánh 01 (Quận 1, TP.HCM)
-                </span>
-              </div>
-            </div>
             <Suspense fallback={<LoadingState message="Đang tải phân hệ Tính Lương..." />}>
               <PayrollCreator 
                 gasUrl={gasUrl} 
@@ -3499,34 +3436,6 @@ function App() {
         {/* VIEW 5: MYVIB TRANSFER FILE CREATOR */}
         {currentView === 'transfer' && (
           <div className="screen active">
-            <div className="hub-subtab-row">
-              <div className="hub-subtab-bar">
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn"
-                  onClick={() => setCurrentView('payroll')}
-                >
-                  <CreditCard size={15} />
-                  <span>Bảng Lương & Phiếu Lương K80</span>
-                </button>
-                <button 
-                  type="button" 
-                  className="hub-subtab-btn active"
-                  onClick={() => setCurrentView('transfer')}
-                >
-                  <Send size={15} />
-                  <span>Chuyển Tiền Ngân Hàng Hàng Loạt (MyVIB / VCB)</span>
-                </button>
-              </div>
-              <div className="hub-subtab-meta">
-                <span>Chuẩn Bulk Transfer Napas247</span>
-                <span>•</span>
-                <span className="live-device-tag">
-                  <span className="brand-status-dot" style={{ width: '6px', height: '6px' }} />
-                  MyVIB 2.0 &amp; VCB Digibank
-                </span>
-              </div>
-            </div>
             <Suspense fallback={<LoadingState message="Đang tải phân hệ Lệnh Chuyển Khoản..." />}>
               <TransferFileTool showToast={showToast} />
             </Suspense>
@@ -3550,48 +3459,38 @@ function App() {
         {currentView === 'settings' && (
           <div className="screen active">
             <PageHeader
-              icon={<Settings size={26} />}
-              title="Cấu Hình Hệ Thống & Kết Nối API"
-              subtitle="Thiết lập kết nối an toàn tới Google Sheets, Google Apps Script API và quản lý tài khoản"
-              badgeText="Hệ thống"
-              badgeVariant="neutral"
+              icon={<Settings size={22} />}
+              title="Cấu Hình Hệ Thống & Kết Nối Cloud"
+              subtitle="Thiết lập kết nối an toàn tới Google Sheets, Google Apps Script API và tiện ích mở rộng Chrome/Edge."
+              badgeText={connectionStatus === 'connected' ? 'Google Sheets Live' : 'Chưa kết nối'}
+              badgeVariant={connectionStatus === 'connected' ? 'success' : 'neutral'}
               actions={
-                <button 
-                  className="primary" 
-                  style={{ minWidth: '160px', height: '40px', fontSize: '13px' }}
-                  disabled={!spreadsheetId || spreadsheetId.trim() === ''}
-                  onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, '_blank')}
-                >
-                  ⓘ Xem Google Sheet
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => setShowExtensionGuideModal(true)}
+                  >
+                    <Puzzle size={15} />
+                    <span>Cài đặt Extension / PWA</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={!spreadsheetId || spreadsheetId.trim() === ''}
+                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, '_blank')}
+                  >
+                    <FileText size={15} />
+                    <span>Mở Google Sheet</span>
+                  </button>
+                </div>
               }
-            />
-
-            {/* Instruction module */}
-            <GuidePanel 
-              title="Cấu hình Hệ thống"
-              purpose="Cấu hình tài khoản và định danh bảng tính Google Sheets để lưu trữ lịch sử chấm công, danh sách tài khoản VietQR và lịch sử xuất bảng tổng hợp lương nhà hàng an toàn qua API."
-              steps={[
-                "Mở tệp Google Spreadsheet của bạn và copy chuỗi ID trên thanh URL (Spreadsheet ID).",
-                "Mở Script Editor (Trình soạn thảo mã) Google Apps Script bound với bảng tính.",
-                "Dán mã backend API tương ứng vào file Code.gs của Apps Script.",
-                "Thực hiện Deploy dưới dạng Web App với quyền truy cập 'Anyone' (Bất kỳ ai).",
-                "Copy URL Web App của Google và dán vào form cấu hình bên dưới cùng với Spreadsheet ID.",
-                "Bấm '🔒 Lưu cấu hình' rồi bấm 'Kiểm tra kết nối' để test kết nối thực tế."
-              ]}
-              notes={[
-                "Nút 'Xem Google Sheet' ở đầu trang sẽ tự động bị khóa (Disabled) cho đến khi bạn điền một ID Spreadsheet hợp lệ.",
-                "URL Apps Script Web App của Google luôn kết thúc bằng từ khóa '/exec'."
-              ]}
-              errors={[
-                "Trạng thái báo 'Lỗi kết nối' -> Đảm bảo bạn đã cấp quyền chạy Script cho tài khoản Google của bạn (Authorize Script) trong Google Editor."
-              ]}
             />
 
             <div className="settings-layout">
               <div className="card panel">
-                <h2>Thông tin kết nối Google</h2>
-                <p className="sub" style={{ marginBottom: '1.5rem' }}>Cung cấp thông tin kết nối với Google Apps Script Web App để hệ thống có thể ghi và đọc dữ liệu.</p>
+                <h2>Kết nối Google Apps Script &amp; Sheets</h2>
+                <p className="sub" style={{ marginBottom: '1.25rem' }}>Cấu hình Web App URL và Spreadsheet ID để lưu trữ đồng bộ Chấm công, Bảng lương, VietQR và TTS AI.</p>
                 <form onSubmit={handleSaveSettings} className="form-grid">
                   <div className="field full">
                     <label>Google Apps Script Web App URL</label>
@@ -3602,7 +3501,7 @@ function App() {
                       onChange={(e) => setGasUrl(e.target.value.trim())}
                       required
                     />
-                    <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '4px' }}>Mọi hoạt động lưu trữ (chấm công & tạo QR tài khoản) đều được chuyển giao qua API Web App này.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '4px 0 0' }}>URL Web App triển khai từ Apps Script luôn kết thúc bằng <code>/exec</code>.</p>
                   </div>
 
                   <div className="field full">
@@ -3614,25 +3513,26 @@ function App() {
                       onChange={(e) => setSpreadsheetId(e.target.value.trim())}
                       required
                     />
-                    <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '4px' }}>Mã ID của bảng tính Google Sheet chứa sheet DATA2 và Bang_Cham_Cong_Log.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '4px 0 0' }}>Mã ID trên đường dẫn Google Sheet chứa các bảng dữ liệu vận hành.</p>
                   </div>
 
-                  <div className="bulk-import-row full" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button type="submit" className="primary" style={{ flexGrow: 1, height: '48px' }}>
-                      🔒 Lưu cấu hình
+                  <div className="bulk-import-row full" style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    <button type="submit" className="primary" style={{ flex: 1, minHeight: '42px' }}>
+                      <Save size={15} />
+                      <span>Lưu cấu hình</span>
                     </button>
                     <button 
                       type="button" 
                       className="btn-outline" 
-                      style={{ width: '180px', height: '48px' }}
+                      style={{ minWidth: '170px', minHeight: '42px' }}
                       onClick={testConnection}
                       disabled={connectionStatus === 'testing'}
                     >
-                      {connectionStatus === 'testing' ? 'Đang test...' : 'Kiểm tra kết nối'}
+                      {connectionStatus === 'testing' ? <Loader2 className="loader" size={15} /> : <Activity size={15} />}
+                      <span>{connectionStatus === 'testing' ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}</span>
                     </button>
                   </div>
                 </form>
-                <p className="sub" style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '1rem' }}>🛡 Thông tin của bạn được mã hóa và lưu trữ an toàn. Chỉ quản trị viên mới có quyền thay đổi cấu hình.</p>
               </div>
 
               <div className="status-col">
@@ -3641,22 +3541,23 @@ function App() {
                     <h3 style={{ margin: 0 }}>Trạng thái kết nối</h3>
                     <span className={`pulse-dot ${connectionStatus === 'connected' ? '' : connectionStatus === 'failed' ? 'danger' : 'warning'}`} />
                   </div>
-                  {connectionStatus === 'connected' && <b style={{ color: 'var(--green)' }}>Đã kết nối Google Sheet</b>}
-                  {connectionStatus === 'testing' && <b style={{ color: 'var(--cyan)' }}>Đang kiểm tra kết nối...</b>}
-                  {connectionStatus === 'failed' && <b style={{ color: 'var(--red)' }}>Lỗi kết nối</b>}
+                  {connectionStatus === 'connected' && <b style={{ color: 'var(--status-success)' }}>Đã kết nối Google Sheet</b>}
+                  {connectionStatus === 'testing' && <b style={{ color: 'var(--accent-primary)' }}>Đang kiểm tra kết nối...</b>}
+                  {connectionStatus === 'failed' && <b style={{ color: 'var(--status-danger)' }}>Lỗi kết nối API</b>}
                   {connectionStatus === 'not_configured' && <b style={{ color: 'var(--muted)' }}>Chưa cấu hình</b>}
-                  <p className="sub">Trạng thái xác thực Google Apps Script Web App API.</p>
+                  <p className="sub">Xác thực trực tiếp với Google Apps Script Web App.</p>
                 </div>
                 <div className="card status">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0 }}>Sức khỏe đồng bộ</h3>
-                    <span style={{ fontSize: '18px' }}>{connectionStatus === 'connected' ? '⚡' : '💤'}</span>
+                    <Badge variant={connectionStatus === 'connected' ? 'success' : 'neutral'}>
+                      {connectionStatus === 'connected' ? '100% Online' : 'Standby'}
+                    </Badge>
                   </div>
-                  <b>{connectionStatus === 'connected' ? '100% Hoàn hảo' : '0% Chưa sẵn sàng'}</b>
-                  <p className="sub">{connectionStatus === 'connected' ? 'Hệ thống lưu trữ Cloud hoạt động thông suốt' : 'Kiểm tra lại cấu hình kết nối'}</p>
+                  <b>{connectionStatus === 'connected' ? 'Hoạt động thông suốt' : 'Chưa kích hoạt'}</b>
+                  <p className="sub">{connectionStatus === 'connected' ? 'Dữ liệu Chấm công, Lương & QR đồng bộ hai chiều.' : 'Nhập URL và nhấn Kiểm tra kết nối.'}</p>
                 </div>
               </div>
-
             </div>
 
             <div className="card guide">

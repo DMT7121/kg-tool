@@ -8,9 +8,14 @@ import {
   Users,
   Clock,
   AlertCircle,
-  Search
+  Search,
+  Settings2,
+  CloudDownload,
+  ArrowLeft,
+  ClipboardList,
+  X
 } from 'lucide-react';
-import { StatCard, EmptyState, LoadingState, ErrorState, GuidePanel, PageHeader, Badge } from './Shared';
+import { StatCard, EmptyState, LoadingState, ErrorState, PageHeader, Badge } from './Shared';
 import { getLocalYMD } from '../utils/numberUtils';
 
 interface AttendanceLog {
@@ -50,6 +55,9 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
   const [isLoading, setIsLoading] = useState<boolean>(() => Boolean(gasUrl));
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [logScope, setLogScope] = useState<'all' | 'today'>('all');
+  const [showWebhookConfig, setShowWebhookConfig] = useState(false);
+  const [showOfflineSync, setShowOfflineSync] = useState(false);
 
   // Webhook settings variables
   const [workerUrl, setWorkerUrl] = useState(
@@ -212,14 +220,15 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
   }, [todayLogs]);
 
   const filteredLogs = useMemo(() => {
+    const base = logScope === 'today' ? todayLogs : logs;
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return logs;
-    return logs.filter(log =>
+    if (!query) return base;
+    return base.filter(log =>
       log.name.toLowerCase().includes(query) ||
       log.date.includes(query) ||
       (log.notes && log.notes.toLowerCase().includes(query))
     );
-  }, [logs, searchQuery]);
+  }, [logs, todayLogs, logScope, searchQuery]);
 
   const effectiveError = !gasUrl
     ? 'Vui lòng cấu hình URL Google Apps Script trong phần Cài đặt trước!'
@@ -228,55 +237,81 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
   return (
     <div className="screen active">
       <PageHeader
-        icon={<Cpu size={26} />}
-        title="Quản Lý Chấm Công & Thiết Bị"
-        subtitle="Nhận dữ liệu chấm công thời gian thực từ thiết bị Hikvision thông qua Cloudflare Worker"
-        badgeText="Hikvision Sync"
-        badgeVariant="danger"
+        icon={<Cpu size={22} />}
+        title="Máy Chấm Công Cloud (Hikvision)"
+        subtitle="Theo dõi nhật ký quét vân tay/khuôn mặt theo thời gian thực và đồng bộ bù trực tiếp từ thiết bị qua Cloudflare Worker."
+        badgeText={logs.length > 0 ? 'Trực tuyến' : 'Hikvision Sync'}
+        badgeVariant={logs.length > 0 ? 'success' : 'info'}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => onNavigate?.('attendance')}
+            >
+              <ArrowLeft size={14} />
+              <span>Về Chấm công</span>
+            </button>
+            <button
+              type="button"
+              className={showOfflineSync ? 'primary' : 'btn-outline'}
+              onClick={() => {
+                setShowOfflineSync((v) => !v);
+                if (!showOfflineSync) setShowWebhookConfig(false);
+              }}
+            >
+              <CloudDownload size={15} />
+              <span>Kéo log bù</span>
+            </button>
+            <button
+              type="button"
+              className={showWebhookConfig ? 'primary' : 'btn-outline'}
+              onClick={() => {
+                setShowWebhookConfig((v) => !v);
+                if (!showWebhookConfig) setShowOfflineSync(false);
+              }}
+            >
+              <Settings2 size={15} />
+              <span>Cấu hình Webhook</span>
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void loadAttendanceLogs()}
+              disabled={isLoading}
+            >
+              <RefreshCw className={isLoading ? 'spinner' : ''} size={14} />
+              <span>Làm mới</span>
+            </button>
+          </div>
+        }
       />
-      <div className="hub-subtab-bar">
-        <button
-          type="button"
-          className="hub-subtab-btn"
-          onClick={() => onNavigate?.('attendance')}
-        >
-          <Clock size={15} />
-          <span>Xử lý Chấm Công & Phân Ca</span>
-        </button>
-        <button
-          type="button"
-          className="hub-subtab-btn active"
-          onClick={() => onNavigate?.('hikvision')}
-        >
-          <Cpu size={15} />
-          <span>Máy Chấm Công Cloud (Hikvision)</span>
-        </button>
-      </div>
-      <div className="head" style={{ marginBottom: '1.5rem' }}>
+
+      <div className="head" style={{ marginBottom: '1rem' }}>
         <div className="kpis">
           <StatCard
-            icon={<Clock size={20} />}
+            icon={<Clock size={18} />}
             label="Lượt chấm hôm nay"
             value={todayLogs.length}
             subtext={`Ngày ${todayStr}`}
             hasData={logs.length > 0}
           />
           <StatCard
-            icon={<Users size={20} />}
+            icon={<Users size={18} />}
             label="Nhân viên đi làm hôm nay"
             value={uniqueEmpsToday}
-            subtext="Số người đã quét vân tay/mặt"
+            subtext="Số người đã quét máy"
             hasData={logs.length > 0}
           />
           <StatCard
-            icon={<Cpu size={20} />}
+            icon={<Cpu size={18} />}
             label="Trạng thái Webhook"
             value={gasUrl ? 'Đã liên kết' : 'Chưa cấu hình'}
-            subtext={gasUrl ? 'Đang chờ tín hiệu...' : 'Vui lòng cài đặt GAS'}
+            subtext={gasUrl ? 'Sẵn sàng nhận tín hiệu' : 'Vui lòng cài đặt GAS'}
             hasData={!!gasUrl}
           />
           <StatCard
-            icon={<Wifi size={20} />}
+            icon={<Wifi size={18} />}
             label="Kết nối thiết bị"
             value={logs.length > 0 ? 'Trực tuyến' : 'Chờ đồng bộ'}
             subtext={logs.length > 0 ? `Lượt cuối: ${logs[0]?.name}` : 'Chưa có log đẩy lên'}
@@ -285,284 +320,303 @@ export default function HikvisionSync({ gasUrl, spreadsheetId, showToast, onNavi
         </div>
       </div>
 
-      <GuidePanel
-        title="Đồng Bộ Máy Chấm Công"
-        purpose="Module này kết nối trực tuyến với máy chấm công Hikvision DS-K1T320MX đặt tại cửa hàng thông qua Cloudflare Worker để nhận tín hiệu chấm công tự động mà không cần máy tính POS chạy ngầm."
-        steps={[
-          "Mở trình quản lý Cloudflare Worker của bạn và deploy file 'CloudflareWorkerHikvision.js' được đính kèm ở thư mục gốc dự án.",
-          "Điền URL của Worker đã deploy vào ô cấu hình 'Đường dẫn Cloudflare Worker' bên dưới.",
-          "Sao chép link Cloudflare Worker của bạn và dán vào mục cấu hình HTTP Host / HTTP Listening trên trang quản trị IP máy chấm công tại quán.",
-          "Đảm bảo đã set đúng mật khẩu bảo mật (Secret Key) tương ứng.",
-          "Mỗi khi nhân viên chấm công, dữ liệu sẽ tự động đẩy lên Google Sheet và hiển thị ngay lập tức tại bảng bên dưới."
-        ]}
-        notes={[
-          "Mã nhân viên (Employee ID) trên máy chấm công nên khớp hoặc ghi nhận đúng tên họ nhân viên để tính ca chính xác.",
-          "Khoảng cách thời gian đẩy dữ liệu là thời gian thực (Real-time) ngay sau khi quét."
-        ]}
-        errors={[
-          "Lỗi 'Không kết nối được' -> Kiểm tra xem máy chấm công tại nhà hàng có kết nối mạng Internet ổn định không.",
-          "Lỗi 'Sai mã bảo mật' -> Đảm bảo trường secret_key trên Cloudflare Worker khớp với Apps Script."
-        ]}
-      />
-
-      <div className="two-col">
-        {/* LEFT COLUMN: Configurations */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '480px', flexShrink: 0 }}>
-          {/* Card 1: Webhook Config */}
-          <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', margin: 0 }}>
-            <h2>⚙️ Cấu hình Webhook</h2>
-            <p className="sub" style={{ margin: 0 }}>Cài đặt đường link nhận dữ liệu từ Cloudflare Worker để dán vào máy chấm công Hikvision.</p>
-
-            <div className="field full" style={{ marginTop: '0.5rem' }}>
-              <label>Đường dẫn Cloudflare Worker của bạn</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={workerUrl}
-                  onChange={(e) => setWorkerUrl(e.target.value)}
-                  placeholder="https://kingsgrill-attendance-webhook.username.workers.dev"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
-                />
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={handleSaveWorkerUrl}
-                  style={{ height: '44px', padding: '0 16px', borderRadius: '8px', minWidth: '80px', flexShrink: 0 }}
-                >
-                  Lưu
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-elevated)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-default)' }}>
-              <div>
-                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>1. Đường dẫn dán vào máy chấm công (HTTP Host URL):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
-                  <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', wordBreak: 'break-all' }}>{workerUrl}</code>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(workerUrl, 'url')}
-                    style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedUrl ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
-                  >
-                    {copiedUrl ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>2. Khóa bảo mật Webhook (Secret Key):</small>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-input)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-default)' }}>
-                  <code style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>{secretKey}</code>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(secretKey, 'secret')}
-                    style={{ height: '30px', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)', borderRadius: '6px', color: copiedSecret ? 'var(--green)' : 'var(--text-secondary)', cursor: 'pointer', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', flexShrink: 0, marginLeft: '8px' }}
-                  >
-                    {copiedSecret ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: 'rgba(34, 211, 238, 0.04)', border: '1px solid rgba(34, 211, 238, 0.15)', borderRadius: '10px', padding: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <AlertCircle size={18} style={{ color: 'var(--cyan)', flexShrink: 0, marginTop: '2px' }} />
-              <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
-                <strong>Hướng dẫn nhanh:</strong> Mở trình duyệt truy cập vào IP máy chấm công, vào <strong>Configuration &rarr; Network &rarr; Advanced Settings &rarr; HTTP Listening</strong>. Điền địa chỉ Worker URL và đặt cổng là <code>443</code>, phương thức gửi là <code>HTTPS</code>.
-              </p>
-            </div>
+      {/* COLLAPSIBLE PANEL 1: WEBHOOK SETUP */}
+      {showWebhookConfig && (
+        <div className="studio-collapsible-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '8px' }}>
+            <h2 className="studio-section-title" style={{ margin: 0 }}>
+              <Settings2 size={17} color="var(--accent-primary)" />
+              Cấu hình Cloudflare Worker Webhook
+            </h2>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setShowWebhookConfig(false)}
+              aria-label="Đóng cấu hình Webhook"
+            >
+              <X size={15} />
+              <span>Thu gọn</span>
+            </button>
           </div>
 
-          {/* Card 2: Offline Sync */}
-          <form onSubmit={handleOfflineSync} className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', margin: 0 }}>
-            <h2>🔄 Đồng bộ bổ sung</h2>
-            <p className="sub" style={{ margin: 0 }}>
-              Kéo dữ liệu trực tiếp từ máy chấm công để bù các lượt chấm bị thiếu do lỗi mạng hoặc mất kết nối đột ngột.
-            </p>
+          <div className="two-col" style={{ gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div className="field full" style={{ margin: 0 }}>
+                <label>Đường dẫn Cloudflare Worker của bạn</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={workerUrl}
+                    onChange={(e) => setWorkerUrl(e.target.value)}
+                    placeholder="https://kingsgrill-hikvision-sync.workers.dev"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={handleSaveWorkerUrl}
+                    style={{ flexShrink: 0, padding: '0 16px' }}
+                  >
+                    Lưu URL
+                  </button>
+                </div>
+              </div>
 
+              <div style={{ background: 'var(--accent-primary-subtle)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', padding: '10px 12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <AlertCircle size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0, marginTop: '2px' }} />
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+                  Trên trang quản trị máy Hikvision, vào <strong>Configuration &rarr; Network &rarr; Advanced Settings &rarr; HTTP Listening</strong>, dán Worker URL bên cạnh, đặt cổng <code>443</code> và giao thức <code>HTTPS</code>.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: 600 }}>1. HTTP Host URL (dán vào máy chấm công)</small>
+                <div className="studio-code-row">
+                  <code>{workerUrl}</code>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => handleCopy(workerUrl, 'url')}
+                    style={{ height: '32px', padding: '0 10px', fontSize: '0.76rem', flexShrink: 0 }}
+                  >
+                    {copiedUrl ? <><Check size={13} /> Đã chép</> : <><Copy size={13} /> Chép</>}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: 600 }}>2. Khóa bảo mật (Secret Key)</small>
+                <div className="studio-code-row">
+                  <code>{secretKey}</code>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => handleCopy(secretKey, 'secret')}
+                    style={{ height: '32px', padding: '0 10px', fontSize: '0.76rem', flexShrink: 0 }}
+                  >
+                    {copiedSecret ? <><Check size={13} /> Đã chép</> : <><Copy size={13} /> Chép</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COLLAPSIBLE PANEL 2: OFFLINE LOG SYNC */}
+      {showOfflineSync && (
+        <form onSubmit={handleOfflineSync} className="studio-collapsible-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', gap: '8px' }}>
+            <h2 className="studio-section-title" style={{ margin: 0 }}>
+              <CloudDownload size={17} color="var(--accent-primary)" />
+              Đồng bộ bổ sung từ máy chấm công
+            </h2>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setShowOfflineSync(false)}
+              aria-label="Đóng kéo log bù"
+            >
+              <X size={15} />
+              <span>Thu gọn</span>
+            </button>
+          </div>
+
+          <div className="form-grid">
             <div className="field full">
-              <label>Địa chỉ máy chấm công (IP / Tên miền / Tunnel URL)</label>
+              <label>Địa chỉ máy chấm công (IP nội bộ / Tunnel URL)</label>
               <input
                 type="text"
-                className="form-control"
                 value={syncDeviceUrl}
                 onChange={(e) => setSyncDeviceUrl(e.target.value)}
                 placeholder="Ví dụ: http://192.168.1.3 hoặc https://xyz.trycloudflare.com"
                 required
-                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
               />
-              <small style={{ color: 'var(--muted)', marginTop: '4px', display: 'block', fontSize: '0.75rem' }}>
-                Nhập IP nội bộ nếu chạy Web App cục bộ, hoặc URL Tunnel nếu chạy bat tạm thời.
-              </small>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Tài khoản máy</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={syncUsername}
-                  onChange={(e) => setSyncUsername(e.target.value)}
-                  placeholder="admin"
-                  required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
-                />
-              </div>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Mật khẩu máy (chỉ lưu trong phiên)</label>
-                <input
-                  type="password"
-                  className="form-control"
-                  value={syncPassword}
-                  onChange={(e) => setSyncPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
-                />
-              </div>
+            <div className="field">
+              <label>Tài khoản máy</label>
+              <input
+                type="text"
+                value={syncUsername}
+                onChange={(e) => setSyncUsername(e.target.value)}
+                placeholder="admin"
+                required
+              />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Từ ngày</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  value={syncFromDate}
-                  onChange={(e) => setSyncFromDate(e.target.value)}
-                  required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
-                />
-              </div>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Đến ngày</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  value={syncToDate}
-                  onChange={(e) => setSyncToDate(e.target.value)}
-                  required
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px' }}
-                />
-              </div>
+            <div className="field">
+              <label>Mật khẩu máy (chỉ lưu trong phiên)</label>
+              <input
+                type="password"
+                value={syncPassword}
+                onChange={(e) => setSyncPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+              />
             </div>
 
-            {syncResultMsg && (
-              <div style={{
-                background: syncResultMsg.type === 'success' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                border: syncResultMsg.type === 'success' ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                borderRadius: '8px',
-                padding: '10px 12px',
-                fontSize: '0.8rem',
-                color: syncResultMsg.type === 'success' ? '#4ade80' : '#f87171',
-                lineHeight: 1.4
-              }}>
-                {syncResultMsg.text}
-              </div>
-            )}
+            <div className="field">
+              <label>Từ ngày</label>
+              <input
+                type="date"
+                value={syncFromDate}
+                onChange={(e) => setSyncFromDate(e.target.value)}
+                required
+              />
+            </div>
 
+            <div className="field">
+              <label>Đến ngày</label>
+              <input
+                type="date"
+                value={syncToDate}
+                onChange={(e) => setSyncToDate(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          {syncResultMsg && (
+            <div style={{
+              marginTop: '0.75rem',
+              background: syncResultMsg.type === 'success' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
+              border: `1px solid ${syncResultMsg.type === 'success' ? 'var(--status-success)' : 'var(--status-danger)'}`,
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 12px',
+              fontSize: '0.8rem',
+              color: syncResultMsg.type === 'success' ? 'var(--status-success)' : 'var(--status-danger)',
+              fontWeight: 600,
+              lineHeight: 1.4
+            }}>
+              {syncResultMsg.text}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.85rem' }}>
             <button
               type="submit"
               className="primary"
               disabled={isSyncingOffline}
-              style={{ width: '100%', height: '44px', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontWeight: 600 }}
+              style={{ height: '42px', padding: '0 1.35rem' }}
             >
-              <RefreshCw className={isSyncingOffline ? 'spinner' : ''} size={16} />
-              {isSyncingOffline ? 'Đang đồng bộ...' : 'Đồng bộ log từ máy chấm công'}
+              <RefreshCw className={isSyncingOffline ? 'spinner' : ''} size={15} />
+              <span>{isSyncingOffline ? 'Đang đồng bộ...' : 'Bắt đầu kéo log từ máy'}</span>
             </button>
-          </form>
+          </div>
+        </form>
+      )}
+
+      {/* MAIN WORKSPACE: FULL-WIDTH LIVE ATTENDANCE LOGS */}
+      <div className="studio-action-bar">
+        <div className="studio-bar-group">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+            <ClipboardList size={17} color="var(--accent-primary)" />
+            Nhật ký chấm công trực tuyến
+          </span>
+          <Badge variant="info">{filteredLogs.length} dòng</Badge>
         </div>
 
-        {/* RIGHT COLUMN: Logs list */}
-        <div className="card panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flexGrow: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-              <span>📋 Nhật ký chấm công online</span>
-              <span className="badge badge-info" style={{ fontSize: '11px', padding: '2px 8px' }}>{filteredLogs.length} dòng</span>
-            </h2>
+        <div className="studio-bar-group">
+          <div className="studio-seg-bar" role="group" aria-label="Phạm vi nhật ký">
             <button
               type="button"
-              className="btn-outline"
-              onClick={() => void loadAttendanceLogs()}
-              disabled={isLoading}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 12px', borderRadius: '8px' }}
+              className={logScope === 'all' ? 'active' : ''}
+              onClick={() => setLogScope('all')}
             >
-              <RefreshCw className={isLoading ? 'spinner' : ''} size={14} />
-              Tải lại
+              Tất cả ({logs.length})
+            </button>
+            <button
+              type="button"
+              className={logScope === 'today' ? 'active' : ''}
+              onClick={() => setLogScope('today')}
+            >
+              Hôm nay ({todayLogs.length})
             </button>
           </div>
 
-          <div style={{ position: 'relative', width: '100%' }}>
-            <span style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--muted)' }}><Search size={16} /></span>
+          <div className="studio-search-box" style={{ minWidth: '240px' }}>
+            <Search size={14} />
             <input
               type="text"
-              className="form-control"
-              placeholder="Tìm kiếm theo tên nhân viên, ngày hoặc ghi chú..."
+              placeholder="Tìm tên nhân viên, ngày, ghi chú..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid var(--border-default)', background: 'var(--surface-input)', color: 'var(--text-primary)', padding: '0 12px 0 36px', fontSize: '0.9rem' }}
             />
           </div>
-
-          {isLoading ? (
-            <LoadingState message="Đang tải dữ liệu từ Google Sheets..." />
-          ) : effectiveError ? (
-            <ErrorState message={effectiveError} onRetry={() => void loadAttendanceLogs()} />
-          ) : filteredLogs.length === 0 ? (
-            <EmptyState
-              icon="📟"
-              title="Không có log chấm công nào"
-              description={searchQuery ? 'Không tìm thấy dữ liệu phù hợp với tìm kiếm của bạn.' : 'Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets.'}
-            />
-          ) : (
-            <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-default)', borderRadius: '10px' }}>
-              <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-default)', color: 'var(--text-muted)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 2 }}>
-                    <th style={{ padding: '10px 14px', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 14px' }}>Họ tên nhân viên</th>
-                    <th style={{ padding: '10px 14px' }}>Ngày</th>
-                    <th style={{ padding: '10px 14px' }}>Giờ vào</th>
-                    <th style={{ padding: '10px 14px' }}>Giờ ra</th>
-                    <th style={{ padding: '10px 14px' }}>Ghi chú</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLogs.map((log, idx) => {
-                    const cleanDate = log.date?.includes('T') ? log.date.split('T')[0] : (log.date || '—');
-                    const formatTime = (t: string) => {
-                      if (!t) return null;
-                      if (t.includes('T')) {
-                        const timePart = t.split('T')[1];
-                        return timePart ? timePart.replace(/\.000Z|Z/g, '').substring(0, 8) : t;
-                      }
-                      return t;
-                    };
-                    const cleanIn = formatTime(log.checkIn);
-                    const cleanOut = formatTime(log.checkOut);
-
-                    return (
-                      <tr key={`${log.name}-${log.date}-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
-                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '11px' }}>#{idx + 1}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{log.name}</td>
-                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontFamily: 'monospace', fontSize: '12px' }}>{cleanDate}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          {cleanIn ? <Badge variant="success" dot>{cleanIn}</Badge> : <span style={{ color: 'var(--muted)' }}>—</span>}
-                        </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          {cleanOut ? <Badge variant="warning" dot>{cleanOut}</Badge> : <span style={{ color: 'var(--muted)' }}>—</span>}
-                        </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--muted)', fontSize: '0.8rem' }}>{log.notes || '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
+      </div>
+
+      <div className="card panel" style={{ padding: 0, overflow: 'hidden' }}>
+        {isLoading ? (
+          <LoadingState message="Đang tải dữ liệu từ Google Sheets..." />
+        ) : effectiveError ? (
+          <ErrorState message={effectiveError} onRetry={() => void loadAttendanceLogs()} />
+        ) : filteredLogs.length === 0 ? (
+          <EmptyState
+            icon={<Cpu size={28} />}
+            title="Chưa có nhật ký chấm công"
+            description={searchQuery ? 'Không tìm thấy dữ liệu phù hợp với từ khóa tìm kiếm.' : 'Chưa có lượt chấm công nào từ máy Hikvision được đồng bộ lên Google Sheets.'}
+            actionLabel={!showOfflineSync ? 'Kéo log bù từ máy chấm công' : undefined}
+            onAction={!showOfflineSync ? () => setShowOfflineSync(true) : undefined}
+          />
+        ) : (
+          <div className="table-container datagrid-table-wrapper" style={{ maxHeight: '540px', overflowY: 'auto' }}>
+            <table className="datagrid-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '11px 14px', width: '56px', textAlign: 'center' }}>STT</th>
+                  <th style={{ padding: '11px 14px' }}>Họ tên nhân viên</th>
+                  <th style={{ padding: '11px 14px', width: '130px' }}>Ngày công</th>
+                  <th style={{ padding: '11px 14px', width: '130px' }}>Giờ vào</th>
+                  <th style={{ padding: '11px 14px', width: '130px' }}>Giờ ra</th>
+                  <th style={{ padding: '11px 14px' }}>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.map((log, idx) => {
+                  const cleanDate = log.date?.includes('T') ? log.date.split('T')[0] : (log.date || '—');
+                  const formatTime = (t: string) => {
+                    if (!t) return null;
+                    if (t.includes('T')) {
+                      const timePart = t.split('T')[1];
+                      return timePart ? timePart.replace(/\.000Z|Z/g, '').substring(0, 8) : t;
+                    }
+                    return t;
+                  };
+                  const cleanIn = formatTime(log.checkIn);
+                  const cleanOut = formatTime(log.checkOut);
+
+                  return (
+                    <tr key={`${log.name}-${log.date}-${idx}`}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+                        {idx + 1}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {log.name}
+                      </td>
+                      <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '0.8rem' }}>
+                        {cleanDate}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                        {cleanIn ? <Badge variant="success" dot>{cleanIn}</Badge> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                        {cleanOut ? <Badge variant="warning" dot>{cleanOut}</Badge> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                        {log.notes || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

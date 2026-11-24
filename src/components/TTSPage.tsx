@@ -15,9 +15,18 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   Key,
-  Info
+  Info,
+  Megaphone,
+  Clock,
+  X,
+  Plus,
+  PenLine,
+  Radio,
+  Car,
+  CreditCard,
+  Banknote
 } from 'lucide-react';
-import { StatCard, EmptyState, PageHeader } from './Shared';
+import { StatCard, EmptyState, PageHeader, Badge } from './Shared';
 import {
   EDGE_VOICES,
   CAPCUT_VOICES,
@@ -1900,26 +1909,60 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       
       {/* PAGE HEADER */}
       <PageHeader
-        icon={<Volume2 size={26} />}
-        title="Chuyển Văn Bản Thành Giọng Nói (TTS)"
-        subtitle="Tạo và phát giọng đọc tự động từ mẫu câu nghiệp vụ nhà hàng Kings Grill hoặc văn bản tùy chỉnh"
-        badgeText="Web Speech AI"
+        icon={<Volume2 size={22} />}
+        title="Phát Thanh AI (TTS Studio)"
+        subtitle="Phát thông báo nhà hàng 1 chạm từ mẫu câu nghiệp vụ hoặc văn bản tùy chỉnh với giọng đọc Neural tiếng Việt."
+        badgeText={
+          providerSettings.activeProvider === 'edge' ? 'Edge Neural' :
+          providerSettings.activeProvider === 'capcut' ? 'CapCut SAMI' :
+          providerSettings.activeProvider === 'openaifm' ? 'OpenAI.fm' :
+          providerSettings.activeProvider === 'google' ? 'Google TTS' :
+          providerSettings.activeProvider.toUpperCase()
+        }
         badgeVariant="success"
         actions={
-          <button 
-            className="btn-outline" 
-            onClick={handleSpreadsheetSync}
-            disabled={syncStatus === 'syncing'}
-            style={{ height: '40px', padding: '0 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            {syncStatus === 'syncing' ? <RefreshCw className="spinner" size={16} /> : <Database size={16} />}
-            <span>Đồng bộ Spreadsheet</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="studio-seg-bar" role="group" aria-label="Chế độ TTS Studio">
+              <button 
+                type="button" 
+                className={mainTab === 'broadcast' ? 'active' : ''}
+                onClick={() => setMainTab('broadcast')}
+              >
+                <Radio size={14} />
+                <span>Phát thanh</span>
+              </button>
+              <button 
+                type="button" 
+                className={mainTab === 'settings' ? 'active' : ''}
+                onClick={() => setMainTab('settings')}
+              >
+                <SlidersHorizontal size={14} />
+                <span>Giọng & API</span>
+              </button>
+              <button 
+                type="button" 
+                className={mainTab === 'history' ? 'active' : ''}
+                onClick={() => setMainTab('history')}
+              >
+                <History size={14} />
+                <span>Lịch sử ({history.length})</span>
+              </button>
+            </div>
+            <button 
+              type="button"
+              className="btn-outline" 
+              onClick={handleSpreadsheetSync}
+              disabled={syncStatus === 'syncing'}
+            >
+              {syncStatus === 'syncing' ? <RefreshCw className="spinner" size={14} /> : <Database size={14} />}
+              <span>Đồng bộ Cloud</span>
+            </button>
+          </div>
         }
       />
 
       {/* OVERVIEW KPIS */}
-      <div className="kpis" style={{ marginBottom: '1.5rem' }}>
+      <div className="kpis" style={{ marginBottom: '1rem' }}>
         <StatCard 
           icon={<SlidersHorizontal size={18} />} 
           label="Provider chủ đạo" 
@@ -1959,15 +2002,15 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           } 
           value={
             providerSettings.activeProvider === 'browser' ? 'Không giới hạn' :
-            providerSettings.activeProvider === 'edge' ? `${edgeUsedToday} / ${providerSettings.edgeDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'capcut' ? `${capcutUsedToday} / ${providerSettings.capcutDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'openaifm' ? `${openaifmUsedToday} / ${providerSettings.openaifmDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'google' ? `${googleUsedToday} / ${providerSettings.googleDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'fpt' ? `${fptUsedToday} / ${providerSettings.fptDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'viettel' ? `${viettelUsedToday} / ${providerSettings.viettelDailyLimit} kí tự` :
-            providerSettings.activeProvider === 'zalo' ? `${zaloUsedToday} / ${providerSettings.zaloDailyLimit} kí tự` : 'Không giới hạn'
+            providerSettings.activeProvider === 'edge' ? `${edgeUsedToday} / ${providerSettings.edgeDailyLimit}` :
+            providerSettings.activeProvider === 'capcut' ? `${capcutUsedToday} / ${providerSettings.capcutDailyLimit}` :
+            providerSettings.activeProvider === 'openaifm' ? `${openaifmUsedToday} / ${providerSettings.openaifmDailyLimit}` :
+            providerSettings.activeProvider === 'google' ? `${googleUsedToday} / ${providerSettings.googleDailyLimit}` :
+            providerSettings.activeProvider === 'fpt' ? `${fptUsedToday} / ${providerSettings.fptDailyLimit}` :
+            providerSettings.activeProvider === 'viettel' ? `${viettelUsedToday} / ${providerSettings.viettelDailyLimit}` :
+            providerSettings.activeProvider === 'zalo' ? `${zaloUsedToday} / ${providerSettings.zaloDailyLimit}` : 'Không giới hạn'
           }
-          subtext="Số kí tự đã gửi hôm nay"
+          subtext="Ký tự đã phát hôm nay"
           hasData={
             providerSettings.activeProvider === 'edge' ? edgeUsedToday > 0 :
             providerSettings.activeProvider === 'capcut' ? capcutUsedToday > 0 :
@@ -1981,69 +2024,41 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
         <StatCard 
           icon={<Volume2 size={18} />} 
           label="Tổng phát hôm nay" 
-          value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday + edgeUsedToday + capcutUsedToday + openaifmUsedToday} kí tự`} 
-          subtext="Tổng lưu lượng các Cloud & Neural Provider"
+          value={`${fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday + edgeUsedToday + capcutUsedToday + openaifmUsedToday} ký tự`} 
+          subtext="Lưu lượng Cloud & Neural"
           hasData={(fptUsedToday + viettelUsedToday + zaloUsedToday + googleUsedToday + edgeUsedToday + capcutUsedToday + openaifmUsedToday) > 0} 
         />
         <StatCard 
           icon={<BookOpen size={18} />} 
           label="Mẫu câu đã lưu" 
           value={`${templates.length} mẫu`} 
-          subtext="Lưu trong cơ sở dữ liệu"
+          subtext="Sẵn sàng phát 1 chạm"
           hasData={templates.length > 0} 
         />
-      </div>
-
-      {/* UNIVERSAL SUBTAB BAR */}
-      <div className="hub-subtab-bar" style={{ marginBottom: '1.25rem' }}>
-        <button 
-          type="button" 
-          className={`hub-subtab-btn ${mainTab === 'broadcast' ? 'active' : ''}`}
-          onClick={() => setMainTab('broadcast')}
-        >
-          <Volume2 size={15} />
-          <span>Phát Thông Báo</span>
-        </button>
-
-        <button 
-          type="button" 
-          className={`hub-subtab-btn ${mainTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setMainTab('settings')}
-        >
-          <SlidersHorizontal size={15} />
-          <span>Cấu Hình Giọng & Quota API</span>
-        </button>
-
-        <button 
-          type="button" 
-          className={`hub-subtab-btn ${mainTab === 'history' ? 'active' : ''}`}
-          onClick={() => setMainTab('history')}
-        >
-          <History size={15} />
-          <span>Lịch Sử Phát ({history.length})</span>
-        </button>
       </div>
 
       {/* TAB 1: BROADCAST PLAYBACK (2-COLUMN BALANCED WORKFLOW) */}
       {mainTab === 'broadcast' && (
         <>
           {isMobileScreen && (
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', padding: '4px', borderRadius: '8px' }}>
+            <div className="studio-seg-bar" style={{ width: '100%', marginBottom: '0.9rem' }}>
               <button 
                 type="button" 
-                className={`hub-subtab-btn ${mobileBroadcastTab === 'compose' ? 'active' : ''}`}
+                className={mobileBroadcastTab === 'compose' ? 'active' : ''}
                 onClick={() => setMobileBroadcastTab('compose')}
-                style={{ flex: 1, padding: '7px', fontSize: '0.8rem' }}
+                style={{ flex: 1 }}
               >
-                ✍️ Soạn câu
+                <PenLine size={14} />
+                <span>Soạn câu</span>
               </button>
               <button 
                 type="button" 
-                className={`hub-subtab-btn ${mobileBroadcastTab === 'templates' ? 'active' : ''}`}
+                className={mobileBroadcastTab === 'templates' ? 'active' : ''}
                 onClick={() => setMobileBroadcastTab('templates')}
-                style={{ flex: 1, padding: '7px', fontSize: '0.8rem' }}
+                style={{ flex: 1 }}
               >
-                📂 Thư viện mẫu ({templates.length})
+                <BookOpen size={14} />
+                <span>Thư viện ({templates.length})</span>
               </button>
             </div>
           )}
@@ -2052,52 +2067,56 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             style={{ 
               display: 'grid', 
               gridTemplateColumns: isMobileScreen ? '1fr' : '360px 1fr', 
-              gap: '1.25rem',
+              gap: '1rem',
               alignItems: 'start'
             }}
           >
             {/* COLUMN 1: TEMPLATE LIBRARY */}
             {(!isMobileScreen || mobileBroadcastTab === 'templates') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div className="card panel" style={{ background: 'var(--panel-bg)', height: 'auto', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-              <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.85rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <BookOpen size={18} style={{ color: 'var(--accent-primary)' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="card panel" style={{ height: 'auto', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
+              <h2 className="studio-section-title">
+                <BookOpen size={17} style={{ color: 'var(--accent-primary)' }} />
                 <span>Thư viện mẫu câu</span>
               </h2>
 
               {/* Search template */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-input)', border: '1px solid var(--border-default)', borderRadius: '8px', padding: '6px 10px', marginBottom: '0.75rem' }}>
-                <Search size={14} style={{ color: 'var(--text-muted)' }} />
+              <div className="studio-search-box" style={{ width: '100%', marginBottom: '0.7rem' }}>
+                <Search size={14} />
                 <input 
                   type="text" 
                   placeholder="Tìm kiếm mẫu câu..." 
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', height: '24px', padding: 0, fontSize: '0.84rem', outline: 'none', boxShadow: 'none' }}
                 />
               </div>
 
               {/* Category tabs */}
-              <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '0.7rem' }}>
                 {categories.map(cat => (
                   <button 
                     key={cat} 
                     type="button"
                     onClick={() => setActiveCategory(cat)}
                     style={{ 
-                      height: '28px',
+                      height: '30px',
                       whiteSpace: 'nowrap',
                       padding: '0 10px',
-                      borderRadius: '6px',
+                      borderRadius: 'var(--radius-sm)',
                       fontSize: '0.74rem',
                       fontWeight: 600,
-                      background: activeCategory === cat ? 'var(--accent-primary-subtle)' : 'var(--surface-subtle)',
-                      border: activeCategory === cat ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid var(--border-default)',
+                      background: activeCategory === cat ? 'var(--accent-primary-subtle)' : 'var(--bg-subtle)',
+                      border: activeCategory === cat ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       color: activeCategory === cat ? 'var(--accent-primary)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
-                    {cat === 'Favorite' ? '⭐ Yêu thích' : cat}
+                    {cat === 'Favorite' ? (
+                      <>
+                        <Star size={12} style={{ marginRight: '2px' }} />
+                        Yêu thích
+                      </>
+                    ) : cat}
                   </button>
                 ))}
               </div>
@@ -2110,42 +2129,45 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     onClick={() => handleSelectTemplate(tpl)}
                     style={{ 
                       padding: '8px 10px', 
-                      borderRadius: '8px', 
-                      background: selectedTemplateId === tpl.id ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
+                      borderRadius: 'var(--radius-md)', 
+                      background: selectedTemplateId === tpl.id ? 'var(--accent-primary-subtle)' : 'var(--bg-subtle)', 
                       border: selectedTemplateId === tpl.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      transition: 'border-color 140ms ease, background-color 140ms ease'
                     }}
                   >
                     <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '8px' }}>
-                      <span style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.title}</span>
+                      <span style={{ display: 'block', fontSize: '0.83rem', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.title}</span>
                       <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tpl.text}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button 
                         type="button" 
                         onClick={(e) => toggleFavorite(tpl.id, e)}
-                        style={{ background: 'transparent', border: 'none', color: tpl.isFavorite ? '#fbbf24' : 'var(--text-muted)', cursor: 'pointer', padding: '4px', height: 'auto' }}
+                        aria-label="Đánh dấu yêu thích"
+                        style={{ background: 'transparent', border: 'none', color: tpl.isFavorite ? 'var(--status-warning)' : 'var(--text-muted)', cursor: 'pointer', padding: '4px', height: 'auto', minHeight: 'auto' }}
                       >
-                        <Star size={13} fill={tpl.isFavorite ? '#fbbf24' : 'none'} />
+                        <Star size={14} fill={tpl.isFavorite ? 'currentColor' : 'none'} />
                       </button>
                       <button 
                         type="button" 
                         onClick={(e) => handleDeleteTemplate(tpl.id, e)}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--status-danger)', cursor: 'pointer', padding: '4px', height: 'auto' }}
+                        aria-label="Xóa mẫu câu"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--status-danger)', cursor: 'pointer', padding: '4px', height: 'auto', minHeight: 'auto' }}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
                 ))}
                 {filteredTemplates.length === 0 && (
                   <EmptyState 
-                    icon={<Volume2 size={28} />}
+                    icon={<Volume2 size={26} />}
                     title="Chưa có mẫu câu nào" 
-                    description="Soạn và lưu mẫu câu bên cạnh hoặc thêm từ mục Gợi ý ở dưới." 
+                    description="Soạn và lưu mẫu câu bên cạnh hoặc thêm nhanh từ mục Gợi ý ở dưới." 
                     style={{ padding: '1.5rem 1rem' }}
                   />
                 )}
@@ -2153,39 +2175,39 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             </div>
 
             {/* Suggestions Library */}
-            <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <h3 style={{ fontSize: '0.95rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+            <div className="card panel">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.7rem' }}>
+                <h3 className="studio-section-title" style={{ margin: 0, fontSize: '0.88rem' }}>
                   <Sparkles size={15} style={{ color: 'var(--accent-primary)' }} />
                   <span>Gợi ý mẫu câu phát nhanh</span>
                 </h3>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>{filteredSuggestions.length} mẫu</span>
+                <Badge variant="neutral">{filteredSuggestions.length} mẫu</Badge>
               </div>
 
               {/* Category Filter Chips */}
-              <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
                 {[
                   { id: 'all', label: 'Tất cả' },
-                  { id: 'Đặt bàn', label: '🍽️ Đặt bàn' },
-                  { id: 'Vận hành', label: '👨‍🍳 Bếp/Sảnh' },
-                  { id: 'Thu ngân', label: '💰 Thu ngân' },
-                  { id: 'Thông báo', label: '📢 Thông báo' }
+                  { id: 'Đặt bàn', label: 'Đặt bàn' },
+                  { id: 'Vận hành', label: 'Bếp / Sảnh' },
+                  { id: 'Thu ngân', label: 'Thu ngân' },
+                  { id: 'Thông báo', label: 'Thông báo' }
                 ].map(cat => (
                   <button
                     key={cat.id}
                     type="button"
                     onClick={() => setSuggestionCategory(cat.id)}
                     style={{
-                      height: '28px',
+                      height: '30px',
                       padding: '0 10px',
                       borderRadius: 'var(--radius-sm)',
-                      fontSize: '11.5px',
+                      fontSize: '0.74rem',
                       whiteSpace: 'nowrap',
                       border: suggestionCategory === cat.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                       cursor: 'pointer',
-                      background: suggestionCategory === cat.id ? 'var(--accent-primary)' : 'var(--surface-subtle)',
+                      background: suggestionCategory === cat.id ? 'var(--accent-primary)' : 'var(--bg-subtle)',
                       color: suggestionCategory === cat.id ? 'var(--accent-contrast)' : 'var(--text-secondary)',
-                      fontWeight: suggestionCategory === cat.id ? 600 : 500,
+                      fontWeight: 600,
                       transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
                     }}
                   >
@@ -2200,9 +2222,9 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     key={i}
                     style={{ 
                       padding: '8px 10px', 
-                      background: 'var(--bg-elevated)', 
+                      background: 'var(--bg-subtle)', 
                       border: '1px solid var(--border-default)', 
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -2216,15 +2238,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     </div>
                     <button 
                       type="button" 
+                      className="btn-outline"
                       onClick={() => handleLoadSuggestion(sug)}
-                      style={{ height: '28px', background: 'var(--accent-primary-subtle)', border: '1px solid rgba(59, 130, 246, 0.3)', color: 'var(--accent-primary)', borderRadius: '6px', padding: '0 10px', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
+                      style={{ height: '30px', padding: '0 10px', fontSize: '0.74rem', flexShrink: 0, color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
                     >
-                      + Thêm
+                      <Plus size={12} />
+                      <span>Dùng</span>
                     </button>
                   </div>
                 ))}
                 {filteredSuggestions.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--muted)', fontSize: '11px' }}>
+                  <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-muted)', fontSize: '0.76rem' }}>
                     Không có gợi ý trong danh mục này.
                   </div>
                 )}
@@ -2235,31 +2259,31 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
         {/* COLUMN 2: TEXT COMPOSER & INTERPOLATOR */}
         {(!isMobileScreen || mobileBroadcastTab === 'compose') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
-              <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0' }}>✍️ Soạn câu phát âm thanh</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="card panel">
+              <h2 className="studio-section-title">
+                <PenLine size={17} color="var(--accent-primary)" />
+                <span>Soạn câu phát âm thanh</span>
+              </h2>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
                 
                 {/* Title and Category */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '0.75rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Tên mẫu câu (Không bắt buộc)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '0.75rem' }}>
+                  <div className="field">
+                    <label>Tên mẫu câu (Không bắt buộc)</label>
                     <input 
                       type="text" 
-                      className="form-control" 
                       placeholder="VD: Thông báo đón khách"
                       value={composeTitle}
                       onChange={e => setComposeTitle(e.target.value)}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Nhóm</label>
+                  <div className="field">
+                    <label>Nhóm</label>
                     <select 
-                      className="form-control"
                       value={composeCategory}
                       onChange={e => setComposeCategory(e.target.value)}
-                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
                       <option value="Đặt bàn">Đặt bàn</option>
                       <option value="Nhà hàng/Vận hành">Vận hành</option>
@@ -2272,14 +2296,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 </div>
 
                 {/* Textarea Composer */}
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Nội dung mẫu nói <span style={{ color: 'var(--primary)', fontWeight: 500, fontSize: '0.72rem' }}>(Nhấn Ctrl + Enter để phát ngay)</span></span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{composeText.length} ký tự</span>
+                <div className="field">
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Nội dung phát loa <span style={{ color: 'var(--accent-primary)', fontWeight: 500, fontSize: '0.72rem' }}>(Ctrl + Enter để phát ngay)</span></span>
+                    <span style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{composeText.length} ký tự</span>
                   </label>
                   <textarea 
-                    className="form-control"
-                    placeholder="Nhập nội dung mẫu nói ở đây... (Ctrl + Enter để phát loa ngay)"
+                    placeholder="Nhập nội dung cần đọc phát ra loa... (Nhấn Ctrl + Enter để phát ngay)"
                     value={composeText}
                     onChange={e => setComposeText(e.target.value)}
                     onKeyDown={e => {
@@ -2288,28 +2311,18 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         handleSpeak();
                       }
                     }}
-                    style={{ height: '140px', fontFamily: 'inherit', fontSize: '0.95rem', lineHeight: 1.5 }}
+                    style={{ height: '130px', fontFamily: 'inherit', fontSize: '0.92rem', lineHeight: 1.5, padding: '10px 12px' }}
                   />
                   
                   {/* Insert variable quick chips */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', marginRight: '4px' }}>Chèn biến nhanh:</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginRight: '2px' }}>Chèn biến:</span>
                     {["ten_khach", "so_khach", "gio_nhan_ban", "so_ban", "khu_vuc", "ten_nhan_vien", "so_tien"].map(v => (
                       <button 
                         key={v}
                         type="button"
+                        className="amount-chip"
                         onClick={() => setComposeText(prev => prev + ` {${v}}`)}
-                        style={{ 
-                          height: '26px',
-                          fontSize: '0.72rem',
-                          fontWeight: 600,
-                          padding: '0 8px',
-                          background: 'var(--accent-primary-subtle)', 
-                          border: '1px solid rgba(59, 130, 246, 0.25)',
-                          borderRadius: '6px',
-                          color: 'var(--accent-primary)',
-                          cursor: 'pointer' 
-                        }}
                       >
                         +{v}
                       </button>
@@ -2319,16 +2332,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
 
                 {/* DYNAMIC VARIABLES INPUT FIELDS */}
                 {parsedVariables.length > 0 && (
-                  <div className="card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', padding: '1rem', borderRadius: '10px' }}>
-                    <h3 style={{ fontSize: '0.88rem', margin: '0 0 0.75rem 0', color: 'var(--accent-primary)' }}>📝 Nhập giá trị biến động</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', padding: '0.85rem', borderRadius: 'var(--radius-md)' }}>
+                    <h3 className="studio-section-title" style={{ fontSize: '0.84rem', marginBottom: '0.65rem' }}>
+                      <SlidersHorizontal size={14} color="var(--accent-primary)" />
+                      <span>Điền giá trị biến động</span>
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
                       {parsedVariables.map(v => (
-                        <div key={v} className="form-group">
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>&#123;{v}&#125;</label>
+                        <div key={v} className="field">
+                          <label style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)' }}>&#123;{v}&#125;</label>
                           <input 
                             type="text" 
-                            className="form-control" 
-                            style={{ padding: '6px 10px', fontSize: '0.85rem' }}
                             value={variablesInputValues[v] || ''}
                             onChange={e => setVariablesInputValues(prev => ({ ...prev, [v]: e.target.value }))}
                           />
@@ -2339,27 +2353,51 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 )}
 
                 {/* TRANSLATED & NORMALIZED PREVIEW CARD */}
-                <div className="card" style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)', padding: '1rem', borderRadius: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '6px' }}>
-                    <h3 style={{ fontSize: '0.9rem', margin: 0, color: 'var(--status-success)' }}>🔊 Xem trước câu nói thật</h3>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.76rem', fontWeight: 600, color: 'var(--accent-primary)', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={providerSettings.autoOptimize}
-                        onChange={e => setProviderSettings(prev => ({ ...prev, autoOptimize: e.target.checked }))}
-                        style={{ accentColor: 'var(--accent-primary)' }}
+                <div style={{ background: 'var(--status-success-bg)', border: '1px solid var(--status-success-border)', padding: '0.9rem 1rem', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '6px' }}>
+                    <h3 style={{ fontSize: '0.86rem', fontWeight: 700, margin: 0, color: 'var(--status-success)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <Volume2 size={15} />
+                      <span>Xem trước câu phát loa</span>
+                    </h3>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={providerSettings.autoOptimize}
+                      onClick={() => setProviderSettings(prev => ({ ...prev, autoOptimize: !prev.autoOptimize }))}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        height: '30px',
+                        padding: '0 10px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        border: `1px solid ${providerSettings.autoOptimize ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                        background: providerSettings.autoOptimize ? 'var(--accent-primary-subtle)' : 'var(--bg-surface)',
+                        color: providerSettings.autoOptimize ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: providerSettings.autoOptimize ? 'var(--accent-primary)' : 'var(--text-muted)'
+                        }}
                       />
-                      <span>Tự động tối ưu câu đọc</span>
-                    </label>
+                      <span>Chuẩn hóa đọc Việt: {providerSettings.autoOptimize ? 'Bật' : 'Tắt'}</span>
+                    </button>
                   </div>
-                  <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                  <p style={{ margin: '0 0 0.45rem 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.45 }}>
                     {interpolatedText}
                   </p>
                   
                   {/* Speech normalization display */}
                   {providerSettings.autoOptimize && (
-                    <div style={{ borderTop: '1px dashed var(--border-strong)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                      <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Dòng đọc chuẩn hóa phát ra loa:</span>
+                    <div style={{ borderTop: '1px dashed var(--border-strong)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Bản đọc chuẩn hóa gửi tới bộ đọc AI:</span>
                       <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 500, color: 'var(--accent-primary)', fontStyle: 'italic' }}>
                         "{normalizedTextToSpeak}"
                       </span>
@@ -2368,43 +2406,47 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                 </div>
 
                 {/* PLAYBACK CONTROLS PANEL */}
-                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.25rem' }}>
                   {playbackState === 'playing' ? (
                     <button 
+                      type="button"
                       className="primary" 
                       onClick={handleStop}
-                      style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', flexGrow: 1 }}
+                      style={{ background: 'var(--status-danger)', borderColor: 'var(--status-danger)', flexGrow: 1, height: '44px' }}
                     >
-                      <Square size={18} />
+                      <Square size={16} />
                       <span>Dừng phát</span>
                     </button>
                   ) : (
                     <button 
+                      type="button"
                       className="primary" 
                       onClick={handleSpeak}
-                      style={{ flexGrow: 1 }}
+                      style={{ flexGrow: 1, height: '44px' }}
                     >
-                      <Volume2 size={18} />
-                      <span>Nghe thử giọng</span>
+                      <Volume2 size={17} />
+                      <span>Phát ra loa ngay</span>
                     </button>
                   )}
 
-                  <button className="btn-outline" onClick={handleSaveTemplate} style={{ width: '120px' }}>
-                    <Save size={18} />
-                    <span>Lưu lại</span>
+                  <button type="button" className="btn-outline" onClick={handleSaveTemplate} style={{ height: '44px', padding: '0 16px' }}>
+                    <Save size={16} />
+                    <span>Lưu mẫu</span>
                   </button>
                   
                   <button 
+                    type="button"
                     className="btn-outline" 
                     onClick={() => {
                       setComposeText('');
                       setComposeTitle('');
                       setSelectedTemplateId(null);
                     }}
-                    style={{ width: '44px', padding: 0 }}
+                    style={{ width: '44px', height: '44px', padding: 0 }}
                     title="Xóa trắng"
+                    aria-label="Xóa trắng"
                   >
-                    ×
+                    <X size={16} />
                   </button>
                 </div>
 
@@ -2412,10 +2454,14 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
             </div>
 
             {/* Quick action buttons for restaurant operations */}
-            <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
-              <h3 style={{ fontSize: '1rem', margin: '0 0 0.75rem 0' }}>⚡ Phát nhanh thông báo nghiệp vụ</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobileScreen ? '1fr' : '1fr 1fr', gap: '0.75rem' }}>
+            <div className="card panel">
+              <h3 className="studio-section-title">
+                <Megaphone size={16} color="var(--accent-primary)" />
+                <span>Phát nhanh 1 chạm tại quầy</span>
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobileScreen ? '1fr' : '1fr 1fr', gap: '0.65rem' }}>
                 <button 
+                  type="button"
                   className="btn-outline" 
                   onClick={() => {
                     const text = "Có khách đặt bàn mới, vui lòng kiểm tra thông tin tiệc.";
@@ -2426,13 +2472,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
                     dispatchSpeak(normalized);
                   }}
-                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
+                  style={{ height: 'auto', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', gap: '2px' }}
                 >
-                  <strong style={{ fontSize: '0.85rem' }}>📢 Đặt bàn mới</strong>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Phát nhanh thông báo đặt bàn chung</span>
+                  <strong style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Megaphone size={14} color="var(--accent-primary)" />
+                    Đặt bàn mới
+                  </strong>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 400 }}>Phát nhanh thông báo đặt bàn chung</span>
                 </button>
                 
                 <button 
+                  type="button"
                   className="btn-outline" 
                   onClick={() => {
                     const text = "Có giao dịch chuyển khoản mới, đề nghị thu ngân kiểm tra tài khoản.";
@@ -2443,13 +2493,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
                     dispatchSpeak(normalized);
                   }}
-                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
+                  style={{ height: 'auto', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', gap: '2px' }}
                 >
-                  <strong style={{ fontSize: '0.85rem' }}>💰 Chuyển khoản mới</strong>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Phát loa thông báo biến động số dư</span>
+                  <strong style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <CreditCard size={14} color="var(--status-success)" />
+                    Chuyển khoản mới
+                  </strong>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 400 }}>Thông báo biến động số dư tại quầy</span>
                 </button>
 
                 <button 
+                  type="button"
                   className="btn-outline" 
                   onClick={() => {
                     const text = "Bảng chấm công ngày hôm nay đã được chốt và đồng bộ.";
@@ -2460,13 +2514,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
                     dispatchSpeak(normalized);
                   }}
-                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
+                  style={{ height: 'auto', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', gap: '2px' }}
                 >
-                  <strong style={{ fontSize: '0.85rem' }}>⏰ Chốt chấm công</strong>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Phát báo cáo chốt công ngày</span>
+                  <strong style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={14} color="var(--accent-primary)" />
+                    Chốt chấm công
+                  </strong>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 400 }}>Phát báo cáo chốt công cuối ngày</span>
                 </button>
 
                 <button 
+                  type="button"
                   className="btn-outline" 
                   onClick={() => {
                     const text = "Đã xuất file chuyển tiền lương tháng thành công, kế toán trưởng vui lòng duyệt chuyển tiền.";
@@ -2477,13 +2535,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
                     dispatchSpeak(normalized);
                   }}
-                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px' }}
+                  style={{ height: 'auto', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', gap: '2px' }}
                 >
-                  <strong style={{ fontSize: '0.85rem' }}>💵 Báo cáo xuất lương</strong>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Thông báo cho Kế toán trưởng duyệt lương</span>
+                  <strong style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Banknote size={14} color="var(--status-success)" />
+                    Báo cáo xuất lương
+                  </strong>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 400 }}>Thông báo Kế toán trưởng duyệt lương</span>
                 </button>
 
                 <button 
+                  type="button"
                   className="btn-outline" 
                   onClick={() => {
                     const plate = prompt("Nhập biển số xe cần dời:", variablesInputValues.bien_so_xe || "30F-123.45");
@@ -2501,10 +2563,13 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     const normalized = providerSettings.autoOptimize ? normalizeTextForVietnameseTTS(text) : text;
                     dispatchSpeak(normalized);
                   }}
-                  style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px', gridColumn: isMobileScreen ? 'auto' : 'span 2' }}
+                  style={{ height: 'auto', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', gap: '2px', gridColumn: isMobileScreen ? 'auto' : 'span 2' }}
                 >
-                  <strong style={{ fontSize: '0.85rem' }}>🚗 Dời xe khẩn cấp</strong>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Thông báo yêu cầu khách dời xe</span>
+                  <strong style={{ fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Car size={14} color="var(--status-warning)" />
+                    Dời xe khẩn cấp (Nhập biển số)
+                  </strong>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 400 }}>Hỏi nhanh biển số xe và phát loa mời khách gặp bảo vệ</span>
                 </button>
               </div>
             </div>
@@ -2518,59 +2583,57 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       {/* TAB 2: AUDIO CONFIG & API QUOTA SETTINGS */}
       {mainTab === 'settings' && (
         <div style={{ maxWidth: '850px', margin: '0 auto' }}>
-              <div className="card panel" style={{ background: 'var(--panel-bg)' }}>
-                <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <SlidersHorizontal size={18} style={{ color: 'var(--cyan)' }} />
-                  <span>Cấu hình giọng đọc</span>
+              <div className="card panel">
+                <h2 className="studio-section-title">
+                  <SlidersHorizontal size={17} style={{ color: 'var(--accent-primary)' }} />
+                  <span>Cấu hình giọng đọc & Provider AI</span>
                 </h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   
                   {/* Select provider */}
-                  <div className="form-group">
-                    <label className="form-label">Bộ chuyển đổi TTS (Provider)</label>
+                  <div className="field">
+                    <label>Bộ chuyển đổi TTS (Provider)</label>
                     <select 
-                      className="form-control"
                       value={providerSettings.activeProvider}
                       onChange={e => setProviderSettings(prev => ({ ...prev, activeProvider: e.target.value }))}
-                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
-                      <optgroup label="🌟 Nguồn Reverse-Engineered (Miễn phí, Không cần API Key)">
-                        <option value="edge">🧠 Microsoft Edge Neural TTS (Hoài My / Nam Minh - Khuyên dùng)</option>
-                        <option value="capcut">🎬 CapCut / ByteDance SAMI TTS (18 Giọng Việt TikTok/CapCut)</option>
-                        <option value="openaifm">🤖 OpenAI.fm / TTSFM (GPT-4o-mini-tts + Prompt Cảm xúc)</option>
-                        <option value="google">🔍 Google Translate TTS (Multi-chunk Nâng cao, Không Key)</option>
+                      <optgroup label="Nguồn Neural Miễn Phí (Không cần API Key)">
+                        <option value="edge">Microsoft Edge Neural TTS (Hoài My / Nam Minh — Khuyên dùng)</option>
+                        <option value="capcut">CapCut / ByteDance SAMI TTS (18 Giọng Việt)</option>
+                        <option value="openaifm">OpenAI.fm / TTSFM (GPT-4o-mini-tts + Prompt Cảm xúc)</option>
+                        <option value="google">Google Translate TTS (Multi-chunk Nâng cao)</option>
                       </optgroup>
-                      <optgroup label="☁️ Nguồn Trình duyệt & Cloud API Chính thức">
-                        <option value="browser">🌐 Browser Speech API (Nội bộ trình duyệt)</option>
-                        <option value="fpt">⚡ FPT.AI Text to Speech (Cloud API Key)</option>
-                        <option value="viettel">🎖️ Viettel AI Text to Speech (Cloud Token)</option>
-                        <option value="zalo">💬 Zalo AI Text to Speech (Cloud API Key)</option>
-                        <option value="custom">🛠️ Custom Endpoint Server (Tự host)</option>
+                      <optgroup label="Nguồn Trình duyệt & Cloud API Chính thức">
+                        <option value="browser">Browser Speech API (Nội bộ trình duyệt)</option>
+                        <option value="fpt">FPT.AI Text to Speech (Cloud API Key)</option>
+                        <option value="viettel">Viettel AI Text to Speech (Cloud Token)</option>
+                        <option value="zalo">Zalo AI Text to Speech (Cloud API Key)</option>
+                        <option value="custom">Custom Endpoint Server (Tự host)</option>
                       </optgroup>
                     </select>
                   </div>
 
                   {/* Fallback & limits configuration */}
-                  <div style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <div style={{ padding: '0.75rem 0.9rem', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                       <input 
                         type="checkbox" 
                         checked={providerSettings.autoFallback}
                         onChange={e => setProviderSettings(prev => ({ ...prev, autoFallback: e.target.checked }))}
-                        style={{ accentColor: 'var(--cyan)' }}
+                        style={{ accentColor: 'var(--accent-primary)' }}
                       />
-                      <span>Tự động Fallback sang nguồn dự phòng (Google/Browser) khi lỗi</span>
+                      <span>Tự động Fallback sang nguồn dự phòng (Google/Browser) khi gặp lỗi</span>
                     </label>
                   </div>
 
                   {/* 1. Microsoft Edge Read-Aloud Neural TTS */}
                   {providerSettings.activeProvider === 'edge' && (
                     <>
-                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.76rem', display: 'flex', gap: '8px', color: '#60a5fa', lineHeight: 1.45 }}>
-                        <Sparkles size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ background: 'var(--accent-primary-subtle)', border: '1px solid var(--border-strong)', padding: '0.75rem 0.9rem', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', display: 'flex', gap: '8px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                        <Sparkles size={16} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--accent-primary)' }} />
                         <span>
-                          <strong>Microsoft Edge Read-Aloud Neural TTS (DRM Sec-MS-GEC v2):</strong> Sử dụng trực tiếp giọng đọc Neural chất lượng cao nhất của Microsoft Azure (Hoài My & Nam Minh) hoàn toàn miễn phí, không cần tài khoản Azure.
+                          <strong style={{ color: 'var(--text-primary)' }}>Microsoft Edge Neural TTS:</strong> Sử dụng trực tiếp giọng đọc Neural tiếng Việt chất lượng cao (Hoài My & Nam Minh) hoàn toàn miễn phí, không cần tài khoản Azure.
                         </span>
                       </div>
 
@@ -2810,8 +2873,8 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                           ))}
                         </select>
                         {voices.filter(v => v.lang.startsWith('vi')).length === 0 && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--red)', display: 'block', marginTop: '4px' }}>
-                            ⚠️ Trình duyệt của bạn không hỗ trợ giọng nói tiếng Việt chuẩn.
+                          <span style={{ fontSize: '0.75rem', color: 'var(--status-danger)', display: 'block', marginTop: '4px' }}>
+                            Trình duyệt của bạn không hỗ trợ giọng nói tiếng Việt chuẩn.
                           </span>
                         )}
                       </div>
@@ -2854,7 +2917,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       {/* Safety API Key warning banner */}
                       <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
                         <ShieldAlert size={16} style={{ flexShrink: 0 }} />
-                        <span>⚠️ API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                        <span>API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
                       </div>
 
                       <div className="form-group">
@@ -2871,7 +2934,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://console.fpt.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
-                            🔗 Lấy API Key tại FPT.AI Console
+                            Lấy API Key tại FPT.AI Console
                           </a>
                         </div>
                       </div>
@@ -2960,7 +3023,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       {/* Safety API Key warning banner */}
                       <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
                         <ShieldAlert size={16} style={{ flexShrink: 0 }} />
-                        <span>⚠️ API token đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                        <span>API token đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
                       </div>
 
                       <div className="form-group">
@@ -2977,7 +3040,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://viettelai.vn" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
-                            🔗 Lấy Token tại Viettel AI Console
+                            Lấy Token tại Viettel AI Console
                           </a>
                         </div>
                       </div>
@@ -3066,7 +3129,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       {/* Safety API Key warning banner */}
                       <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#f87171' }}>
                         <ShieldAlert size={16} style={{ flexShrink: 0 }} />
-                        <span>⚠️ API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
+                        <span>API key đang lưu trên trình duyệt, chỉ dùng cho thử nghiệm.</span>
                       </div>
 
                       <div className="form-group">
@@ -3083,7 +3146,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                         />
                         <div style={{ marginTop: '4px', textAlign: 'right' }}>
                           <a href="https://zalo.ai" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: 'var(--cyan)', textDecoration: 'underline' }}>
-                            🔗 Lấy API Key tại Zalo AI Console
+                            Lấy API Key tại Zalo AI Console
                           </a>
                         </div>
                       </div>
@@ -3159,7 +3222,7 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                     <>
                       <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', display: 'flex', gap: '8px', color: '#34d399' }}>
                         <Info size={16} style={{ flexShrink: 0 }} />
-                        <span>💡 Google Translate TTS (Multi-chunk Nâng cao): Tự động tách câu dài (&gt;180 ký tự) theo dấu câu, hỗ trợ chỉnh tốc độ phát và tự động dự phòng qua Proxy / No-Referer.</span>
+                        <span>Google Translate TTS (Multi-chunk Nâng cao): Tự động tách câu dài (&gt;180 ký tự) theo dấu câu, hỗ trợ chỉnh tốc độ phát và tự động dự phòng qua Proxy / No-Referer.</span>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -3276,10 +3339,10 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
       {/* TAB 3: HISTORY DETAIL LOG */}
       {mainTab === 'history' && (
         <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <div className="card panel" style={{ background: 'var(--panel-bg)', minHeight: '350px', maxHeight: '650px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <h2 style={{ fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <History size={16} style={{ color: 'var(--cyan)' }} />
+          <div className="card panel" style={{ minHeight: '350px', maxHeight: '650px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+              <h2 className="studio-section-title" style={{ margin: 0 }}>
+                <History size={17} style={{ color: 'var(--accent-primary)' }} />
                 <span>Nhật ký phát âm thanh gần đây</span>
               </h2>
               {history.length > 0 && (
@@ -3292,33 +3355,37 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       showToast('Đã dọn dẹp toàn bộ lịch sử phát!', 'info');
                     }
                   }}
-                  style={{ fontSize: '11px', color: '#f87171', padding: '2px 8px', height: '24px' }}
+                  style={{ fontSize: '0.76rem', color: 'var(--status-danger)' }}
                 >
-                  Xóa tất cả
+                  <Trash2 size={13} />
+                  <span>Xóa tất cả</span>
                 </button>
               )}
             </div>
 
-            <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {history.map(item => (
                 <div 
                   key={item.id} 
                   style={{ 
                     padding: '10px 12px', 
-                    background: 'var(--bg-elevated)', 
+                    background: 'var(--bg-subtle)', 
                     border: '1px solid var(--border-default)', 
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    gap: '12px'
                   }}
                 >
-                  <div style={{ overflow: 'hidden', flexGrow: 1, paddingRight: '12px' }}>
-                    <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  <div style={{ overflow: 'hidden', flexGrow: 1 }}>
+                    <span style={{ display: 'block', fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                       {item.text}
                     </span>
-                    <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginTop: '2px' }}>
-                      🕒 {new Date(item.playedAt).toLocaleString('vi-VN')} • <strong style={{ color: 'var(--cyan)' }}>{item.providerId.toUpperCase()}</strong>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                      <Clock size={12} />
+                      <span>{new Date(item.playedAt).toLocaleString('vi-VN')}</span>
+                      <Badge variant="info">{item.providerId.toUpperCase()}</Badge>
                     </span>
                   </div>
                   <button 
@@ -3330,24 +3397,17 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
                       dispatchSpeak(item.normalizedText, item.providerId);
                     }}
                     className="primary"
-                    style={{ 
-                      height: '32px',
-                      padding: '0 10px',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
+                    style={{ height: '34px', padding: '0 12px', fontSize: '0.78rem', flexShrink: 0 }}
                     title="Phát lại và mở khung soạn thảo"
                   >
-                    <Play size={12} fill="white" />
+                    <Play size={12} fill="currentColor" />
                     <span>Phát lại</span>
                   </button>
                 </div>
               ))}
               {history.length === 0 && (
                 <EmptyState 
-                  icon={<History size={36} />}
+                  icon={<History size={32} />}
                   title="Chưa có lịch sử phát nào"
                   description="Các câu phát qua loa sẽ được tự động ghi lại tại đây."
                 />
@@ -3356,22 +3416,6 @@ export default function TTSPage({ showToast, gasUrl, spreadsheetId }: TTSPagePro
           </div>
         </div>
       )}
-
-      {/* Guide Panel Instruction */}
-      <div className="card panel" style={{ marginTop: '1.5rem', background: 'var(--panel-bg)' }}>
-        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Info size={18} style={{ color: 'var(--cyan)' }} />
-          <span>Hướng dẫn sử dụng Đọc TTS</span>
-        </h2>
-        <ol style={{ fontSize: '0.85rem', color: 'var(--muted)', paddingLeft: '1.25rem', lineHeight: 1.6, margin: 0 }}>
-          <li>Nhập nội dung mẫu câu cần nói ở khung soạn thảo hoặc chọn nhanh từ thư viện bên trái.</li>
-          <li>Bạn có thể chèn biến động dạng <code style={{ color: 'var(--cyan)' }}>&#123;ten_khach&#125;</code> để điền nhanh nội dung động cho khách hàng.</li>
-          <li>Chọn provider phát âm mong muốn: <strong>Edge Neural TTS</strong> (Hoài My / Nam Minh), <strong>CapCut SAMI TTS</strong> (18 giọng TikTok/CapCut), <strong>OpenAI.fm GPT-4o</strong>, <strong>Google Multi-chunk TTS</strong>, hoặc các Cloud API (FPT.AI / Viettel / Zalo).</li>
-          <li>Điều chỉnh tốc độ và cao độ giọng đọc phù hợp với không gian nhà hàng của bạn.</li>
-          <li>Bấm <strong>"Nghe thử giọng"</strong> để bắt đầu phát âm thanh. Hệ thống tự động fallback sang nguồn miễn phí nếu Cloud bị lỗi hoặc hết Quota.</li>
-          <li>Bấm <strong>"Lưu lại"</strong> để lưu mẫu câu vào cơ sở dữ liệu local và đồng bộ lên Spreadsheet.</li>
-        </ol>
-      </div>
 
     </div>
   );
