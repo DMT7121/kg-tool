@@ -213,7 +213,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
       justifyContent: 'center', 
       gap: '0.85rem',
       background: 'var(--surface-subtle)',
-      borderRadius: '12px',
+      borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--border-default)',
       ...style
     }}>
@@ -244,7 +244,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       padding: '1.5rem', 
       background: 'var(--status-danger-bg)', 
       border: '1px solid var(--status-danger-border)', 
-      borderRadius: '12px', 
+      borderRadius: 'var(--radius-lg)', 
       color: 'var(--status-danger)', 
       display: 'flex', 
       flexDirection: 'column', 

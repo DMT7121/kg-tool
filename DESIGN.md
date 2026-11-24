@@ -1,64 +1,50 @@
 # KG Studio — Design System & Architecture (`DESIGN.md`)
 
-## 1. Visual Direction & Domain Exemplars
-- **Domain**: Enterprise F&B Operations, POS Billing, HR Payroll & FinTech Disbursement Suite (`KG Studio`).
-- **Aesthetic Persona**: **High-Craft Editorial Operations Studio** (inspired by **Linear**, **Stripe Dashboard**, **Square POS**, and **Raycast**).
-- **100% Visual Transformation**:
-  - Replaced the legacy dark-navy `#050b1e` + neon-cyan glassmorphism look with a dual-mode **Warm Carbon & Emerald/Terracotta Studio** dark theme and **Crisp Alabaster & Forest Slate** daylight theme.
-  - Eliminated heavy multi-layer `backdrop-filter: blur(24px)` GPU bottlenecks in favor of crisp `1px solid` structural hairlines, subtle surface luminance hierarchy, and tactile micro-interactions.
-  - Dual deployment architecture: **Standalone Webapp (PWA)** + **Browser Extension (Manifest V3 Side Panel & Popup Companion)**.
+## 1. Visual Direction & Usability Philosophy (Option G — Command Home Launchpad)
+- **Domain**: Enterprise F&B Operations, POS Billing (VietQR), AI TTS Broadcast, HR Payroll K80 & FinTech Disbursement Suite (`KG Studio`).
+- **Aesthetic Persona**: **Command Home Launchpad — Ocean Sapphire** (grounded in NN/g Usability Heuristics, Fitts's Law, Jakob's Law, Square POS, and Apple HIG).
+- **Core UX Upgrades**:
+  - **6 Large 1-Click Launchpad Tiles** on the default Home screen showing live operational metrics and instant action buttons so new staff and cashiers know where to tap in under 2 seconds.
+  - **Single-Tier Full-Label Top Navigation (`58px`)**: Eliminated the redundant dual-tier ribbon; every navigation item pairs a crisp `lucide-react` icon with a clear Vietnamese text label.
+  - **Ergonomic Touch & Desk Controls**: Comfortable `40px` table rows, `38–44px` buttons (`>= 44px` on touch/mobile), semantic `<button>` controls throughout, zero glassmorphism blur bottlenecks, and `10–14px` clean surface radii.
+  - **Dual Deployment**: Standalone Webapp (PWA) + Chrome/Edge Extension Side Panel (`420px`) & Mobile Dock with full access to all 7 modules + Home.
 
 ---
 
 ## 2. Color & Atmospheric Polarity (Dual Adaptive Palette)
 
-### Dark Theme (`[data-theme="dark"]` — Default Carbon Studio)
+### Light Theme (`[data-theme="light"]` — Default Soft Sky-Cloud & Ocean Sapphire)
 | Token | Value | Role |
 | :--- | :--- | :--- |
-| `--bg` / `--bg-dark` | `#0c0d10` | Primary carbon canvas |
-| `--bg-elevated` | `#13151a` | Sidebar, topbar, and structural frame |
-| `--panel-bg` / `--card-bg` | `#171920` | Primary Bento card surface |
-| `--card-bg-hover` | `#1d2029` | Interactive row/card hover state |
-| `--surface-subtle` | `#21242e` | Segmented control track, input fill |
-| `--border` / `--glass-border` | `rgba(255, 255, 255, 0.08)` | Crisp 1px structural hairline |
-| `--border-strong` | `rgba(255, 255, 255, 0.15)` | Highlighted / focused border |
-| `--text` / `--text-main` | `#f3f4f6` | Alabaster primary ink |
-| `--muted` / `--text-muted` | `#9ca3af` | Neutral slate secondary label |
-| `--primary` / `--blue` | `#10b981` | **Emerald Studio Accent** (Primary CTA & active state) |
-| `--primary-hover` | `#059669` | Deep emerald hover |
-| `--accent` / `--cyan` | `#f59e0b` | **Warm Amber Accent** (Highlights, monetary emphasis) |
-| `--gold` | `#fbbf24` | Gold badge & premium indicator |
-| `--green` / `--success` | `#22c55e` | Verified / Online / Positive delta |
-| `--red` / `--danger` | `#ef4444` | Error / Deduction / Destructive action |
+| `--bg-canvas` / `--bg-base` | `#F5F8FB` | Soft sky-cloud primary canvas |
+| `--bg-surface` / `--bg-panel` | `#FFFFFF` | Crisp elevated card & header surface |
+| `--bg-subtle` | `#EAF1F7` | Subtle input/pill track & table header |
+| `--border-default` | `#D4E0EC` | Clean 1px structural sky hairline |
+| `--border-strong` | `#B3C6D9` | Focused / active border |
+| `--text-primary` | `#0F1C2A` | High-contrast marine charcoal ink |
+| `--text-muted` | `#4A5E73` | WCAG AA balanced secondary text |
+| `--accent-primary` | `#0369A1` | **Ocean Sapphire** (Primary CTA & active nav) |
+| `--accent-primary-hover` | `#075985` | Deep sapphire hover |
+| `--accent-primary-subtle` | `#E0F2FE` | Soft sapphire active highlight |
+| `--status-success` | `#15803D` | Verified / Sheets Live |
+| `--status-warning` | `#B45309` | Warnings & highlights |
+| `--status-danger` | `#B42318` | Destructive actions & errors |
 
-### Light Theme (`[data-theme="light"]` — Crisp Daylight Alabaster)
+### Dark Theme (`[data-theme="dark"]` — Deep Marine Slate & Crisp Sky)
 | Token | Value | Role |
 | :--- | :--- | :--- |
-| `--bg` / `--bg-dark` | `#f6f5f2` | Warm alabaster paper canvas |
-| `--bg-elevated` | `#ffffff` | Pure white navigation & header surface |
-| `--panel-bg` / `--card-bg` | `#ffffff` | Crisp white card surface |
-| `--card-bg-hover` | `#f1f0ec` | Subtle stone hover surface |
-| `--surface-subtle` | `#eeede8` | Input & pill track surface |
-| `--border` / `--glass-border` | `rgba(15, 23, 42, 0.09)` | Crisp stone hairline |
-| `--border-strong` | `rgba(15, 23, 42, 0.18)` | Active control border |
-| `--text` / `--text-main` | `#111827` | Deep charcoal primary ink |
-| `--muted` / `--text-muted` | `#6b7280` | Balanced slate secondary text |
-| `--primary` / `--blue` | `#059669` | Deep Emerald primary action |
-| `--accent` / `--cyan` | `#d97706` | Warm Terracotta Amber |
-| `--gold` | `#b45309` | Warm bronze-gold |
+| `--bg-canvas` / `--bg-base` | `#0B1219` | Deep marine slate canvas |
+| `--bg-surface` / `--bg-panel` | `#131D27` | Elevated card & header surface |
+| `--bg-subtle` | `#1C2937` | Pill track & subtle container |
+| `--border-default` | `#263749` | Crisp dark marine hairline |
+| `--text-primary` | `#F0F6FC` | Clean alabaster ink |
+| `--text-muted` | `#94A7BC` | Balanced slate muted label |
+| `--accent-primary` | `#38BDF8` | **Crisp Sky** accent |
+| `--accent-contrast` | `#062030` | High-contrast ink on bright sky |
 
 ---
 
-## 3. Typography & Scannable Hierarchy
-- **Primary UI Sans**: `'Plus Jakarta Sans', 'Be Vietnam Pro', 'Inter', -apple-system, sans-serif`
-- **Display / Headings**: `'Plus Jakarta Sans', 'Be Vietnam Pro', sans-serif` (`font-weight: 700–800`, `letter-spacing: -0.025em`)
-- **Numeric & Financial Discipline**: `'JetBrains Mono', 'Be Vietnam Pro', monospace` with `font-variant-numeric: tabular-nums` enforced across all currency values, bank accounts, hours, workdays, and timestamps.
-
----
-
-## 4. Layout, Spatial Architecture & Dual Webapp/Extension Ergonomics
-1. **Desktop & Tablet Webapp Mode**:
-   - **Left Structural Rail (`248px` expanded / `68px` collapsed)**: Grouped into clear operational domains (*Nhân sự & Lương*, *Tài chính & POS*, *Tiện ích & Hệ thống*), with instant keyboard shortcut badges (`Alt+1`..`Alt+5`, `Ctrl+K`).
-   - **Sticky Operational Topbar (`58px`)**: Breadcrumb context, **1-Click Cross-Module Pipeline Actions** (e.g., *Chấm công → Tính lương*, *Tính lương → Lập lệnh chuyển khoản*), **Quick Extension Mode / Side Panel Launcher**, **Theme Switcher (Dark/Light)**, and **Command Palette Trigger (`Ctrl+K`)**.
-2. **Browser Extension Mode (`?mode=extension` or viewport `< 520px` / Chrome Side Panel & Popup)**:
-   - Automatically adapts into a compact, zero-waste **Quick Companion Workspace** with a bottom/top dock, instant VietQR POS generator, 1-click TTS broadcast, and Bank Account / Attendance quick tools.
+## 3. Typography & Numeric Discipline
+- **Display / Headings**: `'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif`
+- **Body / UI**: `'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, sans-serif`
+- **Financial & Tabular Data**: `'JetBrains Mono', 'IBM Plex Mono', monospace` with `font-variant-numeric: tabular-nums` right-aligned across all VNĐ amounts, bank accounts, hours, and workdays.

@@ -1,29 +1,29 @@
-/* Auto-generated Project Design DNA Tokens (KG Studio Operations Sheet) */
+/* Project Design DNA Tokens — KG Studio Command Home Launchpad (Option G: Ocean Sapphire) */
 :root, [data-theme="light"] {
-  --font-heading: 'IBM Plex Sans', 'Be Vietnam Pro', sans-serif;
-  --font-body: 'Be Vietnam Pro', 'IBM Plex Sans', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --font-heading: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif;
+  --font-body: 'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
 
-  --bg-canvas: #F3F5F2;
+  --bg-canvas: #F5F8FB;
   --bg-surface: #FFFFFF;
-  --bg-subtle: #E7ECE5;
-  --ink-primary: #141913;
-  --ink-secondary: #4B5549;
-  --border-default: #CFD5CC;
-  --accent-primary: #3F6212;
+  --bg-subtle: #EAF1F7;
+  --ink-primary: #0F1C2A;
+  --ink-secondary: #4A5E73;
+  --border-default: #D4E0EC;
+  --accent-primary: #0369A1;
   --accent-contrast: #FFFFFF;
   --status-success: #15803D;
   --status-warning: #B45309;
   --status-danger: #B42318;
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 9999px;
-  --row-height: 32px;
+  --row-height: 40px;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-md: 0 8px 20px rgba(16, 24, 40, 0.08);
+  --shadow-sm: 0 1px 3px rgba(15, 28, 42, 0.05);
+  --shadow-md: 0 8px 24px rgba(15, 28, 42, 0.08);
   --motion-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
   --motion-base: 200ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -39,14 +39,14 @@
 }
 
 [data-theme="dark"] {
-  --bg-canvas: #0F120E;
-  --bg-surface: #171C15;
-  --bg-subtle: #222A20;
-  --ink-primary: #EAEFE8;
-  --ink-secondary: #9CA898;
-  --border-default: #2F3A2B;
-  --accent-primary: #84CC16;
-  --accent-contrast: #141913;
+  --bg-canvas: #0B1219;
+  --bg-surface: #131D27;
+  --bg-subtle: #1C2937;
+  --ink-primary: #F0F6FC;
+  --ink-secondary: #94A7BC;
+  --border-default: #263749;
+  --accent-primary: #38BDF8;
+  --accent-contrast: #062030;
   --status-success: #4ADE80;
   --status-warning: #F59E0B;
   --status-danger: #F87171;

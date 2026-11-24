@@ -1,60 +1,60 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
 :root,
 [data-theme="light"] {
   /* ==========================================================================
-     1. DESIGN DNA TOKENS — OPTION A: UTILITARIAN FREEZE-PANE SHEET
-     Olive Moss (#3F6212) & Alabaster Ledger (#F3F5F2)
+     1. DESIGN DNA TOKENS — OPTION G: COMMAND HOME LAUNCHPAD
+     Ocean Sapphire (#0369A1) & Soft Sky-Cloud (#F5F8FB)
      ========================================================================== */
   color-scheme: light;
 
-  --bg-canvas: #F3F5F2;
+  --bg-canvas: #F5F8FB;
   --bg-surface: #FFFFFF;
-  --bg-subtle: #E7ECE5;
-  --bg-zebra: #F8FAF7;
-  --bg-ribbon: #1A2118;
-  --bg-ribbon-elevated: #252F22;
-  --bg-ribbon-border: #2F3A2B;
-  --ink-ribbon: #E7ECE5;
-  --ink-ribbon-muted: #A7B3A3;
+  --bg-subtle: #EAF1F7;
+  --bg-zebra: #F8FBFD;
+  --bg-ribbon: #FFFFFF;
+  --bg-ribbon-elevated: #EAF1F7;
+  --bg-ribbon-border: #D4E0EC;
+  --ink-ribbon: #0F1C2A;
+  --ink-ribbon-muted: #4A5E73;
 
-  --bg-base: #F3F5F2;
-  --bg-lowest: #E7ECE5;
+  --bg-base: #F5F8FB;
+  --bg-lowest: #EAF1F7;
   --bg-elevated: #FFFFFF;
   --bg-panel: #FFFFFF;
-  --bg-hover: #EDF2EA;
-  --bg-active: #E1EBD8;
+  --bg-hover: #EEF5FB;
+  --bg-active: #DFF0FC;
   --bg-glass: #FFFFFF;
 
   --surface-card: #FFFFFF;
-  --surface-hover: rgba(63, 98, 18, 0.055);
-  --surface-subtle: #F7F9F6;
+  --surface-hover: rgba(3, 105, 161, 0.06);
+  --surface-subtle: #F2F6FA;
   --surface-input: #FFFFFF;
 
-  /* Typography Hierarchy */
-  --ink-primary: #141913;
-  --ink-secondary: #3E473C;
-  --text-primary: #141913;
-  --text-secondary: #3E473C;
-  --text-muted: #4E5A4C;
-  --text-disabled: #727E6F;
+  /* Typography Hierarchy (WCAG 2.2 AA Verified) */
+  --ink-primary: #0F1C2A;
+  --ink-secondary: #33475B;
+  --text-primary: #0F1C2A;
+  --text-secondary: #33475B;
+  --text-muted: #4A5E73;
+  --text-disabled: #75899E;
 
-  /* Crisp 1px Structural Grid Hairlines */
-  --border-subtle: #E2E7DF;
-  --border-default: #CFD5CC;
-  --border-strong: #AAB4A6;
-  --border-focus: #3F6212;
+  /* Crisp 1px Structural Sky-Slate Hairlines */
+  --border-subtle: #E2ECF4;
+  --border-default: #D4E0EC;
+  --border-strong: #B3C6D9;
+  --border-focus: #0369A1;
 
-  /* Olive Moss Accent & Semantic Status */
-  --accent-primary: #3F6212;
-  --accent-primary-light: #4D7C0F;
-  --accent-primary-hover: #365314;
-  --accent-primary-subtle: #ECF3E1;
+  /* Ocean Sapphire Primary Accent & Semantic Status */
+  --accent-primary: #0369A1;
+  --accent-primary-light: #0284C7;
+  --accent-primary-hover: #075985;
+  --accent-primary-subtle: #E0F2FE;
   --accent-contrast: #FFFFFF;
-  --accent-lime: #84CC16;
+  --accent-lime: #0369A1;
 
-  --accent-secondary: #155E75;
-  --accent-secondary-subtle: #ECFEFF;
+  --accent-secondary: #B45309;
+  --accent-secondary-subtle: #FEF3C7;
 
   --status-success: #15803D;
   --status-success-bg: #DCFCE7;
@@ -73,7 +73,7 @@
   --status-purple-bg: #EDE9FE;
   --status-purple-border: rgba(91, 33, 182, 0.24);
 
-  /* Legacy Aliases (Preserving existing child module compatibility) */
+  /* Legacy Aliases (Preserving 100% child module compatibility) */
   --bg: var(--bg-base);
   --bg-2: var(--bg-elevated);
   --panel: var(--bg-panel);
@@ -89,15 +89,15 @@
   --primary: var(--accent-primary);
   --blue: var(--accent-primary);
   --blue-2: var(--accent-primary-hover);
-  --cyan: var(--accent-secondary);
-  --cyan-glow: rgba(63, 98, 18, 0.14);
+  --cyan: var(--accent-primary-light);
+  --cyan-glow: rgba(3, 105, 161, 0.14);
   --green: var(--status-success);
   --orange: var(--status-warning);
   --gold: var(--status-warning);
   --red: var(--status-danger-solid);
   --purple: var(--status-purple);
 
-  /* Spacing, Crisp 2-4px Sheet Radii, Zero Heavy Shadows */
+  /* Ergonomic Spacing, Tactile 6-14px Radii & Subtle Elevation */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -108,23 +108,23 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  --radius-xs: 2px;
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 6px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-full: 9999px;
-  --row-height: 34px;
+  --row-height: 40px;
 
-  --shadow-sm: 0 1px 2px rgba(20, 25, 19, 0.04);
-  --shadow-md: 0 3px 10px rgba(20, 25, 19, 0.06);
-  --shadow-lg: 0 10px 24px rgba(20, 25, 19, 0.12);
+  --shadow-sm: 0 1px 3px rgba(15, 28, 42, 0.05);
+  --shadow-md: 0 6px 18px rgba(15, 28, 42, 0.07);
+  --shadow-lg: 0 14px 32px rgba(15, 28, 42, 0.12);
   --shadow-inset: none;
   --shadow: var(--shadow-sm);
 
-  --font-heading: 'IBM Plex Sans', 'Be Vietnam Pro', -apple-system, sans-serif;
-  --font-sans: 'Be Vietnam Pro', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-heading: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif;
+  --font-sans: 'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 140ms;
@@ -144,62 +144,62 @@
 }
 
 /* ==========================================================================
-   2. DARK OLIVE LEDGER THEME ([data-theme="dark"])
+   2. DARK MARINE SLATE THEME ([data-theme="dark"])
    ========================================================================== */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: #0F120E;
-  --bg-surface: #171C15;
-  --bg-subtle: #20271D;
-  --bg-zebra: #131812;
-  --bg-ribbon: #0B0E0A;
-  --bg-ribbon-elevated: #182016;
-  --bg-ribbon-border: #283324;
-  --ink-ribbon: #EAEFE8;
-  --ink-ribbon-muted: #9CA898;
+  --bg-canvas: #0B1219;
+  --bg-surface: #131D27;
+  --bg-subtle: #1C2937;
+  --bg-zebra: #101922;
+  --bg-ribbon: #111B24;
+  --bg-ribbon-elevated: #1C2937;
+  --bg-ribbon-border: #263749;
+  --ink-ribbon: #F0F6FC;
+  --ink-ribbon-muted: #94A7BC;
 
-  --bg-base: #0F120E;
-  --bg-lowest: #0B0E0A;
-  --bg-elevated: #171C15;
-  --bg-panel: #171C15;
-  --bg-hover: #21291E;
-  --bg-active: #2B3627;
-  --bg-glass: #171C15;
+  --bg-base: #0B1219;
+  --bg-lowest: #080E14;
+  --bg-elevated: #131D27;
+  --bg-panel: #131D27;
+  --bg-hover: #1B2A38;
+  --bg-active: #1E3A52;
+  --bg-glass: #131D27;
 
-  --surface-card: #171C15;
-  --surface-hover: rgba(132, 204, 22, 0.08);
-  --surface-subtle: #1B2219;
-  --surface-input: #0F120E;
+  --surface-card: #131D27;
+  --surface-hover: rgba(56, 189, 248, 0.09);
+  --surface-subtle: #172330;
+  --surface-input: #0D151D;
 
-  --ink-primary: #EAEFE8;
-  --ink-secondary: #B8C4B4;
-  --text-primary: #EAEFE8;
-  --text-secondary: #B8C4B4;
-  --text-muted: #8E9C8A;
-  --text-disabled: #5D6959;
+  --ink-primary: #F0F6FC;
+  --ink-secondary: #BFD0E0;
+  --text-primary: #F0F6FC;
+  --text-secondary: #BFD0E0;
+  --text-muted: #94A7BC;
+  --text-disabled: #647B92;
 
-  --border-subtle: #242D21;
-  --border-default: #2F3A2B;
-  --border-strong: #44533E;
-  --border-focus: #84CC16;
+  --border-subtle: #1D2B38;
+  --border-default: #263749;
+  --border-strong: #374F68;
+  --border-focus: #38BDF8;
 
-  --accent-primary: #84CC16;
-  --accent-primary-light: #A3E635;
-  --accent-primary-hover: #A3E635;
-  --accent-primary-subtle: rgba(132, 204, 22, 0.14);
-  --accent-contrast: #141913;
-  --accent-lime: #84CC16;
+  --accent-primary: #38BDF8;
+  --accent-primary-light: #7DD3FC;
+  --accent-primary-hover: #7DD3FC;
+  --accent-primary-subtle: rgba(56, 189, 248, 0.14);
+  --accent-contrast: #062030;
+  --accent-lime: #38BDF8;
 
-  --accent-secondary: #38BDF8;
-  --accent-secondary-subtle: rgba(56, 189, 248, 0.12);
+  --accent-secondary: #F59E0B;
+  --accent-secondary-subtle: rgba(245, 158, 11, 0.14);
 
   --status-success: #4ADE80;
-  --status-success-bg: rgba(74, 222, 128, 0.12);
+  --status-success-bg: rgba(74, 222, 128, 0.14);
   --status-success-border: rgba(74, 222, 128, 0.28);
 
   --status-warning: #F59E0B;
-  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
   --status-warning-border: rgba(245, 158, 11, 0.28);
 
   --status-danger: #F87171;
@@ -211,16 +211,16 @@
   --status-purple-bg: rgba(167, 139, 250, 0.14);
   --status-purple-border: rgba(167, 139, 250, 0.28);
 
-  --blue: #84CC16;
-  --blue-2: #65A30D;
+  --blue: #38BDF8;
+  --blue-2: #0EA5E9;
   --cyan: #38BDF8;
-  --cyan-glow: rgba(132, 204, 22, 0.16);
+  --cyan-glow: rgba(56, 189, 248, 0.18);
   --green: #4ADE80;
   --red: #F87171;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.48);
-  --shadow-lg: 0 14px 32px rgba(0, 0, 0, 0.65);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.62);
   --shadow-inset: none;
 }
 
@@ -277,17 +277,17 @@ html, body {
   min-height: 100vh;
 }
 
-/* Custom Crisp Sheet Scrollbars */
+/* Clean Scrollbars */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-subtle);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 2px;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);

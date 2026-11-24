@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
+  Home,
   Search,
   Calendar,
   CreditCard,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export type CommandTabId =
+  | 'home'
   | 'attendance'
   | 'payroll'
   | 'vietqr'
@@ -65,6 +67,18 @@ const CommandPaletteDialog: React.FC<Omit<CommandPaletteProps, 'isOpen'>> = ({
 
   const commands: CommandItem[] = useMemo(() => [
     // 1. Navigation
+    {
+      id: 'nav_home',
+      title: 'Đi tới: Trang chủ 1 chạm (Launchpad)',
+      subtitle: 'Màn hình tổng quan 6 thẻ chức năng lớn với số liệu thực tế',
+      category: 'navigation',
+      icon: <Home size={16} />,
+      keywords: 'trang chu home launchpad tong quan menu chinh',
+      onSelect: () => {
+        onNavigateTab('home');
+        onClose();
+      }
+    },
     {
       id: 'nav_attendance',
       title: 'Đi tới: Xử lý Chấm công Excel',

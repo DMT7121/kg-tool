@@ -28,7 +28,11 @@ import {
   Cpu,
   Wallet,
   Activity,
-  UploadCloud
+  UploadCloud,
+  Home,
+  ArrowRight,
+  MoreHorizontal,
+  Printer
 } from 'lucide-react';
 import './App.css';
 import { parseFile, processRecords, exportToExcel, exportAttendanceTemplate, summarizeAttendanceForPayroll, type ProcessedRecord, type TimeRecord } from './processor';
@@ -41,7 +45,7 @@ const TransferFileTool = lazy(() => import('./components/TransferFileTool'));
 const TTSPage = lazy(() => import('./components/TTSPage'));
 const HikvisionSync = lazy(() => import('./components/HikvisionSync'));
 
-type AppViewTab = 'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts' | 'hikvision';
+type AppViewTab = 'home' | 'attendance' | 'vietqr' | 'payroll' | 'settings' | 'transfer' | 'tts' | 'hikvision';
 type ReceiptTheme = 'blue' | 'green' | 'black' | 'gold';
 type SplitMethod = 'equal' | 'custom';
 
@@ -181,8 +185,9 @@ function resolveInitialDeepLinkState(savedAccounts: SavedAccount[], banks: Bank[
     };
   }
 
-  let view: AppViewTab = 'attendance';
-  if (tabParam === 'tts' || textParam) view = 'tts';
+  let view: AppViewTab = 'home';
+  if (tabParam === 'attendance') view = 'attendance';
+  else if (tabParam === 'tts' || textParam) view = 'tts';
   else if (tabParam === 'payroll') view = 'payroll';
   else if (tabParam === 'transfer') view = 'transfer';
   else if (tabParam === 'hikvision') view = 'hikvision';
@@ -246,20 +251,21 @@ function App() {
     setTheme(next);
     showToast(
       next === 'light'
-        ? 'Đã chuyển sang chế độ Sáng (Daylight Alabaster)'
-        : 'Đã chuyển sang chế độ Tối (Warm Carbon Studio)',
+        ? 'Đã chuyển sang chế độ Sáng (Ocean Sapphire Light)'
+        : 'Đã chuyển sang chế độ Tối (Deep Marine Dark)',
       'info'
     );
   }, [theme, showToast]);
 
-  // Global Shortcut listener for Command Palette (Ctrl+K / Cmd+K) & Module Switch (Alt+1..7)
+  // Global Shortcut listener for Command Palette (Ctrl+K / Cmd+K) & Module Switch (Alt+0..7)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
       } else if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        if (e.key === '1') { e.preventDefault(); setCurrentView('attendance'); }
+        if (e.key === '0') { e.preventDefault(); setCurrentView('home'); }
+        else if (e.key === '1') { e.preventDefault(); setCurrentView('attendance'); }
         else if (e.key === '2') { e.preventDefault(); setCurrentView('payroll'); }
         else if (e.key === '3') { e.preventDefault(); setCurrentView('transfer'); }
         else if (e.key === '4') { e.preventDefault(); setCurrentView('vietqr'); }
@@ -321,9 +327,10 @@ function App() {
   const [attendanceSyncSuccess, setAttendanceSyncSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Topbar interactive menu state
+  // Topbar & mobile dock interactive menu state
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMoreDockMenu, setShowMoreDockMenu] = useState(false);
 
   // Attendance search, filter & pagination for preview table
   const [attendanceSearch, setAttendanceSearch] = useState('');
@@ -1343,111 +1350,124 @@ function App() {
         ))}
       </div>
 
-      {/* Tier 1: Workbook Tabs Top Ribbon */}
-      <header className="ribbon-t1">
-        <div className="ribbon-t1-left">
-          <div className="ribbon-brand" title="KG Studio — Kings Grill Operations Sheet">
-            <span className="ribbon-brand-mark">KG</span>
-            <span className="ribbon-brand-name">KG STUDIO</span>
-          </div>
+      {/* Single-Tier Full-Label Top Navigation Bar (Option G — Command Home Launchpad) */}
+      <header className="lp-topbar">
+        <div className="lp-topbar-left">
+          <button
+            type="button"
+            className="lp-brand"
+            onClick={() => setCurrentView('home')}
+            title="Về Trang chủ 1 chạm (Alt+0)"
+          >
+            <span className="lp-brand-mark">KG</span>
+            <span className="lp-brand-copy">
+              <span className="lp-brand-name">KG Studio</span>
+              <span className="lp-brand-sub">Kings Grill · Bảng 1 chạm</span>
+            </span>
+          </button>
 
-          <nav className="workbook-tabs" aria-label="Điều hướng phân hệ">
+          <nav className="lp-nav" aria-label="Điều hướng phân hệ">
             <button
               type="button"
-              className={`wb-tab ${currentView === 'attendance' ? 'active' : ''}`}
-              onClick={() => setCurrentView('attendance')}
-              title="Xử lý Chấm công & Phân ca (Alt+1)"
+              className={`lp-nav-btn ${currentView === 'home' ? 'active' : ''}`}
+              onClick={() => setCurrentView('home')}
+              title="Trang chủ 1 chạm (Alt+0)"
             >
-              <span className="wb-idx">01</span>
-              <span>Chấm công</span>
+              <Home size={16} />
+              <span>Trang chủ</span>
             </button>
             <button
               type="button"
-              className={`wb-tab ${currentView === 'hikvision' ? 'active' : ''}`}
-              onClick={() => setCurrentView('hikvision')}
-              title="Máy Chấm Công Cloud Hikvision (Alt+7)"
-            >
-              <span className="wb-idx">02</span>
-              <span>Hikvision Cloud</span>
-            </button>
-            <button
-              type="button"
-              className={`wb-tab ${currentView === 'payroll' ? 'active' : ''}`}
-              onClick={() => setCurrentView('payroll')}
-              title="Bảng Lương & Phiếu Lương K80 (Alt+2)"
-            >
-              <span className="wb-idx">03</span>
-              <span>Bảng lương</span>
-            </button>
-            <button
-              type="button"
-              className={`wb-tab ${currentView === 'transfer' ? 'active' : ''}`}
-              onClick={() => setCurrentView('transfer')}
-              title="Chuyển Tiền Hàng Loạt MyVIB / VCB (Alt+3)"
-            >
-              <span className="wb-idx">04</span>
-              <span>Lệnh CK</span>
-            </button>
-            <button
-              type="button"
-              className={`wb-tab ${currentView === 'vietqr' ? 'active' : ''}`}
+              className={`lp-nav-btn ${currentView === 'vietqr' ? 'active' : ''}`}
               onClick={() => setCurrentView('vietqr')}
-              title="VietQR Napas 247 & Chia Tiền Bàn (Alt+4)"
+              title="Thu ngân VietQR & Chia tiền bàn (Alt+4)"
             >
-              <span className="wb-idx">05</span>
+              <QrCode size={16} />
               <span>VietQR</span>
             </button>
             <button
               type="button"
-              className={`wb-tab ${currentView === 'tts' ? 'active' : ''}`}
+              className={`lp-nav-btn ${currentView === 'tts' ? 'active' : ''}`}
               onClick={() => setCurrentView('tts')}
-              title="Đọc Thông Báo TTS AI (Alt+5)"
+              title="Phát thanh Loa AI TTS (Alt+5)"
             >
-              <span className="wb-idx">06</span>
-              <span>TTS AI</span>
+              <Volume2 size={16} />
+              <span>Loa TTS</span>
+            </button>
+            <span className="lp-nav-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className={`lp-nav-btn ${currentView === 'attendance' ? 'active' : ''}`}
+              onClick={() => setCurrentView('attendance')}
+              title="Xử lý Chấm công & Phân ca (Alt+1)"
+            >
+              <Calendar size={16} />
+              <span>Chấm công</span>
             </button>
             <button
               type="button"
-              className={`wb-tab ${currentView === 'settings' ? 'active' : ''}`}
-              onClick={() => setCurrentView('settings')}
-              title="Cấu Hình Hệ Thống (Alt+6)"
+              className={`lp-nav-btn ${currentView === 'hikvision' ? 'active' : ''}`}
+              onClick={() => setCurrentView('hikvision')}
+              title="Máy Chấm Công Cloud Hikvision (Alt+7)"
             >
-              <span className="wb-idx">07</span>
-              <span>Cấu hình</span>
+              <Cpu size={16} />
+              <span>Hikvision</span>
+            </button>
+            <button
+              type="button"
+              className={`lp-nav-btn ${currentView === 'payroll' ? 'active' : ''}`}
+              onClick={() => setCurrentView('payroll')}
+              title="Bảng Lương & Phiếu Lương K80 (Alt+2)"
+            >
+              <CreditCard size={16} />
+              <span>Bảng lương</span>
+            </button>
+            <button
+              type="button"
+              className={`lp-nav-btn ${currentView === 'transfer' ? 'active' : ''}`}
+              onClick={() => setCurrentView('transfer')}
+              title="Chuyển Tiền Hàng Loạt MyVIB / VCB (Alt+3)"
+            >
+              <Send size={16} />
+              <span>Lệnh CK</span>
             </button>
           </nav>
         </div>
 
-        <div className="ribbon-t1-right">
-          <div
-            className="ribbon-live-chip"
+        <div className="lp-topbar-right">
+          <button
+            type="button"
+            className={`lp-live-chip ${connectionStatus === 'connected' ? 'is-live' : ''}`}
             onClick={() => setCurrentView('settings')}
             title="Trạng thái đồng bộ Google Sheets thời gian thực"
           >
-            <span className="brand-status-dot" />
-            <span>{connectionStatus === 'connected' ? 'Sheets Live' : 'Cloud Standby'}</span>
-          </div>
+            <span className="lp-live-dot" />
+            <span>{connectionStatus === 'connected' ? 'Sheets Live' : 'Standby'}</span>
+          </button>
 
-          <div
-            className="topbar-command-trigger"
+          <button
+            type="button"
+            className="lp-cmd-trigger"
             onClick={() => setIsCommandPaletteOpen(true)}
-            title="Mở Command Hub (Ctrl+K)"
+            title="Mở Tìm lệnh nhanh (Ctrl+K)"
           >
-            <Search size={13} style={{ color: 'var(--accent-lime)' }} />
-            <span className="command-trigger-text">Tìm lệnh nhanh...</span>
+            <Search size={15} />
+            <span className="lp-cmd-text">Tìm nhanh...</span>
             <kbd>Ctrl+K</kbd>
-          </div>
+          </button>
 
           {/* Notification Button & Popover */}
           <div className="topbar-action-item">
-            <div
-              className="mini-btn"
+            <button
+              type="button"
+              className="lp-icon-btn"
               onClick={() => { setShowNotifications(prev => !prev); setShowUserMenu(false); }}
-              title="Thông báo hệ thống"
+              title="Thông báo & Trạng thái hệ thống"
+              aria-label="Thông báo hệ thống"
             >
-              <Bell size={15} />
-              <i className="dot" style={{ background: connectionStatus === 'connected' ? '#84CC16' : '#EF4444' }} />
-            </div>
+              <Bell size={17} />
+              <i className="dot" style={{ background: connectionStatus === 'connected' ? 'var(--status-success)' : 'var(--status-danger-solid)' }} />
+            </button>
 
             {showNotifications && (
               <>
@@ -1455,10 +1475,10 @@ function App() {
                 <div className="topbar-popover">
                   <div className="topbar-popover-header">
                     <span className="topbar-popover-title">Trạng thái hệ thống</span>
-                    <button type="button" className="topbar-popover-close" onClick={() => setShowNotifications(false)}>✕</button>
+                    <button type="button" className="topbar-popover-close" onClick={() => setShowNotifications(false)} aria-label="Đóng">✕</button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'var(--bg-subtle)', borderRadius: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
                       <span style={{ color: 'var(--muted)' }}>Google Cloud Sync:</span>
                       <span className="pulse-indicator">
                         <span className={`pulse-dot ${connectionStatus === 'connected' ? '' : connectionStatus === 'failed' ? 'danger' : 'warning'}`} />
@@ -1467,21 +1487,21 @@ function App() {
                         </span>
                       </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'var(--bg-subtle)', borderRadius: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
                       <span style={{ color: 'var(--muted)' }}>Ngân hàng VietQR:</span>
                       <span style={{ color: banks.length > 0 ? 'var(--accent-primary)' : 'var(--muted)', fontWeight: 600 }}>
                         {banks.length} ngân hàng sẵn sàng
                       </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: 'var(--bg-subtle)', borderRadius: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
                       <span style={{ color: 'var(--muted)' }}>Mã QR hôm nay:</span>
-                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{qrCreatedToday} giao dịch</span>
+                      <span className="tabular-nums" style={{ color: 'var(--text)', fontWeight: 600 }}>{qrCreatedToday} giao dịch</span>
                     </div>
                   </div>
                   <button
                     type="button"
                     className="primary"
-                    style={{ height: '32px', fontSize: '12px', marginTop: '4px' }}
+                    style={{ height: '38px', fontSize: '12.5px', marginTop: '4px' }}
                     onClick={() => { setCurrentView('settings'); setShowNotifications(false); }}
                   >
                     Kiểm tra cài đặt hệ thống →
@@ -1492,67 +1512,85 @@ function App() {
           </div>
 
           {/* Extension Companion Mode Toggle */}
-          <div
-            className="mini-btn"
+          <button
+            type="button"
+            className={`lp-icon-btn lp-desktop-only-btn ${isExtensionMode ? 'is-active' : ''}`}
             onClick={() => {
               const next = !isExtensionMode;
               setIsExtensionMode(next);
-              showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp Sheet đầy đủ', 'info');
+              showToast(next ? 'Đã bật Chế độ Extension / Side Panel nhỏ gọn' : 'Đã trở về Giao diện Webapp đầy đủ', 'info');
             }}
-            title={isExtensionMode ? "Thoát chế độ Extension nhỏ gọn" : "Chế độ Extension / Side Panel nhỏ gọn"}
-            style={isExtensionMode ? { borderColor: 'var(--accent-lime)', color: 'var(--accent-lime)' } : undefined}
+            title={isExtensionMode ? 'Thoát chế độ Extension nhỏ gọn' : 'Chế độ Extension / Side Panel nhỏ gọn'}
+            aria-label="Chuyển chế độ Extension"
           >
-            <PanelRight size={15} />
-          </div>
+            <PanelRight size={17} />
+          </button>
 
           {/* Browser Extension Install Guide Button */}
-          <div
-            className="mini-btn"
+          <button
+            type="button"
+            className="lp-icon-btn lp-desktop-only-btn"
             onClick={() => setShowExtensionGuideModal(true)}
             title="Cài đặt Tiện ích mở rộng (Chrome / Edge Extension)"
+            aria-label="Hướng dẫn cài Extension"
           >
-            <Puzzle size={15} />
-          </div>
+            <Puzzle size={17} />
+          </button>
 
           {/* Theme Switcher Button */}
-          <div
-            className="mini-btn"
+          <button
+            type="button"
+            className="lp-icon-btn"
             onClick={toggleTheme}
-            title={theme === 'dark' ? "Chuyển sang giao diện Sáng (Alabaster Sheet)" : "Chuyển sang giao diện Tối (Dark Olive Ledger)"}
+            title={theme === 'dark' ? 'Chuyển sang giao diện Sáng (Ocean Sapphire)' : 'Chuyển sang giao diện Tối (Deep Marine)'}
+            aria-label="Đổi giao diện Sáng Tối"
           >
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </div>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+
+          {/* Settings Quick Button */}
+          <button
+            type="button"
+            className={`lp-icon-btn lp-desktop-only-btn ${currentView === 'settings' ? 'is-active' : ''}`}
+            onClick={() => setCurrentView('settings')}
+            title="Cấu hình hệ thống (Alt+6)"
+            aria-label="Cấu hình hệ thống"
+          >
+            <Settings size={17} />
+          </button>
 
           {/* User Profile */}
           <div className="topbar-action-item">
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            <button
+              type="button"
+              className="lp-user-btn"
               onClick={() => { setShowUserMenu(prev => !prev); setShowNotifications(false); }}
+              aria-label="Tài khoản quản trị"
             >
-              <div className="avatar">K</div>
-              <div className="user-text">
+              <span className="avatar">K</span>
+              <span className="user-text">
                 <b>Quản trị viên</b>
-                <small>Kings Grill F&amp;B</small>
-              </div>
-            </div>
+                <small>Kings Grill Q1</small>
+              </span>
+            </button>
 
             {showUserMenu && (
               <>
                 <div className="dropdown-click-outside-backdrop" onClick={() => setShowUserMenu(false)} />
-                <div className="topbar-popover" style={{ width: '240px' }}>
+                <div className="topbar-popover" style={{ width: '248px' }}>
                   <div className="topbar-popover-header">
                     <span className="topbar-popover-title">Tài khoản vận hành</span>
-                    <button type="button" className="topbar-popover-close" onClick={() => setShowUserMenu(false)}>✕</button>
+                    <button type="button" className="topbar-popover-close" onClick={() => setShowUserMenu(false)} aria-label="Đóng">✕</button>
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.4 }}>
-                    <p style={{ margin: '0 0 4px', color: 'var(--text-primary)', fontWeight: 600 }}>Kings Grill Restaurant</p>
+                  <div style={{ fontSize: '12.5px', color: 'var(--muted)', lineHeight: 1.45 }}>
+                    <p style={{ margin: '0 0 4px', color: 'var(--text-primary)', fontWeight: 700 }}>Kings Grill Restaurant</p>
                     <p style={{ margin: 0 }}>Quyền: Toàn quyền Quản trị &amp; Kế toán</p>
                   </div>
-                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <button
                       type="button"
                       className="btn-outline"
-                      style={{ height: '32px', fontSize: '12px', justifyContent: 'flex-start' }}
+                      style={{ height: '36px', fontSize: '12.5px', justifyContent: 'flex-start' }}
                       onClick={() => { setCurrentView('settings'); setShowUserMenu(false); }}
                     >
                       Cấu hình hệ thống
@@ -1560,13 +1598,13 @@ function App() {
                     <button
                       type="button"
                       className="btn-outline"
-                      style={{ height: '32px', fontSize: '12px', justifyContent: 'flex-start' }}
+                      style={{ height: '36px', fontSize: '12.5px', justifyContent: 'flex-start' }}
                       onClick={() => {
-                        showToast('Dữ liệu được lưu trong trình duyệt & Google Sheet của bạn.', 'info');
+                        showToast('Dữ liệu được lưu an toàn trong trình duyệt & Google Sheet của bạn.', 'info');
                         setShowUserMenu(false);
                       }}
                     >
-                      Kiểm tra an toàn
+                      Kiểm tra an toàn dữ liệu
                     </button>
                   </div>
                 </div>
@@ -1576,84 +1614,266 @@ function App() {
         </div>
       </header>
 
-      {/* Tier 2: Formula & Operational Pipeline Ribbon */}
-      <div className="ribbon-t2">
-        <div className="ribbon-t2-left">
-          <span className="cell-ref-badge">KỲ: HIỆN HÀNH · KINGS GRILL Q1</span>
-          <div className="topbar-quick-pipeline" aria-label="Quy trình vận hành nhanh">
-            <button
-              type="button"
-              className={`pipeline-step-pill ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
-              onClick={() => setCurrentView('attendance')}
-              title="Bước 1: Xử lý Chấm công & Máy chấm công (Alt+1)"
-            >
-              <span>1. Chấm công</span>
-            </button>
-            <span className="pipeline-arrow">›</span>
-            <button
-              type="button"
-              className={`pipeline-step-pill ${currentView === 'payroll' ? 'active' : ''}`}
-              onClick={() => setCurrentView('payroll')}
-              title="Bước 2: Tính lương & In phiếu K80/A4 (Alt+2)"
-            >
-              <span>2. Tính lương</span>
-            </button>
-            <span className="pipeline-arrow">›</span>
-            <button
-              type="button"
-              className={`pipeline-step-pill ${currentView === 'transfer' ? 'active' : ''}`}
-              onClick={() => setCurrentView('transfer')}
-              title="Bước 3: Xuất lệnh chuyển khoản lô MyVIB / VCB (Alt+3)"
-            >
-              <span>3. Lệnh CK</span>
-            </button>
-            <span className="pipeline-arrow" style={{ margin: '0 2px', opacity: 0.4 }}>|</span>
-            <button
-              type="button"
-              className={`pipeline-step-pill ${currentView === 'vietqr' ? 'active' : ''}`}
-              onClick={() => setCurrentView('vietqr')}
-              title="Thu ngân: Tạo mã VietQR & Chia bill POS (Alt+4)"
-            >
-              <span>VietQR</span>
-            </button>
-            <button
-              type="button"
-              className={`pipeline-step-pill ${currentView === 'tts' ? 'active' : ''}`}
-              onClick={() => setCurrentView('tts')}
-              title="Phát thanh: Đọc thông báo AI TTS (Alt+5)"
-            >
-              <span>TTS AI</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="ribbon-t2-right">
-          <button
-            type="button"
-            className="topbar-stitch-btn"
-            onClick={() => {
-              localStorage.setItem('kg_tool_pending_preset_k80', '1');
-              setCurrentView('payroll');
-              window.dispatchEvent(new CustomEvent('kg-preset-k80'));
-            }}
-            title="Mở nhanh trình xuất phiếu lương nhiệt K80 / Payslip"
-          >
-            <span>Xuất K80 / Payslip</span>
-          </button>
-
-          <button
-            type="button"
-            className="topbar-stitch-btn"
-            onClick={() => showToast('Đã lưu trạng thái khóa sổ kỳ lương hiện tại (Chế độ Kiểm toán)', 'success')}
-            title="Khóa sổ kỳ lương hiện tại"
-          >
-            <span>Khóa sổ kỳ này</span>
-          </button>
-        </div>
-      </div>
-
       {/* Main Content Pane */}
       <main className="main-content">
+
+        {/* VIEW 0: COMMAND HOME LAUNCHPAD (OPTION G — 6 LARGE 1-CLICK ACTION TILES) */}
+        {currentView === 'home' && (
+          <div className="screen active lp-home-screen">
+            <section className="lp-hero-row" aria-label="Tổng quan nhanh">
+              <div className="lp-hero-copy">
+                <div className="lp-hero-eyebrow">
+                  <span className={`lp-live-dot ${connectionStatus === 'connected' ? 'is-live' : ''}`} />
+                  <span>KINGS GRILL CENTRAL Q1 · {connectionStatus === 'connected' ? 'GOOGLE SHEETS TRỰC TUYẾN' : 'CHẾ ĐỘ NGOẠI TUYẾN / STANDBY'}</span>
+                </div>
+                <h1 className="lp-hero-title">Chào quản trị viên — Hôm nay bạn cần thao tác việc gì?</h1>
+                <p className="lp-hero-sub">
+                  Chọn nhanh 1 trong 6 công cụ bên dưới. Mọi nút đều được thiết kế rộng rãi, chữ rõ ràng để bấm 1 chạm trúng ngay trên cả máy tính lẫn màn hình cảm ứng quầy.
+                </p>
+              </div>
+
+              <div className="lp-hero-actions">
+                <button
+                  type="button"
+                  className="lp-hero-search"
+                  onClick={() => setIsCommandPaletteOpen(true)}
+                >
+                  <Search size={17} />
+                  <span>Tìm nhanh nhân viên, chức năng, phím tắt...</span>
+                  <kbd>Ctrl+K</kbd>
+                </button>
+                <div className="lp-hero-quick-row">
+                  <button
+                    type="button"
+                    className="lp-quick-pill"
+                    onClick={() => {
+                      localStorage.setItem('kg_tool_pending_preset_k80', '1');
+                      setCurrentView('payroll');
+                      window.dispatchEvent(new CustomEvent('kg-preset-k80'));
+                    }}
+                  >
+                    <Printer size={15} />
+                    <span>In nhanh Phiếu K80</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="lp-quick-pill"
+                    onClick={() => setCurrentView('settings')}
+                  >
+                    <Settings size={15} />
+                    <span>Cấu hình Cloud</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* 6 Large 1-Click Launchpad Tiles */}
+            <section className="lp-grid" aria-label="6 công cụ vận hành chính">
+              {/* Tile 1: VietQR & Split Bill (Featured Primary Front-Desk Tool) */}
+              <button
+                type="button"
+                className="lp-tile lp-tile-featured"
+                onClick={() => setCurrentView('vietqr')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">QUẦY THU NGÂN</span>
+                  <span className="lp-tile-badge is-primary">Dùng nhiều nhất</span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon is-primary"><QrCode size={22} /></span>
+                  <h2 className="lp-tile-title">Tạo VietQR &amp; Chia Tiền Bàn</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Nhập tổng hóa đơn, chia đều hoặc tùy chỉnh từng khách không lệch lẻ, tải mã QR Napas 247 &amp; in bill K80 trong vài giây.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat tabular-nums">
+                    Hôm nay: <strong>{qrCreatedToday}</strong> bill · <strong>{totalAmountReceived.toLocaleString('vi-VN')} ₫</strong>
+                  </span>
+                  <span className="lp-tile-cta is-primary">
+                    <span>Mở VietQR ngay</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+
+              {/* Tile 2: AI TTS Broadcast */}
+              <button
+                type="button"
+                className="lp-tile"
+                onClick={() => setCurrentView('tts')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">QUẦY THU NGÂN</span>
+                  <span className="lp-tile-badge">15 mẫu đọc sẵn</span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon"><Volume2 size={22} /></span>
+                  <h2 className="lp-tile-title">Phát Thanh Loa AI (TTS)</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Đọc thông báo đặt bàn, xác nhận chuyển khoản hoặc gọi món bếp bằng giọng đọc tiếng Việt tự nhiên đa nhà cung cấp.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat">
+                    Trạng thái: <strong>Sẵn sàng phát loa</strong>
+                  </span>
+                  <span className="lp-tile-cta">
+                    <span>Mở Loa TTS</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+
+              {/* Tile 3: Hikvision Cloud Sync */}
+              <button
+                type="button"
+                className="lp-tile"
+                onClick={() => setCurrentView('hikvision')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">NHÂN SỰ · BƯỚC 1</span>
+                  <span className={`lp-tile-badge ${connectionStatus === 'connected' ? 'is-success' : ''}`}>
+                    {connectionStatus === 'connected' ? 'Cloud Online' : 'Sẵn sàng'}
+                  </span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon"><Cpu size={22} /></span>
+                  <h2 className="lp-tile-title">Đồng Bộ Máy Chấm Công Hikvision</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Kéo lịch sử quẹt vân tay / khuôn mặt trực tiếp từ máy chấm công chi nhánh qua Cloudflare Worker về Google Sheets.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat">
+                    Cloud Sync: <strong>{connectionStatus === 'connected' ? 'Đã kết nối Sheets' : 'Chưa cấu hình'}</strong>
+                  </span>
+                  <span className="lp-tile-cta">
+                    <span>Đồng bộ ngay</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+
+              {/* Tile 4: Attendance Processor */}
+              <button
+                type="button"
+                className="lp-tile"
+                onClick={() => setCurrentView('attendance')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">NHÂN SỰ · BƯỚC 2</span>
+                  <span className="lp-tile-badge tabular-nums">
+                    {empCount > 0 ? `${empCount} NV đã nạp` : 'Excel / Sheets'}
+                  </span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon"><Calendar size={22} /></span>
+                  <h2 className="lp-tile-title">Xử Lý Chấm Công &amp; Phân Ca</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Tự động chuẩn hóa ca đêm (&lt; 06:00 sáng về ca tối hôm trước), tổng hợp ngày công, giờ làm &amp; đẩy thẳng sang Bảng lương.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat tabular-nums">
+                    {empCount > 0
+                      ? <><strong>{empCount}</strong> NV · <strong>{daysCount}</strong> dòng ({completionRate}%)</>
+                      : <>Kéo từ Sheets hoặc <strong>tải Excel</strong></>}
+                  </span>
+                  <span className="lp-tile-cta">
+                    <span>Mở Bảng công</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+
+              {/* Tile 5: Payroll & K80/A4 Slips */}
+              <button
+                type="button"
+                className="lp-tile"
+                onClick={() => setCurrentView('payroll')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">KẾ TOÁN · BƯỚC 3</span>
+                  <span className="lp-tile-badge">Chuẩn K80 / A4</span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon"><CreditCard size={22} /></span>
+                  <h2 className="lp-tile-title">Tính Lương &amp; In Phiếu Nhiệt K80</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Tính lương cơ bản, phụ cấp, tạm ứng, khấu trừ và xuất phiếu lương nhiệt K80 / khổ A4 có kèm mã QR nhận lương.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat">
+                    Mẫu in: <strong>K80 Nhiệt · A4 Chuẩn</strong>
+                  </span>
+                  <span className="lp-tile-cta">
+                    <span>Mở Bảng lương</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+
+              {/* Tile 6: Batch Bank Transfer */}
+              <button
+                type="button"
+                className="lp-tile"
+                onClick={() => setCurrentView('transfer')}
+              >
+                <div className="lp-tile-top">
+                  <span className="lp-tile-tag">KẾ TOÁN · BƯỚC 4</span>
+                  <span className="lp-tile-badge">MyVIB &amp; VCB</span>
+                </div>
+                <div className="lp-tile-head">
+                  <span className="lp-tile-icon"><Send size={22} /></span>
+                  <h2 className="lp-tile-title">Xuất File Chuyển Khoản Hàng Loạt</h2>
+                </div>
+                <p className="lp-tile-desc">
+                  Nhận danh sách từ Bảng lương, kiểm tra hợp lệ số tài khoản &amp; tên ngân hàng rồi xuất file Excel nạp thẳng MyVIB / VCB.
+                </p>
+                <div className="lp-tile-foot">
+                  <span className="lp-tile-stat tabular-nums">
+                    Sẵn sàng: <strong>{savedAccounts.length}</strong> TK lưu · <strong>{banks.length}</strong> NH
+                  </span>
+                  <span className="lp-tile-cta">
+                    <span>Tạo Lệnh CK</span>
+                    <ArrowRight size={15} />
+                  </span>
+                </div>
+              </button>
+            </section>
+
+            {/* Clear 4-Step Operational Pipeline Shortcut Bar */}
+            <section className="lp-pipeline-card" aria-label="Chuỗi nghiệp vụ lương theo kỳ">
+              <div className="lp-pipeline-info">
+                <strong>Chuỗi quyết toán lương theo kỳ</strong>
+                <span>Thao tác tuần tự 4 bước để dữ liệu tự động nối sang nhau không cần nhập tay lại:</span>
+              </div>
+              <div className="lp-pipeline-steps">
+                <button type="button" className="lp-step-btn" onClick={() => setCurrentView('hikvision')}>
+                  <span className="lp-step-num">1</span>
+                  <span>Lấy công Hikvision</span>
+                </button>
+                <ArrowRight size={14} className="lp-step-arrow" />
+                <button type="button" className="lp-step-btn" onClick={() => setCurrentView('attendance')}>
+                  <span className="lp-step-num">2</span>
+                  <span>Chốt Bảng công</span>
+                </button>
+                <ArrowRight size={14} className="lp-step-arrow" />
+                <button type="button" className="lp-step-btn" onClick={() => setCurrentView('payroll')}>
+                  <span className="lp-step-num">3</span>
+                  <span>Tính lương K80</span>
+                </button>
+                <ArrowRight size={14} className="lp-step-arrow" />
+                <button type="button" className="lp-step-btn" onClick={() => setCurrentView('transfer')}>
+                  <span className="lp-step-num">4</span>
+                  <span>Xuất Lệnh CK</span>
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
 
         {/* VIEW 1: ATTENDANCE PROCESSOR */}
@@ -3534,8 +3754,8 @@ function App() {
           }}
         />
 
-        {/* Sticky Bottom Ledger Totals Bar */}
-        {!isExtensionMode && !isMobile && (
+        {/* Sticky Bottom Operational Totals Bar (Shown on sub-modules) */}
+        {!isExtensionMode && !isMobile && currentView !== 'home' && (
           <footer className="totals-footer" aria-label="Tổng hợp nhanh">
             <div className="totals-group">
               {(currentView === 'attendance' || currentView === 'hikvision') && (
@@ -3569,58 +3789,117 @@ function App() {
                   className="totals-pipe-btn"
                   onClick={handlePipeAttendanceToPayroll}
                 >
-                  → Đẩy sang Bảng lương
+                  Đẩy sang Bảng lương →
                 </button>
               )}
-              <span className="totals-arch-tag">KG STUDIO · SHEET OPS</span>
+              <button
+                type="button"
+                className="totals-home-btn"
+                onClick={() => setCurrentView('home')}
+              >
+                <Home size={13} />
+                <span>Trang chủ</span>
+              </button>
+              <span className="totals-arch-tag">KG STUDIO · LAUNCHPAD</span>
             </div>
           </footer>
         )}
 
-        {/* Extension & Mobile Compact Bottom Navigation Dock */}
+        {/* Extension & Mobile Compact Bottom Navigation Dock (Full 7-Module Reachability) */}
         {(isExtensionMode || isMobile) && (
-          <nav className="extension-bottom-dock">
-            <button
-              type="button"
-              className={`extension-dock-btn ${currentView === 'vietqr' ? 'active' : ''}`}
-              onClick={() => setCurrentView('vietqr')}
-            >
-              <QrCode size={17} />
-              <span>VietQR</span>
-            </button>
-            <button
-              type="button"
-              className={`extension-dock-btn ${currentView === 'tts' ? 'active' : ''}`}
-              onClick={() => setCurrentView('tts')}
-            >
-              <Volume2 size={17} />
-              <span>TTS AI</span>
-            </button>
-            <button
-              type="button"
-              className={`extension-dock-btn ${currentView === 'attendance' || currentView === 'hikvision' ? 'active' : ''}`}
-              onClick={() => setCurrentView('attendance')}
-            >
-              <FileText size={17} />
-              <span>Chấm Công</span>
-            </button>
-            <button
-              type="button"
-              className={`extension-dock-btn ${currentView === 'payroll' ? 'active' : ''}`}
-              onClick={() => setCurrentView('payroll')}
-            >
-              <CreditCard size={17} />
-              <span>Phiếu Lương</span>
-            </button>
-            <button
-              type="button"
-              className={`extension-dock-btn ${currentView === 'transfer' ? 'active' : ''}`}
-              onClick={() => setCurrentView('transfer')}
-            >
-              <Send size={17} />
-              <span>Lệnh CK</span>
-            </button>
-          </nav>
+          <>
+            {showMoreDockMenu && (
+              <>
+                <div className="dropdown-click-outside-backdrop" onClick={() => setShowMoreDockMenu(false)} />
+                <div className="extension-more-sheet" role="menu" aria-label="Thêm chức năng">
+                  <button
+                    type="button"
+                    className={`extension-more-item ${currentView === 'transfer' ? 'active' : ''}`}
+                    onClick={() => { setCurrentView('transfer'); setShowMoreDockMenu(false); }}
+                  >
+                    <Send size={16} />
+                    <span>Lệnh CK Hàng loạt (MyVIB / VCB)</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`extension-more-item ${currentView === 'hikvision' ? 'active' : ''}`}
+                    onClick={() => { setCurrentView('hikvision'); setShowMoreDockMenu(false); }}
+                  >
+                    <Cpu size={16} />
+                    <span>Máy chấm công Hikvision Cloud</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`extension-more-item ${currentView === 'settings' ? 'active' : ''}`}
+                    onClick={() => { setCurrentView('settings'); setShowMoreDockMenu(false); }}
+                  >
+                    <Settings size={16} />
+                    <span>Cấu hình hệ thống &amp; Sheets</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="extension-more-item"
+                    onClick={() => { setShowExtensionGuideModal(true); setShowMoreDockMenu(false); }}
+                  >
+                    <Puzzle size={16} />
+                    <span>Hướng dẫn cài Extension / PWA</span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            <nav className="extension-bottom-dock" aria-label="Điều hướng nhanh di động">
+              <button
+                type="button"
+                className={`extension-dock-btn ${currentView === 'home' ? 'active' : ''}`}
+                onClick={() => { setCurrentView('home'); setShowMoreDockMenu(false); }}
+              >
+                <Home size={18} />
+                <span>Trang chủ</span>
+              </button>
+              <button
+                type="button"
+                className={`extension-dock-btn ${currentView === 'vietqr' ? 'active' : ''}`}
+                onClick={() => { setCurrentView('vietqr'); setShowMoreDockMenu(false); }}
+              >
+                <QrCode size={18} />
+                <span>VietQR</span>
+              </button>
+              <button
+                type="button"
+                className={`extension-dock-btn ${currentView === 'tts' ? 'active' : ''}`}
+                onClick={() => { setCurrentView('tts'); setShowMoreDockMenu(false); }}
+              >
+                <Volume2 size={18} />
+                <span>Loa TTS</span>
+              </button>
+              <button
+                type="button"
+                className={`extension-dock-btn ${currentView === 'attendance' ? 'active' : ''}`}
+                onClick={() => { setCurrentView('attendance'); setShowMoreDockMenu(false); }}
+              >
+                <Calendar size={18} />
+                <span>Chấm công</span>
+              </button>
+              <button
+                type="button"
+                className={`extension-dock-btn ${currentView === 'payroll' ? 'active' : ''}`}
+                onClick={() => { setCurrentView('payroll'); setShowMoreDockMenu(false); }}
+              >
+                <CreditCard size={18} />
+                <span>Lương</span>
+              </button>
+              <button
+                type="button"
+                className={`extension-dock-btn ${showMoreDockMenu || currentView === 'transfer' || currentView === 'hikvision' || currentView === 'settings' ? 'active' : ''}`}
+                onClick={() => setShowMoreDockMenu(prev => !prev)}
+                aria-expanded={showMoreDockMenu}
+              >
+                <MoreHorizontal size={18} />
+                <span>Thêm</span>
+              </button>
+            </nav>
+          </>
         )}
 
         {/* Extension & PWA Installation Guide Modal */}
@@ -3630,8 +3909,7 @@ function App() {
               position: 'fixed',
               inset: 0,
               zIndex: 9998,
-              background: 'rgba(0, 0, 0, 0.72)',
-              backdropFilter: 'blur(6px)',
+              background: 'rgba(11, 18, 25, 0.72)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -3654,11 +3932,11 @@ function App() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'var(--accent-primary-subtle)', color: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Puzzle size={20} />
                   </div>
                   <div>
-                    <h2 style={{ margin: 0, fontSize: '17px' }}>Cài đặt Tiện ích mở rộng (Extension) & Webapp</h2>
+                    <h2 style={{ margin: 0, fontSize: '17px' }}>Cài đặt Tiện ích mở rộng (Extension) &amp; Webapp</h2>
                     <p className="sub" style={{ margin: '2px 0 0', fontSize: '12px' }}>
                       Hỗ trợ song song cả Webapp độc lập (PWA) và Chrome / Edge Extension (Manifest V3)
                     </p>
@@ -3667,17 +3945,18 @@ function App() {
                 <button
                   type="button"
                   className="btn-outline"
-                  style={{ width: '32px', height: '32px', padding: 0, borderRadius: '8px' }}
+                  style={{ width: '36px', height: '36px', padding: 0, borderRadius: 'var(--radius-md)' }}
                   onClick={() => setShowExtensionGuideModal(false)}
+                  aria-label="Đóng hướng dẫn"
                 >
                   <X size={16} />
                 </button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', lineHeight: 1.55 }}>
-                <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'var(--bg-elevated)', border: '1px solid var(--line)' }}>
-                  <strong style={{ color: 'var(--green)', display: 'block', marginBottom: '6px' }}>
-                    🧩 Cách 1: Cài đặt làm Chrome / Microsoft Edge Extension (Popup & Thanh bên Side Panel)
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}>
+                  <strong style={{ color: 'var(--accent-primary)', display: 'block', marginBottom: '6px' }}>
+                    Cách 1: Cài đặt làm Chrome / Microsoft Edge Extension (Popup &amp; Thanh bên Side Panel)
                   </strong>
                   <ol style={{ margin: 0, paddingLeft: '18px', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <li>Chạy lệnh <code>npm run build</code> để xuất gói đóng gói tại thư mục <code>dist/</code> (đã bao gồm <code>manifest.json</code> và <code>background.js</code> chuẩn Manifest V3).</li>
@@ -3687,15 +3966,15 @@ function App() {
                       <b>Tính năng đặc quyền của Extension:</b>
                       <ul style={{ marginTop: '4px', paddingLeft: '18px', color: 'var(--muted)' }}>
                         <li>Mở nhanh cửa sổ thu ngân <b>Popup (420×640)</b> hoặc gắn cố định ở <b>Thanh bên (Side Panel)</b> khi đang mở trang quản lý POS / Ngân hàng.</li>
-                        <li><b>Menu chuột phải thông minh:</b> Bôi đen bất kỳ con số nào trên web → Chuột phải chọn <i>"⚡ Tạo mã VietQR với số tiền..."</i> hoặc bôi đen văn bản → <i>"🔊 Phát thanh AI (TTS)..."</i>.</li>
+                        <li><b>Menu chuột phải thông minh:</b> Bôi đen bất kỳ con số nào trên web → Chuột phải chọn <i>&ldquo;Tạo mã VietQR với số tiền...&rdquo;</i> hoặc bôi đen văn bản → <i>&ldquo;Phát thanh AI (TTS)...&rdquo;</i>.</li>
                       </ul>
                     </li>
                   </ol>
                 </div>
 
-                <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'var(--bg-elevated)', border: '1px solid var(--line)' }}>
-                  <strong style={{ color: 'var(--orange)', display: 'block', marginBottom: '6px' }}>
-                    💻 Cách 2: Cài đặt làm Ứng dụng Máy tính / Điện thoại (Webapp PWA)
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)' }}>
+                  <strong style={{ color: 'var(--status-warning)', display: 'block', marginBottom: '6px' }}>
+                    Cách 2: Cài đặt làm Ứng dụng Máy tính / Điện thoại (Webapp PWA)
                   </strong>
                   <p style={{ margin: 0, color: 'var(--muted)' }}>
                     Trên thanh địa chỉ trình duyệt Chrome / Edge, nhấn biểu tượng <b>Cài đặt ứng dụng (Install KG Studio)</b> để ghim trực tiếp lên Màn hình chính hoặc Thanh tác vụ Windows/macOS và chạy độc lập như phần mềm gốc.

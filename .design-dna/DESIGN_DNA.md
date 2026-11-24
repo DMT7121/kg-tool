@@ -1,11 +1,11 @@
-# Project Design DNA — KG Studio Operations Sheet
+# KG Studio — Command Home Launchpad (`DESIGN_DNA.md`)
 
-- **Archetype:** Utilitarian Freeze-Pane Sheet (Ribbon Filter + Spreadsheet-Native Grid) (`utilitarian-grid-sheet`)
-- **Surface Mode:** Operate
-- **Taste Dials:** Variance 2/10 · Motion 2/10 · Density 10/10
-- **Domain:** hospitality-pos-hr-payroll
-- **Desktop Navigation:** compact-dual-tier-workspace-tabs-and-formula-filter-ribbon
-- **Grayscale Silhouette:** Stacked dual-tier top toolbar and filter ribbon; edge-to-edge frozen data grid spanning 100% viewport width with sticky bottom total bar.
-- **Accent (Light / Dark):** `#1E3A5F` / `#60A5FA`
-- **Icon Family:** `tabler`
-- **Rationale:** Option A (Utilitarian Freeze-Pane Sheet with Olive Moss #3F6212 & Alabaster #F3F5F2): Dual-tier top ribbon, edge-to-edge ledger grid, live K80/QR right inspector, and sticky bottom totals bar.
+- **Option Selected:** Option G — **Command Home Launchpad** (`Ocean Sapphire · #0369A1`)
+- **Surface Mode:** `Operate` (F&B POS Billing, HR Attendance, Payroll K80 & Batch Bank Transfers)
+- **Taste Dials:** Variance `4/10` · Motion `3/10` · Density `6/10` (Comfortable `40px` rows, `≥44px` touch targets)
+- **Navigation:** Single-tier `58px` top bar with full **Icon + Vietnamese Label** buttons (eliminating redundant double-ribbon navigation) + `Ctrl+K` Command Hub + 6-tile 1-click Home Launchpad + Adaptive Bottom Dock with `Thêm` sheet on Mobile/Extension.
+- **Palette:**
+  - Light (Default): Canvas `#F5F8FB`, Surface `#FFFFFF`, Subtle `#EAF1F7`, Primary Ink `#0F1C2A`, Accent **Ocean Sapphire `#0369A1`**.
+  - Dark: Canvas `#0B1219`, Surface `#131D27`, Subtle `#1C2937`, Primary Ink `#F0F6FC`, Accent **Crisp Sky `#38BDF8`**.
+- **Typography:** `Plus Jakarta Sans` (Display/UI) + `Be Vietnam Pro` (Vietnamese body) + `JetBrains Mono` (`tabular-nums` right-aligned currency).
+- **Accessibility:** WCAG 2.2 AA contrast (`>= 4.5:1`), semantic `<button>` controls, keyboard shortcuts (`Ctrl+K`, `Alt+0..7`), `prefers-reduced-motion`.

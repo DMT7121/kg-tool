@@ -1,54 +1,54 @@
 {
   "schemaVersion": "1.0.0",
   "isolatedProjectLock": true,
-  "createdAt": "2026-11-21T13:30:48.858Z",
+  "createdAt": "2026-11-24T21:00:00.000Z",
   "productIdentity": {
-    "name": "KG Studio Operations Sheet",
-    "slug": "kg-studio-operations-sheet",
+    "name": "KG Studio — Command Home Launchpad",
+    "slug": "kg-studio-command-launchpad",
     "domain": "hospitality-pos-hr-payroll",
     "surfaceMode": "Operate",
     "locale": "vi-VN"
   },
   "designDirection": {
-    "archetypeId": "utilitarian-grid-sheet",
-    "archetypeName": "Utilitarian Freeze-Pane Sheet (Ribbon Filter + Spreadsheet-Native Grid)",
+    "archetypeId": "command-home-launchpad",
+    "archetypeName": "Command Home Launchpad (Single Full-Label Topbar + 6 Big 1-Click Action Tiles)",
     "tasteDials": {
-      "designVariance": 2,
-      "motionIntensity": 2,
-      "visualDensity": 10
+      "designVariance": 4,
+      "motionIntensity": 3,
+      "visualDensity": 6
     },
     "axes": {
-      "layoutComposition": "edge-to-edge-freeze-pane-grid-with-top-ribbon-toolbar",
-      "informationArchitecture": "dense-tabular-sheet-inline-summary-footer-pinned-totals",
-      "navigationModel": "compact-dual-tier-workspace-tabs-and-formula-filter-ribbon",
-      "typographySystem": "neutral-grotesk-condensed-headers-monospace-ledger-cells",
-      "visualHierarchy": "zebra-subtle-cell-matrix-pinned-header-and-footer-totals",
-      "contentDensity": "maximum-tabular-32px-rows",
-      "colorArchitecture": "warm-alabaster-sheet-olive-moss-ink-accent",
-      "componentAnatomy": "sharp-2px-radius-spreadsheet-cells-inline-editable-inputs",
-      "interactionModel": "arrow-key-cell-navigation-bulk-checkbox-toolbar",
-      "surfaceIdentity": "high-legibility-ledger-paper"
+      "layoutComposition": "single-tier-full-label-topbar-plus-6-tile-home-launchpad-and-spacious-module-canvas",
+      "informationArchitecture": "zero-mystery-icon-plus-label-nav-launchpad-home-with-live-metrics-and-quick-cta",
+      "navigationModel": "single-58px-readable-topbar-plus-ctrlk-omnibar-and-adaptive-bottom-dock",
+      "typographySystem": "plus-jakarta-display-be-vietnam-body-jetbrains-mono-tabular-currency",
+      "visualHierarchy": "soft-sky-cloud-canvas-crisp-white-elevated-cards-ocean-sapphire-primary-cta",
+      "contentDensity": "comfortable-ergonomic-40px-rows-and-44px-touch-targets",
+      "colorArchitecture": "sky-cloud-alabaster-ocean-sapphire-accent-with-marine-slate-dark-mode",
+      "componentAnatomy": "comfortable-10-14px-rounded-surfaces-crisp-1px-borders-zero-blur",
+      "interactionModel": "one-click-launchpad-cards-keyboard-accessible-buttons-ctrlk-command-hub",
+      "surfaceIdentity": "bright-ergonomic-hospitality-pos-and-hr-suite"
     },
-    "grayscaleSilhouette": "Stacked dual-tier top toolbar and filter ribbon; edge-to-edge frozen data grid spanning 100% viewport width with sticky bottom total bar."
+    "grayscaleSilhouette": "Single crisp 58px top bar with full icon+text labels; welcoming 6-card 3x2 action launchpad grid on home with featured primary card border; clean spacious module workspaces with zero double-ribbon clutter."
   },
   "typographyScale": {
     "display": {
-      "size": "1.75rem",
-      "lineHeight": 1.28,
+      "size": "1.625rem",
+      "lineHeight": 1.25,
+      "weight": 800,
+      "tracking": "-0.025em"
+    },
+    "h1": {
+      "size": "1.35rem",
+      "lineHeight": 1.3,
       "weight": 700,
       "tracking": "-0.02em"
     },
-    "h1": {
-      "size": "1.375rem",
-      "lineHeight": 1.32,
+    "h2": {
+      "size": "1.05rem",
+      "lineHeight": 1.35,
       "weight": 700,
       "tracking": "-0.015em"
-    },
-    "h2": {
-      "size": "1.0625rem",
-      "lineHeight": 1.36,
-      "weight": 600,
-      "tracking": "-0.01em"
     },
     "body": {
       "size": "0.875rem",
@@ -63,41 +63,41 @@
       "tracking": "0.01em"
     },
     "numericMetric": {
-      "size": "1.5rem",
+      "size": "1.375rem",
       "lineHeight": 1.2,
       "weight": 700,
       "fontVariantNumeric": "tabular-nums"
     }
   },
   "fontPairing": {
-    "heading": "'IBM Plex Sans', 'Be Vietnam Pro', sans-serif",
-    "body": "'Be Vietnam Pro', 'IBM Plex Sans', sans-serif",
-    "mono": "'IBM Plex Mono', monospace",
+    "heading": "'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif",
+    "body": "'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, sans-serif",
+    "mono": "'JetBrains Mono', 'IBM Plex Mono', monospace",
     "vietnameseDiacriticsVerified": true
   },
   "colorPalette": {
     "light": {
-      "canvas": "#F3F5F2",
+      "canvas": "#F5F8FB",
       "surface": "#FFFFFF",
-      "subtle": "#E7ECE5",
-      "inkPrimary": "#141913",
-      "inkSecondary": "#4B5549",
-      "border": "#CFD5CC",
-      "accent": "#3F6212",
+      "subtle": "#EAF1F7",
+      "inkPrimary": "#0F1C2A",
+      "inkSecondary": "#4A5E73",
+      "border": "#D4E0EC",
+      "accent": "#0369A1",
       "accentContrast": "#FFFFFF",
       "success": "#15803D",
       "warning": "#B45309",
       "danger": "#B42318"
     },
     "dark": {
-      "canvas": "#0F120E",
-      "surface": "#171C15",
-      "subtle": "#222A20",
-      "inkPrimary": "#EAEFE8",
-      "inkSecondary": "#9CA898",
-      "border": "#2F3A2B",
-      "accent": "#84CC16",
-      "accentContrast": "#141913",
+      "canvas": "#0B1219",
+      "surface": "#131D27",
+      "subtle": "#1C2937",
+      "inkPrimary": "#F0F6FC",
+      "inkSecondary": "#94A7BC",
+      "border": "#263749",
+      "accent": "#38BDF8",
+      "accentContrast": "#062030",
       "success": "#4ADE80",
       "warning": "#F59E0B",
       "danger": "#F87171"
@@ -105,51 +105,37 @@
   },
   "spacingSystem": {
     "baseUnitPx": 4,
-    "scalePx": [
-      4,
-      8,
-      12,
-      16,
-      20,
-      24,
-      32,
-      48,
-      64
-    ],
-    "rowHeight": "32px"
+    "scalePx": [4, 8, 12, 16, 20, 24, 32, 48, 64],
+    "rowHeight": "40px"
   },
   "layoutGrid": {
-    "composition": "edge-to-edge-freeze-pane-grid-with-top-ribbon-toolbar",
-    "maxContentWidth": "1600px",
+    "composition": "single-tier-full-label-topbar-plus-6-tile-home-launchpad",
+    "maxContentWidth": "1480px",
     "containerQueriesEnabled": true
   },
   "borderRadius": {
-    "sm": "2px",
-    "md": "3px",
-    "lg": "4px",
+    "sm": "6px",
+    "md": "10px",
+    "lg": "14px",
     "pill": "9999px"
   },
   "surfaceTreatment": {
-    "style": "high-legibility-ledger-paper",
+    "style": "bright-ergonomic-clean-cards-with-1px-sky-hairlines",
     "glassmorphismAllowed": false
   },
   "shadowAndElevation": {
     "level0": "none",
-    "level1": "0 1px 2px rgba(16, 24, 40, 0.04)",
-    "level2": "0 8px 20px rgba(16, 24, 40, 0.08)"
+    "level1": "0 1px 3px rgba(15, 28, 42, 0.05)",
+    "level2": "0 8px 24px rgba(15, 28, 42, 0.08)"
   },
   "iconography": {
     "primaryFamily": "lucide",
-    "strokeWidth": 1.75,
-    "sizesPx": [
-      16,
-      18,
-      20
-    ],
+    "strokeWidth": 1.85,
+    "sizesPx": [16, 18, 20, 22],
     "banMixedFamiliesAndDecorativeEmoji": true
   },
   "componentAnatomy": {
-    "density": "maximum-tabular-32px-rows",
+    "density": "comfortable-ergonomic-40px-rows",
     "requiredInteractiveStates": [
       "default",
       "hover",
@@ -164,21 +150,16 @@
     "singlePrimaryActionPerZone": true
   },
   "navigationPatterns": {
-    "desktop": "compact-dual-tier-workspace-tabs-and-formula-filter-ribbon",
-    "mobile": "adaptive-bottom-navigation-plus-contextual-sheet"
+    "desktop": "single-58px-full-label-topbar-plus-home-launchpad-and-ctrlk",
+    "mobile": "adaptive-bottom-navigation-plus-more-sheet"
   },
   "interactionPrinciples": {
-    "model": "arrow-key-cell-navigation-bulk-checkbox-toolbar",
+    "model": "one-click-home-launchpad-and-fitts-law-44px-touch-targets",
     "tabularCurrencyAlignment": "right-aligned with tabular-nums and non-breaking ₫ suffix"
   },
   "responsiveBehaviors": {
-    "viewportsVerified": [
-      "390x844",
-      "768x1024",
-      "1440x900",
-      "1920x1080"
-    ],
-    "mobileTableAdaptation": "structured-priority-card-rows-or-pinned-key-column-zero-page-overflow"
+    "viewportsVerified": ["390x844", "768x1024", "1440x900", "1920x1080"],
+    "mobileTableAdaptation": "horizontal-scroll-container-zero-page-overflow-and-44px-controls"
   },
   "accessibilityRequirements": {
     "standard": "WCAG 2.2 AA",
@@ -190,13 +171,10 @@
     "durationFastMs": 140,
     "durationBaseMs": 200,
     "easing": "cubic-bezier(0.2, 0, 0, 1)",
-    "propertiesAllowed": [
-      "opacity",
-      "transform"
-    ],
+    "propertiesAllowed": ["opacity", "transform"],
     "respectPrefersReducedMotion": true
   },
   "decisionsAndRationale": {
-    "selectedReason": "Option A (Utilitarian Freeze-Pane Sheet with Olive Moss #3F6212 & Alabaster #F3F5F2): Dual-tier top ribbon, edge-to-edge ledger grid, live K80/QR right inspector, and sticky bottom totals bar."
+    "selectedReason": "Option G (Command Home Launchpad with Ocean Sapphire #0369A1 & Soft Sky-Cloud #F5F8FB): Prioritizes zero-learning-curve usability for cashiers and staff with 6 large 1-click live launchpad cards, single-tier icon+text topbar, >=44px touch targets, and seamless Desktop + Extension 420px ergonomics."
   }
 }
