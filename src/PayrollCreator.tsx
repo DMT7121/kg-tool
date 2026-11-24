@@ -12,44 +12,44 @@ import {
   ChevronRight,
   Search,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Sparkles,
+  Trash2,
+  Send,
+  Users,
+  Calendar,
+  Wallet,
+  CreditCard,
+  Sliders,
+  AlertTriangle
 } from 'lucide-react';
 import './PayrollCreator.css';
-import { StatCard, EmptyState, GuidePanel, PageHeader } from './components/Shared';
-import { Users, Calendar, Wallet, CreditCard, Sliders } from 'lucide-react';
+import { StatCard, EmptyState, PageHeader } from './components/Shared';
 import { SlideOverDrawer } from './components/SlideOverDrawer';
+import { PayrollSmartImporter } from './components/PayrollSmartImporter';
+import { PayrollSlipEditor } from './components/PayrollSlipEditor';
 import {
   escapeHtml,
   numberToVietnameseWords,
   parseSmartCurrency,
-  parseSmartDecimal,
   removeVietnameseAccents,
-  unwrapExcelCellValue,
 } from './utils/numberUtils';
+import {
+  type PayrollEmployee,
+  buildSlipRenderRows,
+  computeDynamicEmployeeTotals,
+  createSlipItemId,
+  normalizeEmployeeSlip,
+} from './utils/payrollParser';
 
 const THEMES = {
-  blue: '#1e3a8a',
-  lightBlue: '#eff6ff',
+  blue: '#0369a1',
+  lightBlue: '#e0f2fe',
   red: '#dc2626',
   slate: '#475569'
 };
 
-interface Employee {
-  id: string;
-  name: string;
-  days: number;
-  range: string;
-  salary: number;
-  amount: number;
-  advance?: number;
-  addedDays?: number;
-  totalHours?: number;
-  workedDays?: number;
-  lunchPay?: number;
-  bonus?: number;
-  overtimePay?: number;
-  deduction?: number;
-}
+type Employee = PayrollEmployee;
 
 interface Deduction {
   id: string;
@@ -202,14 +202,7 @@ function computeEmployeeAmount(
   stdDays: number,
   rMode: RoundMode
 ): number {
-  if (mode === 'restaurant') {
-    return calculateRestaurantDetails(emp).tongNhan;
-  }
-  if (mode === 'hourly') {
-    return roundSalaryByMode(emp.salary * emp.days, rMode);
-  }
-  const safeStdDays = stdDays > 0 ? stdDays : 26;
-  return roundSalaryByMode((emp.salary * emp.days) / safeStdDays, rMode);
+  return computeDynamicEmployeeTotals(emp, mode, stdDays, rMode).netPay;
 }
 
 interface InitialPayrollDraft {
@@ -356,9 +349,7 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const [historyMonths, setHistoryMonths] = useState<SavedPayrollMonth[]>([]);
   const [syncStatus, setSyncStatus] = useState<'online' | 'offline' | 'loading'>('offline');
 
-  // File inputs
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const excelInputRef = useRef<HTMLInputElement>(null);
+  // Drag-drop state
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   // New Upgraded UI Configurations
@@ -396,9 +387,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     return false;
   });
   const [configDrawerTab, setConfigDrawerTab] = useState<'salary' | 'print' | 'sync' | 'warnings'>('salary');
-  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
-  const [isDeductionsExpanded, setIsDeductionsExpanded] = useState(false);
-  const [isPresetsExpanded, setIsPresetsExpanded] = useState(false);
 
   useEffect(() => {
     const handleOpenConfig = () => {
@@ -617,14 +605,9 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     return roundSalaryByMode(n, roundMode);
   }, [roundMode]);
 
-  const getRestaurantDetails = calculateRestaurantDetails;
-
   const getEmployeeNet = useCallback((emp: Employee) => {
-    if (salaryMode === 'restaurant') {
-      return Number(emp.amount || 0);
-    }
-    return Number(emp.amount || 0) - Number(emp.advance || 0) - Number(emp.deduction || 0);
-  }, [salaryMode]);
+    return computeDynamicEmployeeTotals(emp, salaryMode, standardDays, roundMode).netPay;
+  }, [salaryMode, standardDays, roundMode]);
 
   const recalculateAllEmployees = useCallback((mode: SalaryMode, stdDays: number, rMode: RoundMode) => {
     setEmployees(prev => prev.map(e => ({
@@ -647,21 +630,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
   const handleRoundModeChange = (nextRoundMode: RoundMode) => {
     setRoundMode(nextRoundMode);
     recalculateAllEmployees(salaryMode, standardDays, nextRoundMode);
-  };
-
-  const updateEmployeeRestaurantField = <K extends keyof Employee>(id: string, field: K, value: Employee[K]) => {
-    setEmployees(prev => prev.map(e => {
-      if (e.id === id) {
-        const updatedEmp: Employee = { ...e, [field]: value };
-        if (field === 'workedDays') {
-          updatedEmp.days = Number(value) || 0;
-        }
-        const details = calculateRestaurantDetails(updatedEmp);
-        updatedEmp.amount = details.tongNhan;
-        return updatedEmp;
-      }
-      return e;
-    }));
   };
 
   const importFromAttendanceSummary = useCallback(() => {
@@ -777,126 +745,62 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     };
   }, [importFromAttendanceSummary, showToast]);
 
-  const importPayrollFromExcel = useCallback(async (file: File) => {
-    try {
-      const buffer = await file.arrayBuffer();
-      const ExcelJSMod = await import('exceljs');
-      const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+  // Smart Multi-Source Importer state
+  const [isSmartImporterOpen, setIsSmartImporterOpen] = useState(false);
+  const [importerInitialTab, setImporterInitialTab] = useState<'excel' | 'image' | 'text'>('excel');
+  const [droppedImportFile, setDroppedImportFile] = useState<File | null>(null);
 
-      const worksheet = workbook.worksheets[0];
-      if (!worksheet) {
-        showToast('Không tìm thấy bảng tính nào trong file Excel.', 'error');
-        return;
-      }
+  const openSmartImporter = (tab: 'excel' | 'image' | 'text' = 'excel') => {
+    setImporterInitialTab(tab);
+    setIsSmartImporterOpen(true);
+  };
 
-      const parsedEmployees: Employee[] = [];
-      const rowCount = worksheet.rowCount;
-      const colCount = worksheet.columnCount;
-
-      // Scan all cells in the sheet to find block starters
-      for (let r = 1; r <= rowCount; r++) {
-        const row = worksheet.getRow(r);
-        for (let c = 1; c <= colCount; c++) {
-          const cellVal = unwrapExcelCellValue(row.getCell(c)?.value);
-          if (cellVal && typeof cellVal === 'string' && cellVal.toUpperCase().includes('PHIẾU LƯƠNG NHÂN VIÊN')) {
-            let name = '';
-            let addedDays = 0;
-            let totalHours = 0;
-            let workedDays = 26;
-            let salary = 0;
-            let lunchPay = 0;
-            let bonus = 0;
-            let overtimePay = 0;
-            let deduction = 0;
-            let empAdv = 0;
-
-            // Scan the block rows (up to 20 rows below the header)
-            for (let br = r + 1; br <= Math.min(r + 20, rowCount); br++) {
-              const blockRow = worksheet.getRow(br);
-              const label = unwrapExcelCellValue(blockRow.getCell(c)?.value);
-
-              if (!label || typeof label !== 'string') continue;
-              const normLabel = label.toLowerCase().trim();
-
-              if (normLabel.includes('phiếu lương nhân viên')) {
-                break;
-              }
-
-              const val1 = unwrapExcelCellValue(blockRow.getCell(c + 1)?.value);
-              const val2 = unwrapExcelCellValue(blockRow.getCell(c + 2)?.value);
-              const rawValue = val2 !== null && val2 !== undefined && val2 !== '' ? val2 : val1;
-
-              if (normLabel.includes('họ và tên') || normLabel.includes('họ tên') || normLabel.includes('nhân viên')) {
-                const nameVal = val1 && typeof val1 === 'string' && val1.trim() !== '' ? val1 : val2;
-                if (nameVal) {
-                  name = String(nameVal).trim();
-                }
-              } else if (normLabel.includes('ngày cộng thêm') || normLabel.includes('bù ngày')) {
-                addedDays = parseSmartDecimal(rawValue);
-              } else if (normLabel.includes('tổng giờ làm') || normLabel.includes('giờ làm/tháng')) {
-                totalHours = parseSmartDecimal(rawValue);
-              } else if (normLabel.includes('số ngày làm') || normLabel.includes('ngày làm/tháng')) {
-                workedDays = parseSmartDecimal(rawValue);
-              } else if (normLabel.includes('mức lương') || normLabel.includes('lương hiện tại')) {
-                salary = Math.round(parseSmartCurrency(rawValue));
-              } else if (normLabel.includes('tiền cơm')) {
-                lunchPay = Math.round(parseSmartCurrency(rawValue));
-              } else if (normLabel.includes('thưởng')) {
-                bonus = Math.round(parseSmartCurrency(rawValue));
-              } else if (normLabel.includes('tăng ca')) {
-                overtimePay = Math.round(parseSmartCurrency(rawValue));
-              } else if (normLabel.includes('đổ bể') || normLabel.includes('đồ bể')) {
-                deduction += Math.round(Math.abs(parseSmartCurrency(rawValue)));
-              } else if (normLabel.includes('phạt')) {
-                deduction += Math.round(Math.abs(parseSmartCurrency(rawValue)));
-              } else if (normLabel.includes('ứng lương') || normLabel.includes('tạm ứng')) {
-                empAdv = Math.round(Math.abs(parseSmartCurrency(rawValue)));
-              }
-            }
-
-            if (name) {
-              const empId = createPayrollId('xls');
-              const tempEmp: Employee = {
-                id: empId,
-                name,
-                days: workedDays,
-                workedDays,
-                addedDays,
-                totalHours,
-                salary,
-                range: `${payMonth.split('-')[1]}/${payMonth.split('-')[0]}`,
-                lunchPay,
-                bonus,
-                overtimePay,
-                deduction,
-                advance: empAdv,
-                amount: 0,
-              };
-
-              const details = calculateRestaurantDetails(tempEmp);
-              tempEmp.amount = details.tongNhan;
-              parsedEmployees.push(tempEmp);
-            }
-          }
-        }
-      }
-
-      if (parsedEmployees.length > 0) {
-        setEmployees(parsedEmployees);
-        setSalaryMode('restaurant');
-        setSelectedEmployeeIds(new Set(parsedEmployees.map(e => e.id)));
-        showToast(`Đã nạp thành công ${parsedEmployees.length} phiếu lương từ file Excel!`, 'success');
-      } else {
-        showToast('Không tìm thấy phiếu lương hợp lệ nào theo cấu trúc Nhà hàng F&B.', 'info');
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      const msg = err instanceof Error ? err.message : String(err);
-      showToast(`Lỗi phân tích file Excel: ${msg}`, 'error');
+  const handleApplyImportedEmployees = (
+    imported: Employee[],
+    mode: 'replace' | 'append',
+    detectedMode?: SalaryMode
+  ) => {
+    if (detectedMode && detectedMode !== salaryMode) {
+      setSalaryMode(detectedMode);
     }
-  }, [payMonth, showToast]);
+    if (mode === 'replace') {
+      setEmployees(imported);
+      setSelectedEmployeeIds(new Set(imported.map(e => e.id)));
+      setCurrentEmployeeIndex(0);
+    } else {
+      setEmployees(prev => {
+        const next = [...prev, ...imported];
+        return next;
+      });
+      setSelectedEmployeeIds(prev => {
+        const next = new Set(prev);
+        imported.forEach(e => next.add(e.id));
+        return next;
+      });
+    }
+    showToast(`Đã áp dụng ${imported.length} phiếu lương chuẩn hóa vào Bảng lương!`, 'success');
+  };
+
+  const handleUpdateEmployeeFull = (updated: Employee) => {
+    setEmployees(prev => prev.map(e => (e.id === updated.id ? updated : e)));
+  };
+
+  const handleNormalizeSingleSlip = (empId: string) => {
+    setEmployees(prev => prev.map(e =>
+      e.id === empId
+        ? normalizeEmployeeSlip(e, salaryMode, standardDays, roundMode, { removeZeroRows: true })
+        : e
+    ));
+    showToast('Đã chuẩn hóa phiếu lương (ẩn dòng 0 đ & sắp xếp Cộng/Trừ rõ ràng)!', 'success');
+  };
+
+  const handleNormalizeAllSlips = () => {
+    if (employees.length === 0) return;
+    setEmployees(prev => prev.map(e =>
+      normalizeEmployeeSlip(e, salaryMode, standardDays, roundMode, { removeZeroRows: true })
+    ));
+    showToast(`Đã chuẩn hóa toàn bộ ${employees.length} phiếu lương theo đúng khoản riêng của từng nhân viên!`, 'success');
+  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -918,88 +822,92 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       const ext = file.name.toLowerCase().split('.').pop();
-      if (ext !== 'xlsx' && ext !== 'xls') {
-        showToast('Vui lòng kéo thả tệp Excel hợp lệ (.xlsx, .xls)', 'error');
+      if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) {
+        setImporterInitialTab('image');
+        setDroppedImportFile(file);
+        setIsSmartImporterOpen(true);
         return;
       }
-      void importPayrollFromExcel(file);
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv' || ext === 'tsv') {
+        setImporterInitialTab('excel');
+        setDroppedImportFile(file);
+        setIsSmartImporterOpen(true);
+        return;
+      }
+      showToast('Vui lòng kéo thả tệp Excel (.xlsx, .xls, .csv) hoặc Ảnh phiếu lương (.png, .jpg)', 'error');
     }
-  }, [importPayrollFromExcel, showToast]);
-
-  // Recalculate employee payout amount when basic salary or days changes
-  const updateEmployeeSalary = (id: string, salaryVal: string) => {
-    const rawSal = Math.round(parseSmartCurrency(salaryVal));
-    setEmployees(prev => prev.map(e => {
-      if (e.id === id) {
-        const updated = { ...e, salary: rawSal };
-        return { ...updated, amount: computeEmployeeAmount(updated, salaryMode, standardDays, roundMode) };
-      }
-      return e;
-    }));
-  };
-
-  const updateEmployeeDays = (id: string, daysVal: number) => {
-    setEmployees(prev => prev.map(e => {
-      if (e.id === id) {
-        const updated = { ...e, days: daysVal, workedDays: daysVal };
-        return { ...updated, amount: computeEmployeeAmount(updated, salaryMode, standardDays, roundMode) };
-      }
-      return e;
-    }));
-  };
-
-  const updateEmployeeDetails = (id: string, field: 'name' | 'range', val: string) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, [field]: val } : e));
-  };
+  }, [showToast]);
 
   const loadSampleData = () => {
-    if (salaryMode === 'restaurant') {
-      setEmployees([
-        {
-          id: '1',
-          name: 'Đào Thị Thiên Thanh (TV)',
-          days: 28,
-          range: '01/06 - 30/06',
-          salary: 6500000,
-          amount: 7530000,
-          addedDays: 2,
-          totalHours: 244,
-          workedDays: 28,
-          lunchPay: 560000,
-          bonus: 0,
-          overtimePay: 500000,
-          deduction: 30000
-        },
-        {
-          id: '2',
-          name: 'Quách Thị Bảo Trang (TV)',
-          days: 29,
-          range: '01/06 - 30/06',
-          salary: 6500000,
-          amount: 9033750,
-          addedDays: 2,
-          totalHours: 279,
-          workedDays: 29,
-          lunchPay: 580000,
-          bonus: 600000,
-          overtimePay: 1167083,
-          deduction: 30000
-        }
-      ]);
-      setDeductions([]);
-      setSelectedEmployeeIds(new Set(['1', '2']));
-    } else {
-      setEmployees([
-        { id: '1', name: 'Nguyễn Văn A', days: 26, range: '01/06 - 30/06', salary: 12000000, amount: 10400000 },
-        { id: '2', name: 'Trần Thị B', days: 24, range: '01/06 - 30/06', salary: 15000000, amount: 12000000 },
-        { id: '3', name: 'Lê Văn C', days: 27.5, range: '01/06 - 30/06', salary: 10500000, amount: 9625000 }
-      ]);
-      setDeductions([
-        { id: '1', label: 'Bảo hiểm xã hội', amount: 500000 },
-        { id: '2', label: 'Đồng phục', amount: 200000 }
-      ]);
-      setSelectedEmployeeIds(new Set(['1', '2', '3']));
-    }
+    const sampleList: Employee[] = [
+      normalizeEmployeeSlip({
+        id: createSlipItemId('smp'),
+        name: 'Nguyễn Minh Anh',
+        role: 'Bếp trưởng',
+        dept: 'Bếp nướng',
+        days: 26,
+        workedDays: 26,
+        addedDays: 2,
+        totalHours: 232,
+        range: '01/11 - 30/11',
+        salary: 9000000,
+        amount: 0,
+        useCustomSlipItems: true,
+        slipItems: [
+          { id: createSlipItemId('s'), label: 'Tiền cơm', type: 'add', amount: 520000, visible: true },
+          { id: createSlipItemId('s'), label: 'Thưởng KPI bếp', type: 'add', amount: 600000, note: 'Đạt chuẩn 100%', visible: true },
+          { id: createSlipItemId('s'), label: 'Tăng ca lễ', type: 'add', amount: 450000, visible: true },
+          { id: createSlipItemId('s'), label: 'Tạm ứng lương', type: 'deduct', amount: 1000000, note: 'Đợt 15/11', visible: true },
+        ],
+        sourceType: 'manual',
+      }, salaryMode, standardDays, roundMode),
+      normalizeEmployeeSlip({
+        id: createSlipItemId('smp'),
+        name: 'Trần Thu Hà',
+        role: 'Thu ngân ca tối',
+        dept: 'Quầy thu ngân',
+        days: 25.5,
+        workedDays: 25.5,
+        addedDays: 0,
+        totalHours: 204,
+        range: '01/11 - 30/11',
+        salary: 7800000,
+        amount: 0,
+        useCustomSlipItems: true,
+        slipItems: [
+          { id: createSlipItemId('s'), label: 'Tiền cơm', type: 'add', amount: 510000, visible: true },
+          { id: createSlipItemId('s'), label: 'Phụ cấp gửi xe', type: 'add', amount: 200000, visible: true },
+          { id: createSlipItemId('s'), label: 'Phạt đi trễ', type: 'deduct', amount: 100000, note: '2 buổi', visible: true },
+        ],
+        sourceType: 'manual',
+      }, salaryMode, standardDays, roundMode),
+      normalizeEmployeeSlip({
+        id: createSlipItemId('smp'),
+        name: 'Lê Hoàng Nam',
+        role: 'Phục vụ bàn',
+        dept: 'Sảnh Q1',
+        days: 24,
+        workedDays: 24,
+        addedDays: 0,
+        totalHours: 192,
+        range: '01/11 - 30/11',
+        salary: 7000000,
+        amount: 0,
+        useCustomSlipItems: true,
+        slipItems: [
+          { id: createSlipItemId('s'), label: 'Tiền cơm', type: 'add', amount: 480000, visible: true },
+          { id: createSlipItemId('s'), label: 'Đổ bể ly', type: 'deduct', amount: 120000, note: '2 ly rượu', visible: true },
+          { id: createSlipItemId('s'), label: 'Đồng phục', type: 'deduct', amount: 150000, visible: true },
+          { id: createSlipItemId('s'), label: 'Tạm ứng lương', type: 'deduct', amount: 500000, visible: true },
+        ],
+        sourceType: 'manual',
+      }, salaryMode, standardDays, roundMode),
+    ];
+    setEmployees(sampleList);
+    setDeductions([]);
+    setSelectedEmployeeIds(new Set(sampleList.map(e => e.id)));
+    setCurrentEmployeeIndex(0);
+    showToast('Đã nạp 3 phiếu mẫu có số dòng cộng/trừ khác nhau để bạn trải nghiệm!', 'success');
   };
 
   const addEmployee = () => {
@@ -1089,72 +997,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
       setSelectedEmployeeIds(new Set());
       showToast('Đã xóa trắng form dữ liệu!', 'info');
     }
-  };
-
-  // CSV importer
-  const triggerCsvSelect = () => {
-    fileInputRef.current?.click();
-  };
-
-  const triggerExcelSelect = () => {
-    excelInputRef.current?.click();
-  };
-
-  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    void importPayrollFromExcel(file);
-    if (excelInputRef.current) excelInputRef.current.value = '';
-  };
-
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      if (!text) return;
-
-      const lines = text.split(/\r?\n/);
-      const newEmps: Employee[] = [];
-      const isHourly = salaryMode === 'hourly';
-
-      lines.forEach((line, idx) => {
-        if (idx === 0 || !line.trim()) return; // skip header
-        const cols = line.includes(';') ? line.split(';') : line.split(',');
-        if (cols.length < 2) return;
-
-        const name = cols[0]?.trim();
-        if (!name) return;
-        const days = parseSmartDecimal(cols[1]);
-        const range = cols[2]?.trim() || '';
-        const salary = Math.round(parseSmartCurrency(cols[3] || (isHourly ? '35.000' : '10.000.000')));
-
-        const candidate: Employee = {
-          id: createPayrollId(`csv-${idx}`),
-          name,
-          days,
-          workedDays: days,
-          range,
-          salary,
-          amount: 0,
-        };
-        candidate.amount = computeEmployeeAmount(candidate, salaryMode, standardDays, roundMode);
-
-        newEmps.push(candidate);
-      });
-
-      if (newEmps.length > 0) {
-        setEmployees(newEmps);
-        setSelectedEmployeeIds(new Set(newEmps.map(emp => emp.id)));
-        showToast(`Đã nhập bulk thành công ${newEmps.length} nhân viên từ CSV!`, 'success');
-      } else {
-        showToast('Không đọc được dữ liệu phù hợp từ CSV. Kiểm tra lại định dạng file.', 'error');
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const loadHistoryMonth = async (month: string) => {
@@ -1513,146 +1355,49 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     }
   };
 
-  // SVG Receipt Templates
+  // SVG Receipt Templates (Dynamic Per-Employee Rows via buildSlipRenderRows)
   const slipSvgStandard = (emp: Employee) => {
     if (!emp) return '';
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const isHourly = salaryMode === 'hourly';
-    
-    if (salaryMode === 'restaurant') {
-      const details = getRestaurantDetails(emp);
-      const words = numberToVietnamese(details.tongNhan);
-      
-      const tableRows: { label: string; val: string; isBold?: boolean }[] = [
-        { label: "Ngày cộng thêm (lễ, bù ngày off)", val: String(emp.addedDays !== undefined ? emp.addedDays : 0) },
-        { label: "Tổng giờ làm/tháng", val: String(emp.totalHours !== undefined ? emp.totalHours : 0) },
-        { label: "Số ngày làm/tháng", val: String(emp.workedDays !== undefined ? emp.workedDays : emp.days) },
-        { label: "Mức lương hiện tại", val: formatMoney(emp.salary) },
-        { label: "QUY ĐỔI (LƯƠNG/GIỜ)", val: formatMoney(details.quyDoi) },
-        { label: "LƯƠNG  THEO GIỜ", val: formatMoney(details.luongTheoGio) },
-        { label: "TIỀN CƠM (  + )", val: formatMoney(details.tienCom) }
-      ];
-      if (details.thuong > 0) {
-        tableRows.push({ label: "THƯỞNG ( + )", val: formatMoney(details.thuong) });
-      }
-      tableRows.push({ label: "TĂNG CA ( +)", val: formatMoney(details.tangCa) });
-      if (details.tamUng > 0) {
-        tableRows.push({ label: "TẠM ỨNG ( - )", val: `-${formatMoney(details.tamUng)}` });
-      }
-      tableRows.push({ label: "ĐỔ BỂ ( - )", val: details.doBe > 0 ? `-${formatMoney(details.doBe)}` : '0' });
+    const { rows: slipRows, totals } = buildSlipRenderRows(
+      emp,
+      salaryMode,
+      standardDays,
+      roundMode,
+      formatMoney,
+      {
+        showTime: visibility.showTime,
+        showBaseSalary: visibility.showBaseSalary,
+        showAdvance: visibility.showAdvance,
+        showDeductions: visibility.showDeductions,
+      },
+      thermalOptions.hideEmptyRows
+    );
+    const words = numberToVietnamese(totals.netPay);
+    const empRole = emp.role?.trim() || defaultPosition;
+    const empDept = emp.dept?.trim() || defaultDept;
 
-      const rowLines = tableRows.map((r, i) => {
-        const y = 542 + i * 45;
-        return `
-          <line x1="45" y1="${y - 32}" x2="955" y2="${y - 32}" stroke="${THEMES.blue}" stroke-width="1"/>
-          <text x="92" y="${y - 10}" text-anchor="middle" class="table-cell">${i + 1}</text>
-          <text x="165" y="${y - 10}" class="table-cell">${escapeHtml(r.label)}</text>
-          <text x="928" y="${y - 10}" text-anchor="end" class="table-cell-bold">${escapeHtml(r.val)}</text>
-        `;
-      }).join('');
-
-      const tableHeight = 78 + tableRows.length * 45;
-      const tableBottom = 420 + tableHeight;
-
+    const rowHeight = 48;
+    const rowLines = slipRows.map((r, i) => {
+      const y = 532 + i * rowHeight;
+      const valColor = r.kind === 'deduct' ? THEMES.red : r.kind === 'add' ? '#15803d' : '#0f172a';
       return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1400" role="img" aria-label="Standard Slip">
-        <rect x="16" y="16" width="968" height="1368" rx="0" fill="#fff" stroke="${THEMES.blue}" stroke-width="4"/>
-        <rect x="26" y="26" width="948" height="1348" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="2" opacity=".9"/>
-        
-        <style>
-          .title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle}px; font-weight: ${titleWeight}; fill: ${THEMES.blue}; text-anchor: middle; }
-          .sub-title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 4}px; font-weight: 700; fill: ${THEMES.blue}; text-anchor: middle; }
-          .normal-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent}px; fill: #0f172a; }
-          .bold-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent}px; font-weight: 700; fill: #0f172a; }
-          .table-header { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; font-weight: 700; fill: ${THEMES.blue}; text-anchor: middle; }
-          .table-cell { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; fill: #334155; }
-          .table-cell-bold { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; font-weight: 700; fill: #0f172a; }
-          .total-pay-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 6}px; font-weight: 900; fill: ${THEMES.red}; text-anchor: end; }
-        </style>
-        
-        ${visibility.showUnitInfo ? `
-          <text x="70" y="85" class="bold-text">NHÀ HÀNG KINGS GRILL</text>
-          <text x="70" y="105" class="normal-text" style="font-size: ${fontSizeContent - 2}px; fill: #64748b;">Số 40 Nguyễn Thị Minh Khai, Quận 1, TP. HCM</text>
-        ` : ''}
-        
-        ${visibility.showTitle ? `
-          <text x="500" y="150" class="title-text">PHIẾU LƯƠNG NHÂN VIÊN</text>
-        ` : ''}
-        
-        ${visibility.showMetaInfo ? `
-          <text x="500" y="195" class="sub-title-text">${mLabel}</text>
-        ` : ''}
-  
-        ${visibility.showEmpName ? `
-          <text x="70" y="270" class="bold-text">Họ và tên</text>
-          <text x="245" y="270" class="bold-text">:</text>
-          <text x="285" y="270" class="normal-text" style="font-size: ${fontSizeContent + 2}px; font-weight: 600;">${escapeHtml(emp.name)}</text>
-        ` : ''}
-        
-        ${visibility.showEmpRole ? `
-          <text x="70" y="320" class="bold-text">Chức vụ</text>
-          <text x="245" y="320" class="bold-text">:</text>
-          <text x="285" y="320" class="normal-text">${escapeHtml(defaultPosition)}</text>
-        ` : ''}
-        
-        ${visibility.showEmpDept ? `
-          <text x="70" y="370" class="bold-text">Bộ phận</text>
-          <text x="245" y="370" class="bold-text">:</text>
-          <text x="285" y="370" class="normal-text">${escapeHtml(defaultDept)}</text>
-        ` : ''}
-  
-        <rect x="45" y="420" width="910" height="${tableHeight}" fill="#fff" stroke="${THEMES.blue}" stroke-width="2"/>
-        <rect x="45" y="420" width="910" height="76" fill="${THEMES.lightBlue}" opacity=".75"/>
-        <line x1="140" y1="420" x2="140" y2="${tableBottom}" stroke="${THEMES.blue}" stroke-width="2"/>
-        <line x1="770" y1="420" x2="770" y2="${tableBottom}" stroke="${THEMES.blue}" stroke-width="2"/>
-        
-        <text x="92" y="468" class="table-header">STT</text>
-        <text x="455" y="468" class="table-header">NỘI DUNG THANH TOÁN</text>
-        <text x="862" y="468" class="table-header">SỐ TIỀN</text>
-  
-        ${rowLines}
-  
-        <rect x="45" y="${tableBottom + 30}" width="910" height="108" fill="${THEMES.lightBlue}" opacity=".8" stroke="${THEMES.blue}" stroke-width="2"/>
-        <line x1="690" y1="${tableBottom + 30}" x2="690" y2="${tableBottom + 138}" stroke="${THEMES.blue}" stroke-width="2"/>
-        <text x="70" y="${tableBottom + 95}" font-family="'${selectedFont}', sans-serif" font-size="28" font-weight="900" fill="${THEMES.blue}">TỔNG TIỀN THỰC NHẬN</text>
-        <text x="930" y="${tableBottom + 98}" class="total-pay-text">${formatMoney(details.tongNhan)}</text>
-        
-        ${visibility.showNotes ? `
-          <text x="500" y="${tableBottom + 180}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 1}px; font-style: italic; fill: #64748b;">(Bằng chữ: ${escapeHtml(words)})</text>
-        ` : ''}
-        
-        <text x="70" y="${tableBottom + 250}" class="normal-text" style="fill: #64748b;">${escapeHtml(vDate)}</text>
-        
-        ${visibility.showSignatures ? `
-          <text x="250" y="${tableBottom + 290}" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người nhận lương</text>
-          <text x="250" y="${tableBottom + 315}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
-          
-          <text x="750" y="${tableBottom + 290}" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người lập phiếu</text>
-          <text x="750" y="${tableBottom + 315}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
-        ` : ''}
-      </svg>`;
-    }
+        <line x1="45" y1="${y - 34}" x2="955" y2="${y - 34}" stroke="${THEMES.blue}" stroke-width="1"/>
+        <text x="92" y="${y - 10}" text-anchor="middle" class="table-cell">${i + 1}</text>
+        <text x="165" y="${y - 10}" class="${r.isBold ? 'table-cell-bold' : 'table-cell'}">${escapeHtml(r.label)}</text>
+        <text x="928" y="${y - 10}" text-anchor="end" class="table-cell-bold" fill="${valColor}">${escapeHtml(r.valueText)}</text>
+      `;
+    }).join('');
 
-    const infoDays = isHourly ? (emp.range ? `${emp.days} giờ (${emp.range})` : `${emp.days} giờ`) : (emp.range ? `${emp.days} công (${emp.range})` : `${emp.days} công`);
-    const empNet = getEmployeeNet(emp);
-    const words = numberToVietnamese(empNet);
-    
-    const row1Label = isHourly ? "Lương cơ bản theo giờ" : "Mức lương cơ bản";
-    const row1Val = isHourly ? `${formatMoney(emp.salary)} / giờ` : `${formatMoney(emp.salary)}`;
-    const row2Label = isHourly ? "Tổng số giờ làm việc" : "Số công định mức";
-    const row2Val = isHourly ? `${emp.days} giờ` : `${standardDays} công`;
-    const row3Label = isHourly ? "Thời gian làm việc" : "Số công thực tế";
-    const row3Val = infoDays;
-    const row4Label = isHourly ? "Hệ số hoàn thành" : "Hệ số tính lương";
-    const row4Val = isHourly ? "1.00" : `${emp.days} / ${standardDays}`;
-    const row5Label = isHourly ? "Tiền lương thực nhận" : "Lương thực nhận";
-    const row5Formula = isHourly ? `${formatMoney(emp.salary)} × ${emp.days} giờ` : `${formatMoney(emp.salary)} × ${emp.days}/${standardDays}`;
-    
+    const tableHeight = 76 + Math.max(slipRows.length, 1) * rowHeight;
+    const tableBottom = 420 + tableHeight;
+    const totalHeight = Math.max(1220, tableBottom + 390);
+
     return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1400" role="img" aria-label="Standard Slip">
-      <rect x="16" y="16" width="968" height="1368" rx="0" fill="#fff" stroke="${THEMES.blue}" stroke-width="4"/>
-      <rect x="26" y="26" width="948" height="1348" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="2" opacity=".9"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 ${totalHeight}" role="img" aria-label="Phiếu lương chuẩn ${escapeHtml(emp.name)}">
+      <rect x="16" y="16" width="968" height="${totalHeight - 32}" rx="0" fill="#fff" stroke="${THEMES.blue}" stroke-width="4"/>
+      <rect x="26" y="26" width="948" height="${totalHeight - 52}" rx="0" fill="none" stroke="${THEMES.blue}" stroke-width="1.5" opacity=".85"/>
       
       <style>
         .title-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle}px; font-weight: ${titleWeight}; fill: ${THEMES.blue}; text-anchor: middle; }
@@ -1662,88 +1407,68 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         .table-header { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; font-weight: 700; fill: ${THEMES.blue}; text-anchor: middle; }
         .table-cell { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; fill: #334155; }
         .table-cell-bold { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTable}px; font-weight: 700; fill: #0f172a; }
-        .total-pay-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 6}px; font-weight: 900; fill: ${THEMES.red}; text-anchor: end; }
+        .total-pay-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 8}px; font-weight: 900; fill: ${THEMES.red}; text-anchor: end; }
       </style>
       
       ${visibility.showUnitInfo ? `
         <text x="70" y="85" class="bold-text">NHÀ HÀNG KINGS GRILL</text>
-        <text x="70" y="105" class="normal-text" style="font-size: ${fontSizeContent - 2}px; fill: #64748b;">Số 40 Nguyễn Thị Minh Khai, Quận 1, TP. HCM</text>
+        <text x="70" y="108" class="normal-text" style="font-size: ${fontSizeContent - 2}px; fill: #64748b;">Số 40 Nguyễn Thị Minh Khai, Quận 1, TP. HCM</text>
       ` : ''}
       
       ${visibility.showTitle ? `
-        <text x="500" y="150" class="title-text">PHIẾU LƯƠNG NHÂN VIÊN</text>
+        <text x="500" y="155" class="title-text">PHIẾU LƯƠNG NHÂN VIÊN</text>
       ` : ''}
       
       ${visibility.showMetaInfo ? `
-        <text x="500" y="195" class="sub-title-text">${mLabel}</text>
+        <text x="500" y="198" class="sub-title-text">${mLabel}</text>
       ` : ''}
 
       ${visibility.showEmpName ? `
         <text x="70" y="270" class="bold-text">Họ và tên</text>
         <text x="245" y="270" class="bold-text">:</text>
-        <text x="285" y="270" class="normal-text" style="font-size: ${fontSizeContent + 2}px; font-weight: 600;">${escapeHtml(emp.name)}</text>
+        <text x="285" y="270" class="normal-text" style="font-size: ${fontSizeContent + 2}px; font-weight: 700;">${escapeHtml(emp.name)}</text>
       ` : ''}
       
       ${visibility.showEmpRole ? `
-        <text x="70" y="320" class="bold-text">Chức vụ</text>
-        <text x="245" y="320" class="bold-text">:</text>
-        <text x="285" y="320" class="normal-text">${escapeHtml(defaultPosition)}</text>
+        <text x="70" y="318" class="bold-text">Chức vụ</text>
+        <text x="245" y="318" class="bold-text">:</text>
+        <text x="285" y="318" class="normal-text">${escapeHtml(empRole)}</text>
       ` : ''}
       
       ${visibility.showEmpDept ? `
-        <text x="70" y="370" class="bold-text">Bộ phận</text>
-        <text x="245" y="370" class="bold-text">:</text>
-        <text x="285" y="370" class="normal-text">${escapeHtml(defaultDept)}</text>
+        <text x="70" y="366" class="bold-text">Bộ phận</text>
+        <text x="245" y="366" class="bold-text">:</text>
+        <text x="285" y="366" class="normal-text">${escapeHtml(empDept)}</text>
       ` : ''}
 
-      <rect x="45" y="420" width="910" height="510" fill="#fff" stroke="${THEMES.blue}" stroke-width="2"/>
-      <rect x="45" y="420" width="910" height="76" fill="${THEMES.lightBlue}" opacity=".75"/>
-      <line x1="140" y1="420" x2="140" y2="930" stroke="${THEMES.blue}" stroke-width="2"/>
-      <line x1="455" y1="420" x2="455" y2="930" stroke="${THEMES.blue}" stroke-width="2"/>
-      <line x1="770" y1="420" x2="770" y2="930" stroke="${THEMES.blue}" stroke-width="2"/>
+      <rect x="45" y="420" width="910" height="${tableHeight}" fill="#fff" stroke="${THEMES.blue}" stroke-width="2"/>
+      <rect x="45" y="420" width="910" height="76" fill="${THEMES.lightBlue}" opacity=".8"/>
+      <line x1="140" y1="420" x2="140" y2="${tableBottom}" stroke="${THEMES.blue}" stroke-width="2"/>
+      <line x1="740" y1="420" x2="740" y2="${tableBottom}" stroke="${THEMES.blue}" stroke-width="2"/>
       
-      ${[496, 577, 658, 739, 820, 930].map(y => `<line x1="45" y1="${y}" x2="955" y2="${y}" stroke="${THEMES.blue}" stroke-width="2"/>`).join('')}
-      
-      <text x="92" y="468" class="table-header">STT</text>
-      <text x="300" y="468" class="table-header">NỘI DUNG THANH TOÁN</text>
-      <text x="612" y="468" class="table-header">THÔNG TIN</text>
-      <text x="862" y="468" class="table-header">SỐ TIỀN</text>
+      <text x="92" y="466" class="table-header">STT</text>
+      <text x="440" y="466" class="table-header">NỘI DUNG THANH TOÁN (${slipRows.length} DÒNG)</text>
+      <text x="848" y="466" class="table-header">SỐ TIỀN</text>
 
-      ${[1, 2, 3, 4, 5].map((n, i) => `<text x="92" y="${542 + i * 81}" text-anchor="middle" class="table-cell">${n}</text>`).join('')}
-      
-      <text x="165" y="542" class="table-cell">${row1Label}</text>
-      <text x="928" y="542" text-anchor="end" class="table-cell">${visibility.showBaseSalary ? row1Val : '***'}</text>
-      
-      <text x="165" y="623" class="table-cell">${row2Label}</text>
-      <text x="505" y="623" class="table-cell">${row2Val}</text>
-      
-      <text x="165" y="704" class="table-cell">${row3Label}</text>
-      <text x="505" y="704" class="table-cell">${escapeHtml(row3Val)}</text>
-      
-      <text x="165" y="785" class="table-cell">${row4Label}</text>
-      <text x="505" y="785" class="table-cell">${row4Val}</text>
-      
-      <text x="165" y="866" class="table-cell-bold">${row5Label}</text>
-      <text x="505" y="866" class="table-cell">${row5Formula}</text>
-      <text x="928" y="866" text-anchor="end" class="table-cell-bold">${formatMoney(emp.amount)}</text>
+      ${rowLines}
 
-      <rect x="45" y="960" width="910" height="108" fill="${THEMES.lightBlue}" opacity=".8" stroke="${THEMES.blue}" stroke-width="2"/>
-      <line x1="690" y1="960" x2="690" y2="1068" stroke="${THEMES.blue}" stroke-width="2"/>
-      <text x="70" y="1025" font-family="'${selectedFont}', sans-serif" font-size="28" font-weight="900" fill="${THEMES.blue}">TỔNG TIỀN THỰC NHẬN</text>
-      <text x="930" y="1028" class="total-pay-text">${formatMoney(empNet)}</text>
+      <rect x="45" y="${tableBottom + 28}" width="910" height="104" fill="${THEMES.lightBlue}" opacity=".85" stroke="${THEMES.blue}" stroke-width="2"/>
+      <line x1="650" y1="${tableBottom + 28}" x2="650" y2="${tableBottom + 132}" stroke="${THEMES.blue}" stroke-width="2"/>
+      <text x="70" y="${tableBottom + 90}" font-family="'${selectedFont}', sans-serif" font-size="26" font-weight="900" fill="${THEMES.blue}">TỔNG TIỀN THỰC NHẬN</text>
+      <text x="930" y="${tableBottom + 93}" class="total-pay-text">${formatMoney(totals.netPay)}</text>
       
       ${visibility.showNotes ? `
-        <text x="500" y="1120" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 1}px; font-style: italic; fill: #64748b;">(Bằng chữ: ${escapeHtml(words)})</text>
+        <text x="500" y="${tableBottom + 175}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 1}px; font-style: italic; fill: #64748b;">(Bằng chữ: ${escapeHtml(words)})</text>
       ` : ''}
       
-      <text x="70" y="1215" class="normal-text" style="fill: #64748b;">${escapeHtml(vDate)}</text>
+      <text x="70" y="${tableBottom + 240}" class="normal-text" style="fill: #64748b;">${escapeHtml(vDate)}</text>
       
       ${visibility.showSignatures ? `
-        <text x="250" y="1260" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người nhận lương</text>
-        <text x="250" y="1285" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
+        <text x="250" y="${tableBottom + 282}" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người nhận lương</text>
+        <text x="250" y="${tableBottom + 308}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
         
-        <text x="750" y="1260" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người lập phiếu</text>
-        <text x="750" y="1285" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
+        <text x="750" y="${tableBottom + 282}" text-anchor="middle" class="bold-text" style="font-size: ${fontSizeContent + 2}px;">Người lập phiếu</text>
+        <text x="750" y="${tableBottom + 308}" text-anchor="middle" class="normal-text" style="font-size: ${fontSizeContent - 2}px; font-style: italic; fill: #64748b;">(Ký và ghi rõ họ tên)</text>
       ` : ''}
     </svg>`;
   };
@@ -1859,349 +1584,151 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (!emp) return '';
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const isHourly = salaryMode === 'hourly';
+    const empRole = emp.role?.trim() || defaultPosition;
+    const empDept = emp.dept?.trim() || defaultDept;
 
-    if (salaryMode === 'restaurant') {
-      const details = getRestaurantDetails(emp);
-      const elements: string[] = [];
-      let currentY = 8;
+    const { rows: slipRows, totals } = buildSlipRenderRows(
+      emp,
+      salaryMode,
+      standardDays,
+      roundMode,
+      formatMoney,
+      {
+        showTime: visibility.showTime,
+        showBaseSalary: visibility.showBaseSalary,
+        showAdvance: visibility.showAdvance,
+        showDeductions: visibility.showDeductions,
+      },
+      thermalOptions.hideEmptyRows
+    );
 
-      if (visibility.showUnitInfo) {
-        elements.push(`
-          <text x="160" y="${currentY + 12}" font-family="'JetBrains Mono', '${selectedFont}', monospace" font-size="11.5" font-weight="800" fill="#000000" text-anchor="middle">*** KINGS GRILL F&amp;B ***</text>
-          <text x="160" y="${currentY + 24}" font-family="'${selectedFont}', sans-serif" font-size="8.2" font-weight="600" fill="#475569" text-anchor="middle">HỆ THỐNG NƯỚNG &amp; LẨU CAO CẤP TP.HCM</text>
-        `);
-        currentY += 30;
-      }
-
-      // Header Banner
-      if (visibility.showTitle) {
-        const bannerHeight = visibility.showMetaInfo ? 40 : 32;
-        elements.push(`
-          <rect x="8" y="${currentY}" width="304" height="${bannerHeight}" fill="#2563eb" rx="4" stroke="#1e3a8a" stroke-width="1"/>
-          <text x="160" y="${currentY + (visibility.showMetaInfo ? 17 : 20)}" font-family="'${selectedFont}', sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">PHIẾU LƯƠNG NHÂN VIÊN</text>
-          ${visibility.showMetaInfo ? `<text x="160" y="${currentY + 32}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-weight="600" fill="#dbeafe" text-anchor="middle">${escapeHtml(mLabel)}</text>` : ''}
-        `);
-        currentY += bannerHeight + 8;
-      }
-
-      // Employee Info Row
-      if (visibility.showEmpName) {
-        elements.push(`
-          <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11" font-weight="bold" fill="#000000">Họ và tên NV:</text>
-          <text x="312" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11.5" font-weight="bold" fill="#dc2626" text-anchor="end">${escapeHtml(emp.name)}</text>
-        `);
-        currentY += 20;
-      }
-
-      // Dashed Line
-      elements.push(`
-        <line x1="8" y1="${currentY}" x2="312" y2="${currentY}" stroke="#000000" stroke-width="1" stroke-dasharray="4, 3" />
-      `);
-      currentY += 8;
-
-      // Table Rows
-      const tableRows: { label: string; val: string; isBold?: boolean }[] = [];
-      if (visibility.showTime) {
-        tableRows.push(
-          { label: "Ngày cộng thêm (lễ, bù ngày off)", val: String(emp.addedDays !== undefined ? emp.addedDays : 0) },
-          { label: "Tổng giờ làm/tháng", val: String(emp.totalHours !== undefined ? emp.totalHours : 0) },
-          { label: "Số ngày làm/tháng", val: String(emp.workedDays !== undefined ? emp.workedDays : emp.days) }
-        );
-      }
-      if (visibility.showBaseSalary) {
-        tableRows.push({ label: "Mức lương hiện tại", val: formatMoney(emp.salary) });
-      }
-      tableRows.push(
-        { label: "QUY ĐỔI (LƯƠNG/GIỜ)", val: formatMoney(details.quyDoi) },
-        { label: "LƯƠNG THEO GIỜ", val: formatMoney(details.luongTheoGio) },
-        { label: "TIỀN CƠM ( + )", val: formatMoney(details.tienCom) }
-      );
-
-      // Add optional THƯỞNG
-      if (details.thuong > 0) {
-        tableRows.push({ label: "THƯỞNG ( + )", val: formatMoney(details.thuong) });
-      }
-
-      // Add TĂNG CA, ĐỔ BỂ, TỔNG NHẬN
-      tableRows.push({ label: "TĂNG CA ( + )", val: formatMoney(details.tangCa) });
-      if (details.tamUng > 0) {
-        tableRows.push({ label: "TẠM ỨNG ( - )", val: `-${formatMoney(details.tamUng)}` });
-      }
-      tableRows.push({ label: "ĐỔ BỂ ( - )", val: details.doBe > 0 ? `-${formatMoney(details.doBe)}` : '0' });
-      tableRows.push({ label: "TỔNG NHẬN", val: formatMoney(details.tongNhan), isBold: true });
-
-      const tableStartY = currentY;
-      const rowHeight = 24;
-      
-      tableRows.forEach((r, idx) => {
-        const rowY = tableStartY + idx * rowHeight;
-        
-        if (r.isBold) {
-          elements.push(`<rect x="8" y="${rowY}" width="304" height="${rowHeight}" fill="#f1f5f9" />`);
-        }
-
-        // top line of cell
-        elements.push(`<line x1="8" y1="${rowY}" x2="312" y2="${rowY}" stroke="#000000" stroke-width="0.8" />`);
-        
-        // Label
-        const fontW = r.isBold ? "bold" : "600";
-        const textCol = r.isBold ? "#000000" : "#1e293b";
-        elements.push(`
-          <text x="13" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="10.2" font-weight="${fontW}" fill="${textCol}">${escapeHtml(r.label)}</text>
-        `);
-        
-        // Value
-        elements.push(`
-          <text x="307" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="${r.isBold ? '11.5' : '10.8'}" font-weight="bold" fill="${r.isBold ? '#dc2626' : '#000000'}" text-anchor="end">${escapeHtml(r.val)}</text>
-        `);
-      });
-
-      const tableEndY = tableStartY + tableRows.length * rowHeight;
-      // bottom line of table
-      elements.push(`<line x1="8" y1="${tableEndY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
-
-      // Vertical lines (col divider at x=216 gives 96px for currency amounts)
-      elements.push(`<line x1="8" y1="${tableStartY}" x2="8" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
-      elements.push(`<line x1="216" y1="${tableStartY}" x2="216" y2="${tableEndY}" stroke="#000000" stroke-width="0.8" />`);
-      elements.push(`<line x1="312" y1="${tableStartY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
-
-      currentY = tableEndY + 12;
-
-      // Optional signatures/notes
-      const wordsText = numberToVietnamese(details.tongNhan);
-      const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
-      if (hasNotes) {
-        elements.push(`
-          <text x="8" y="${currentY + 10}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-style="italic" fill="#000000">Bằng chữ:</text>
-          <rect x="8" y="${currentY + 16}" width="304" height="36" fill="#f8fafc" rx="4" stroke="#cbd5e1" stroke-width="0.8"/>
-          <text x="13" y="${currentY + 29}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">
-            ${escapeHtml(wordsText.substring(0, 48))}
-          </text>
-          <text x="13" y="${currentY + 42}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">
-            ${escapeHtml(wordsText.substring(48))}
-          </text>
-        `);
-        currentY += 58;
-      }
-
-      const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
-      if (showSignatures) {
-        elements.push(`
-          <text x="160" y="${currentY + 10}" text-anchor="middle" font-size="9.5" font-family="'${selectedFont}', sans-serif" fill="#475569">${escapeHtml(vDate)}</text>
-          
-          <text x="80" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận</text>
-          <text x="80" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
-          
-          <text x="240" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người lập</text>
-          <text x="240" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
-        `);
-        currentY += 62;
-      } else if (visibility.showSignatures && thermalOptions.hideSignature) {
-        elements.push(`
-          <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận: ________________________</text>
-        `);
-        currentY += 20;
-      }
-
-      // Cut line
-      if (thermalOptions.showCutLine) {
-        elements.push(`
-          <line x1="8" y1="${currentY + 8}" x2="312" y2="${currentY + 8}" stroke="#64748b" stroke-width="1" stroke-dasharray="6, 4" />
-          <text x="160" y="${currentY + 20}" font-size="8.5" font-family="sans-serif" fill="#64748b" text-anchor="middle">✂--- Đường cắt ---✂</text>
-        `);
-        currentY += 26;
-      }
-
-      if (!thermalOptions.compactCut) {
-        currentY += 32;
-      }
-      currentY += (thermalOptions.bottomFeedMm || 4) * 3;
-
-      return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
-        <rect width="320" height="${currentY}" fill="#fff"/>
-        ${elements.join('\n')}
-      </svg>`;
-    }
-
-    const infoDays = isHourly ? (emp.range ? `${emp.days} giờ (${emp.range})` : `${emp.days} giờ`) : (emp.range ? `${emp.days} công (${emp.range})` : `${emp.days} công`);
-    
-    const row1Label = isHourly ? "Lương giờ (đ)" : "Mức lương cơ bản";
-    const row2Label = isHourly ? "Tổng số giờ" : "Công định mức / Thực tế";
-    const row2Val = isHourly ? `${emp.days} giờ` : `${standardDays} / ${infoDays}`;
-    const row3Label = isHourly ? "Công thức tính" : "Hệ số tính lương";
-    const row3Val = isHourly ? "Lương giờ × Số giờ" : `${emp.days}/${standardDays}`;
-
-    // Dynamic Y calculation
-    let currentY = 15;
     const elements: string[] = [];
+    let currentY = 8;
 
-    // Header Title
-    elements.push(`<text x="160" y="${currentY + 15}" class="k80-title">PHIẾU LƯƠNG</text>`);
-    currentY += 20;
-
-    elements.push(`<text x="160" y="${currentY + 15}" class="k80-subtitle">${mLabel}</text>`);
-    currentY += 25;
-
-    // Divider
-    elements.push(`<line x1="15" y1="${currentY}" x2="305" y2="${currentY}" class="k80-divider" />`);
-    currentY += 10;
-
-    // Employee details
-    let hasEmpInfo = false;
-    if (visibility.showEmpName) {
+    if (visibility.showUnitInfo) {
       elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-bold">Họ và tên:</text>
-        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(emp.name)}</text>
-      `);
-      currentY += 20;
-      hasEmpInfo = true;
-    }
-    
-    if (visibility.showEmpRole) {
-      elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-bold">Chức vụ:</text>
-        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(defaultPosition)}</text>
-      `);
-      currentY += 20;
-      hasEmpInfo = true;
-    }
-    
-    if (visibility.showEmpDept) {
-      elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-bold">Bộ phận:</text>
-        <text x="110" y="${currentY + 12}" class="k80-text">${escapeHtml(defaultDept)}</text>
-      `);
-      currentY += 20;
-      hasEmpInfo = true;
-    }
-
-    if (hasEmpInfo) {
-      // Divider after employee info
-      elements.push(`<line x1="15" y1="${currentY + 5}" x2="305" y2="${currentY + 5}" class="k80-divider" />`);
-      currentY += 15;
-    }
-
-    // Salary rows
-    if (!thermalOptions.hideEmptyRows || visibility.showBaseSalary) {
-      elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-text">${row1Label}</text>
-        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${visibility.showBaseSalary ? formatMoney(emp.salary) : '***'}</text>
-      `);
-      currentY += 25;
-    }
-
-    elements.push(`
-      <text x="20" y="${currentY + 12}" class="k80-text">${row2Label}</text>
-      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${escapeHtml(row2Val)}</text>
-    `);
-    currentY += 25;
-
-    elements.push(`
-      <text x="20" y="${currentY + 12}" class="k80-text">${row3Label}</text>
-      <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text">${row3Val}</text>
-    `);
-    currentY += 25;
-
-    // Individual advance & deduction (company-wide advance/deductions apply only to company summary)
-    const empAdvance = Number(emp.advance || 0);
-    const empDeduct = Number(emp.deduction || 0);
-    const empNet = getEmployeeNet(emp);
-
-    if (visibility.showAdvance && (empAdvance > 0 || !thermalOptions.hideEmptyRows)) {
-      elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-text">Tạm ứng lương</text>
-        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(empAdvance)}</text>
-      `);
-      currentY += 25;
-    }
-
-    if (visibility.showDeductions && (empDeduct > 0 || !thermalOptions.hideEmptyRows)) {
-      elements.push(`
-        <text x="20" y="${currentY + 12}" class="k80-text">Khấu trừ cá nhân</text>
-        <text x="300" y="${currentY + 12}" text-anchor="end" class="k80-text" fill="#dc2626">-${formatMoney(empDeduct)}</text>
-      `);
-      currentY += 20;
-    }
-
-    // Divider before total
-    elements.push(`<line x1="15" y1="${currentY + 5}" x2="305" y2="${currentY + 5}" class="k80-divider" />`);
-    currentY += 15;
-
-    // Net total
-    elements.push(`
-      <text x="20" y="${currentY + 15}" class="k80-total">TỔNG THỰC NHẬN</text>
-      <text x="300" y="${currentY + 18}" class="k80-price">${formatMoney(empNet)}</text>
-    `);
-    currentY += 30;
-
-    // Notes
-    const wordsText = numberToVietnamese(empNet);
-    const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
-    if (hasNotes) {
-      elements.push(`
-        <text x="20" y="${currentY + 10}" class="k80-text" font-style="italic">Bằng chữ:</text>
-        <rect x="20" y="${currentY + 20}" width="280" height="40" fill="#f8fafc" rx="4" stroke="#e2e8f0" stroke-width="1"/>
-        <text x="25" y="${currentY + 36}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
-          ${escapeHtml(wordsText.substring(0, 48))}
-        </text>
-        <text x="25" y="${currentY + 50}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#475569" width="270">
-          ${escapeHtml(wordsText.substring(48))}
-        </text>
-      `);
-      currentY += 70;
-    }
-
-    // Signatures
-    const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
-    if (showSignatures) {
-      elements.push(`
-        <text x="160" y="${currentY + 15}" text-anchor="middle" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#64748b">${escapeHtml(vDate)}</text>
-        
-        <text x="80" y="${currentY + 40}" text-anchor="middle" class="k80-bold">Người nhận</text>
-        <text x="80" y="${currentY + 55}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
-        
-        <text x="240" y="${currentY + 40}" text-anchor="middle" class="k80-bold">Người lập</text>
-        <text x="240" y="${currentY + 55}" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">(Ký tên)</text>
-      `);
-      currentY += 75;
-    } else if (visibility.showSignatures && thermalOptions.hideSignature) {
-      elements.push(`
-        <text x="20" y="${currentY + 15}" class="k80-bold">Người nhận: ________________________</text>
-      `);
-      currentY += 25;
-    }
-
-    // Cut Line indicator
-    if (thermalOptions.showCutLine) {
-      elements.push(`
-        <line x1="10" y1="${currentY + 10}" x2="310" y2="${currentY + 10}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8, 5" />
-        <text x="160" y="${currentY + 22}" font-size="8" font-family="sans-serif" fill="#94a3b8" text-anchor="middle">✂--- Đường cắt ---✂</text>
+        <text x="160" y="${currentY + 12}" font-family="'JetBrains Mono', '${selectedFont}', monospace" font-size="11.5" font-weight="800" fill="#000000" text-anchor="middle">*** KINGS GRILL F&amp;B ***</text>
+        <text x="160" y="${currentY + 24}" font-family="'${selectedFont}', sans-serif" font-size="8.2" font-weight="600" fill="#475569" text-anchor="middle">HỆ THỐNG NƯỚNG &amp; LẨU CAO CẤP TP.HCM</text>
       `);
       currentY += 30;
     }
 
-    // Bottom feed margin padding
-    if (!thermalOptions.compactCut) {
-      currentY += 40;
+    if (visibility.showTitle) {
+      const bannerHeight = visibility.showMetaInfo ? 40 : 32;
+      elements.push(`
+        <rect x="8" y="${currentY}" width="304" height="${bannerHeight}" fill="${THEMES.blue}" rx="4" stroke="#075985" stroke-width="1"/>
+        <text x="160" y="${currentY + (visibility.showMetaInfo ? 17 : 20)}" font-family="'${selectedFont}', sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">PHIẾU LƯƠNG NHÂN VIÊN</text>
+        ${visibility.showMetaInfo ? `<text x="160" y="${currentY + 32}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-weight="600" fill="#e0f2fe" text-anchor="middle">${escapeHtml(mLabel)}</text>` : ''}
+      `);
+      currentY += bannerHeight + 8;
     }
-    currentY += (thermalOptions.bottomFeedMm || 6) * 4;
+
+    if (visibility.showEmpName) {
+      elements.push(`
+        <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000000">Họ và tên NV:</text>
+        <text x="312" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="11.5" font-weight="bold" fill="#dc2626" text-anchor="end">${escapeHtml(emp.name)}</text>
+      `);
+      currentY += 18;
+    }
+
+    if (visibility.showEmpRole || visibility.showEmpDept) {
+      const metaLine = [visibility.showEmpRole ? empRole : '', visibility.showEmpDept ? empDept : ''].filter(Boolean).join(' · ');
+      elements.push(`
+        <text x="8" y="${currentY + 10}" font-family="'${selectedFont}', sans-serif" font-size="9.2" fill="#475569">${escapeHtml(metaLine)}</text>
+      `);
+      currentY += 15;
+    }
+
+    elements.push(`
+      <line x1="8" y1="${currentY}" x2="312" y2="${currentY}" stroke="#000000" stroke-width="1" stroke-dasharray="4, 3" />
+    `);
+    currentY += 8;
+
+    const tableRows = [
+      ...slipRows.map(r => ({
+        label: r.label,
+        val: r.valueText,
+        isBold: r.isBold,
+        kind: r.kind,
+      })),
+      { label: 'TỔNG THỰC NHẬN', val: formatMoney(totals.netPay), isBold: true, kind: 'total' as const }
+    ];
+
+    const tableStartY = currentY;
+    const rowHeight = 24;
+
+    tableRows.forEach((r, idx) => {
+      const rowY = tableStartY + idx * rowHeight;
+      if (r.kind === 'total') {
+        elements.push(`<rect x="8" y="${rowY}" width="304" height="${rowHeight}" fill="#e0f2fe" />`);
+      } else if (r.isBold) {
+        elements.push(`<rect x="8" y="${rowY}" width="304" height="${rowHeight}" fill="#f8fafc" />`);
+      }
+
+      elements.push(`<line x1="8" y1="${rowY}" x2="312" y2="${rowY}" stroke="#000000" stroke-width="0.8" />`);
+      const fontW = r.isBold ? 'bold' : '600';
+      const labelTrunc = r.label.length > 31 ? `${r.label.slice(0, 30)}…` : r.label;
+      const valColor = r.kind === 'total' || r.kind === 'deduct' ? '#dc2626' : r.kind === 'add' ? '#15803d' : '#000000';
+
+      elements.push(`
+        <text x="13" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="${r.kind === 'total' ? '10.6' : '9.8'}" font-weight="${fontW}" fill="#0f172a">${escapeHtml(labelTrunc)}</text>
+        <text x="307" y="${rowY + 16}" font-family="'${selectedFont}', sans-serif" font-size="${r.kind === 'total' ? '11.5' : '10.4'}" font-weight="bold" fill="${valColor}" text-anchor="end">${escapeHtml(r.val)}</text>
+      `);
+    });
+
+    const tableEndY = tableStartY + tableRows.length * rowHeight;
+    elements.push(`<line x1="8" y1="${tableEndY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
+    elements.push(`<line x1="8" y1="${tableStartY}" x2="8" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
+    elements.push(`<line x1="212" y1="${tableStartY}" x2="212" y2="${tableEndY}" stroke="#000000" stroke-width="0.7" />`);
+    elements.push(`<line x1="312" y1="${tableStartY}" x2="312" y2="${tableEndY}" stroke="#000000" stroke-width="0.9" />`);
+
+    currentY = tableEndY + 12;
+
+    const wordsText = numberToVietnamese(totals.netPay);
+    const hasNotes = visibility.showNotes && (!thermalOptions.hideEmptyNotes || wordsText.trim().length > 0);
+    if (hasNotes) {
+      elements.push(`
+        <text x="8" y="${currentY + 10}" font-family="'${selectedFont}', sans-serif" font-size="9.5" font-style="italic" fill="#000000">Bằng chữ:</text>
+        <rect x="8" y="${currentY + 16}" width="304" height="36" fill="#f8fafc" rx="4" stroke="#cbd5e1" stroke-width="0.8"/>
+        <text x="13" y="${currentY + 29}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">${escapeHtml(wordsText.substring(0, 48))}</text>
+        <text x="13" y="${currentY + 42}" font-size="9" font-family="'${selectedFont}', sans-serif" fill="#334155">${escapeHtml(wordsText.substring(48))}</text>
+      `);
+      currentY += 58;
+    }
+
+    const showSignatures = visibility.showSignatures && !thermalOptions.hideSignature;
+    if (showSignatures) {
+      elements.push(`
+        <text x="160" y="${currentY + 10}" text-anchor="middle" font-size="9.5" font-family="'${selectedFont}', sans-serif" fill="#475569">${escapeHtml(vDate)}</text>
+        <text x="80" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận</text>
+        <text x="80" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
+        <text x="240" y="${currentY + 28}" text-anchor="middle" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người lập</text>
+        <text x="240" y="${currentY + 41}" text-anchor="middle" font-size="9" font-style="italic" fill="#475569">(Ký tên)</text>
+      `);
+      currentY += 62;
+    } else if (visibility.showSignatures && thermalOptions.hideSignature) {
+      elements.push(`
+        <text x="8" y="${currentY + 12}" font-family="'${selectedFont}', sans-serif" font-size="10.5" font-weight="bold" fill="#000">Người nhận: ________________________</text>
+      `);
+      currentY += 20;
+    }
+
+    if (thermalOptions.showCutLine) {
+      elements.push(`
+        <line x1="8" y1="${currentY + 8}" x2="312" y2="${currentY + 8}" stroke="#64748b" stroke-width="1" stroke-dasharray="6, 4" />
+        <text x="160" y="${currentY + 20}" font-size="8.5" font-family="sans-serif" fill="#64748b" text-anchor="middle">--- Đường cắt ---</text>
+      `);
+      currentY += 26;
+    }
+
+    if (!thermalOptions.compactCut) {
+      currentY += 32;
+    }
+    currentY += (thermalOptions.bottomFeedMm || 4) * 3;
 
     return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương ${escapeHtml(emp.name)}">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 ${currentY}" fill="none" role="img" aria-label="Phiếu lương K80 ${escapeHtml(emp.name)}">
       <rect width="320" height="${currentY}" fill="#fff"/>
-      <style>
-        .k80-text-base { font-family: '${selectedFont}', system-ui, sans-serif; }
-        .k80-title { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeTitle - 8}px; font-weight: ${titleWeight}; fill: #000; text-anchor: middle; }
-        .k80-subtitle { font-family: '${selectedFont}', system-ui, sans-serif; font-size: 10px; fill: #000; text-anchor: middle; }
-        .k80-text { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent - 2}px; fill: #000; }
-        .k80-bold { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent - 2}px; font-weight: bold; fill: #000; }
-        .k80-total { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent}px; font-weight: bold; fill: #000; }
-        .k80-price { font-family: '${selectedFont}', system-ui, sans-serif; font-size: ${fontSizeContent + 2}px; font-weight: bold; fill: #dc2626; text-anchor: end; }
-        .k80-divider { stroke: #000; stroke-width: 1; stroke-dasharray: 4, 3; }
-      </style>
-      
       ${elements.join('\n')}
     </svg>`;
   };
@@ -2342,137 +1869,49 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     if (!emp) return '';
     const mLabel = monthLabel(payMonth);
     const vDate = formatDate(voucherDate);
-    const isHourly = salaryMode === 'hourly';
+    const empRole = emp.role?.trim() || defaultPosition;
+    const empDept = emp.dept?.trim() || defaultDept;
 
-    if (salaryMode === 'restaurant') {
-      const details = getRestaurantDetails(emp);
-      const words = numberToVietnamese(details.tongNhan);
+    const { rows: slipRows, totals } = buildSlipRenderRows(
+      emp,
+      salaryMode,
+      standardDays,
+      roundMode,
+      formatMoney,
+      {
+        showTime: visibility.showTime,
+        showBaseSalary: visibility.showBaseSalary,
+        showAdvance: visibility.showAdvance,
+        showDeductions: visibility.showDeductions,
+      },
+      thermalOptions.hideEmptyRows
+    );
+    const words = numberToVietnamese(totals.netPay);
 
-      const tableRows: { label: string; val: string; isBold?: boolean }[] = [
-        { label: "Ngày cộng thêm (lễ, bù ngày off)", val: String(emp.addedDays !== undefined ? emp.addedDays : 0) },
-        { label: "Tổng giờ làm/tháng", val: String(emp.totalHours !== undefined ? emp.totalHours : 0) },
-        { label: "Số ngày làm/tháng", val: String(emp.workedDays !== undefined ? emp.workedDays : emp.days) },
-        { label: "Mức lương hiện tại", val: formatMoney(emp.salary) },
-        { label: "QUY ĐỔI (LƯƠNG/GIỜ)", val: formatMoney(details.quyDoi) },
-        { label: "LƯƠNG  THEO GIỜ", val: formatMoney(details.luongTheoGio) },
-        { label: "TIỀN CƠM (  + )", val: formatMoney(details.tienCom) }
-      ];
-      if (details.thuong > 0) {
-        tableRows.push({ label: "THƯỞNG ( + )", val: formatMoney(details.thuong) });
-      }
-      tableRows.push({ label: "TĂNG CA ( +)", val: formatMoney(details.tangCa) });
-      if (details.tamUng > 0) {
-        tableRows.push({ label: "TẠM ỨNG ( - )", val: `-${formatMoney(details.tamUng)}` });
-      }
-      tableRows.push({ label: "ĐỔ BỂ ( - )", val: details.doBe > 0 ? `-${formatMoney(details.doBe)}` : '0' });
-
-      const rowLines = tableRows.map((r, i) => {
-        const y = 465 + i * 50;
-        return `
-          <text x="90" y="${y}" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${escapeHtml(r.label)}</text>
-          <text x="910" y="${y}" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${escapeHtml(r.val)}</text>
-          <line x1="60" y1="${y + 25}" x2="940" y2="${y + 25}" stroke="#f1f5f9" stroke-width="1"/>
-        `;
-      }).join('');
-
-      const listHeight = 50 + tableRows.length * 50;
-      const boxHeight = listHeight - 15;
-      const totalBoxY = 415 + boxHeight + 45;
-
+    const rowStep = 50;
+    const rowLines = slipRows.map((r, i) => {
+      const y = 465 + i * rowStep;
+      const valColor = r.kind === 'deduct' ? '#dc2626' : r.kind === 'add' ? '#15803d' : '#0f172a';
       return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 ${totalBoxY + 500}" role="img" aria-label="Modern Payroll Slip">
-        <defs>
-          <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#1e3a8a" />
-            <stop offset="100%" stop-color="#3b82f6" />
-          </linearGradient>
-          <linearGradient id="headerGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#eff6ff" />
-            <stop offset="100%" stop-color="#ffffff" />
-          </linearGradient>
-        </defs>
-        
-        <style>
-          .modern-text { font-family: '${selectedFont}', system-ui, sans-serif; }
-        </style>
-        
-        <rect x="0" y="0" width="1000" height="${totalBoxY + 450}" fill="#f8fafc"/>
-        <rect x="25" y="25" width="950" height="${totalBoxY + 400}" rx="20" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
-        
-        <path d="M25 45 C 25 35, 35 25, 45 25 L 955 25 C 965 25, 975 35, 975 45 L 975 140 L 25 140 Z" fill="url(#blueGrad)"/>
-        <text x="75" y="85" class="modern-text" font-size="${fontSizeTitle}" font-weight="${titleWeight}" fill="#ffffff">PHIẾU CHI LƯƠNG CHI TIẾT</text>
-        <text x="75" y="115" class="modern-text" font-size="16" font-weight="600" fill="#93c5fd" letter-spacing="1">${mLabel.toUpperCase()}</text>
-        
-        ${visibility.showUnitInfo ? `
-          <rect x="730" y="55" width="195" height="50" rx="8" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-          <text x="827" y="85" text-anchor="middle" class="modern-text" font-size="11" font-weight="700" fill="#ffffff">KINGS GRILL OFFICE</text>
-        ` : ''}
-        
-        <rect x="60" y="180" width="880" height="150" rx="12" fill="url(#headerGrad)" stroke="#dbeafe" stroke-width="1"/>
-        
-        ${visibility.showEmpName ? `
-          <text x="90" y="225" class="modern-text" font-size="14" font-weight="700" fill="#64748b">HỌ VÀ TÊN NHÂN VIÊN</text>
-          <text x="90" y="260" class="modern-text" font-size="28" font-weight="800" fill="#0f172a">${escapeHtml(emp.name)}</text>
-        ` : ''}
-        
-        ${visibility.showEmpRole ? `
-          <text x="90" y="295" class="modern-text" font-size="15" font-weight="600" fill="#2563eb">${escapeHtml(defaultPosition)}</text>
-        ` : ''}
-        
-        ${visibility.showEmpDept ? `
-          <text x="600" y="225" class="modern-text" font-size="14" font-weight="700" fill="#64748b">PHÒNG BAN/BỘ PHẬN</text>
-          <text x="600" y="260" class="modern-text" font-size="24" font-weight="700" fill="#0f172a">${escapeHtml(defaultDept)}</text>
-        ` : ''}
-        
-        <text x="90" y="390" class="modern-text" font-size="20" font-weight="800" fill="#1e3a8a">DANH SÁCH CHI TIẾT TÍNH LƯƠNG</text>
-        
-        <rect x="60" y="415" width="880" height="${boxHeight}" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
-        
-        ${rowLines}
-        
-        <rect x="60" y="${totalBoxY}" width="880" height="150" rx="16" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
-        <text x="100" y="${totalBoxY + 60}" class="modern-text" font-size="18" font-weight="800" fill="#1e3a8a">THANH TOÁN THỰC NHẬN CHUYỂN KHOẢN</text>
-        
-        ${visibility.showNotes ? `
-          <text x="100" y="${totalBoxY + 90}" class="modern-text" font-size="15" font-weight="600" fill="#64748b" font-style="italic">Bằng chữ: ${escapeHtml(words)}</text>
-        ` : ''}
-        <text x="900" y="${totalBoxY + 85}" text-anchor="end" class="modern-text" font-size="44" font-weight="900" fill="#dc2626">${formatMoney(details.tongNhan)}</text>
-        
-        <text x="90" y="${totalBoxY + 240}" class="modern-text" font-size="15" font-weight="600" fill="#64748b">${escapeHtml(vDate)}</text>
-        <line x1="60" y1="${totalBoxY + 280}" x2="940" y2="${totalBoxY + 280}" stroke="#f1f5f9" stroke-width="1"/>
-        
-        ${visibility.showSignatures ? `
-          <text x="180" y="${totalBoxY + 320}" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#0f172a">Người Nhận Lương</text>
-          <text x="180" y="${totalBoxY + 345}" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký tên xác nhận đã nhận)</text>
-          
-          <text x="800" y="${totalBoxY + 320}" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#1e3a8a">Bộ Phận Kế Toán</text>
-          <text x="800" y="${totalBoxY + 345}" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký và đóng dấu nếu có)</text>
-        ` : ''}
-      </svg>`;
-    }
+        <text x="90" y="${y}" class="modern-text" font-size="${fontSizeTable}" font-weight="${r.isBold ? '700' : '600'}" fill="${r.isBold ? '#0f172a' : '#475569'}">${escapeHtml(r.label)}</text>
+        <text x="910" y="${y}" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="${valColor}">${escapeHtml(r.valueText)}</text>
+        <line x1="60" y1="${y + 24}" x2="940" y2="${y + 24}" stroke="#f1f5f9" stroke-width="1"/>
+      `;
+    }).join('');
 
-    const empNet = getEmployeeNet(emp);
-    const words = numberToVietnamese(empNet);
-    const infoDays = isHourly ? (emp.range ? `${emp.days} giờ (${emp.range})` : `${emp.days} giờ`) : (emp.range ? `${emp.days} công (${emp.range})` : `${emp.days} công`);
-    
-    const row1Label = isHourly ? "Lương cơ bản theo giờ" : "Mức lương cơ bản hàng tháng";
-    const row1Val = isHourly ? `${formatMoney(emp.salary)} / giờ` : `${formatMoney(emp.salary)}`;
-    const row2Label = isHourly ? "Thời gian làm việc chi tiết" : "Số ngày công định mức trong tháng";
-    const row2Val = isHourly ? (emp.range || "Không có") : `${standardDays} ngày`;
-    const row3Label = isHourly ? "Tổng số giờ làm việc thực tế" : "Số ngày công đi làm thực tế";
-    const row3Val = isHourly ? `${emp.days} giờ` : infoDays;
-    const row4Label = isHourly ? "Hệ số tính toán" : "Hệ số hoàn thành nhiệm vụ";
-    const row4Val = isHourly ? "Không áp dụng" : (emp.days / (standardDays || 26)).toFixed(4);
+    const boxHeight = Math.max(80, 35 + slipRows.length * rowStep);
+    const totalBoxY = 415 + boxHeight + 35;
+    const totalHeight = totalBoxY + 430;
 
     return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1350" role="img" aria-label="Modern Payroll Slip">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 ${totalHeight}" role="img" aria-label="Phiếu lương Modern ${escapeHtml(emp.name)}">
       <defs>
         <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#1e3a8a" />
-          <stop offset="100%" stop-color="#3b82f6" />
+          <stop offset="0%" stop-color="#075985" />
+          <stop offset="100%" stop-color="#0284c7" />
         </linearGradient>
         <linearGradient id="headerGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#eff6ff" />
+          <stop offset="0%" stop-color="#f0f9ff" />
           <stop offset="100%" stop-color="#ffffff" />
         </linearGradient>
       </defs>
@@ -2481,74 +1920,56 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         .modern-text { font-family: '${selectedFont}', system-ui, sans-serif; }
       </style>
       
-      <rect x="0" y="0" width="1000" height="1350" fill="#f8fafc"/>
-      <rect x="25" y="25" width="950" height="1300" rx="20" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+      <rect x="0" y="0" width="1000" height="${totalHeight}" fill="#f8fafc"/>
+      <rect x="25" y="25" width="950" height="${totalHeight - 50}" rx="20" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
       
       <path d="M25 45 C 25 35, 35 25, 45 25 L 955 25 C 965 25, 975 35, 975 45 L 975 140 L 25 140 Z" fill="url(#blueGrad)"/>
       <text x="75" y="85" class="modern-text" font-size="${fontSizeTitle}" font-weight="${titleWeight}" fill="#ffffff">PHIẾU CHI LƯƠNG CHI TIẾT</text>
-      <text x="75" y="115" class="modern-text" font-size="16" font-weight="600" fill="#93c5fd" letter-spacing="1">${mLabel.toUpperCase()}</text>
+      <text x="75" y="115" class="modern-text" font-size="16" font-weight="600" fill="#bae6fd" letter-spacing="1">${mLabel.toUpperCase()}</text>
       
       ${visibility.showUnitInfo ? `
-        <rect x="730" y="55" width="195" height="50" rx="8" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+        <rect x="730" y="55" width="195" height="50" rx="8" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
         <text x="827" y="85" text-anchor="middle" class="modern-text" font-size="11" font-weight="700" fill="#ffffff">KINGS GRILL OFFICE</text>
       ` : ''}
       
-      <rect x="60" y="180" width="880" height="150" rx="12" fill="url(#headerGrad)" stroke="#dbeafe" stroke-width="1"/>
+      <rect x="60" y="175" width="880" height="145" rx="12" fill="url(#headerGrad)" stroke="#bae6fd" stroke-width="1"/>
       
       ${visibility.showEmpName ? `
-        <text x="90" y="225" class="modern-text" font-size="14" font-weight="700" fill="#64748b">HỌ VÀ TÊN NHÂN VIÊN</text>
-        <text x="90" y="260" class="modern-text" font-size="28" font-weight="800" fill="#0f172a">${escapeHtml(emp.name)}</text>
+        <text x="90" y="218" class="modern-text" font-size="13" font-weight="700" fill="#64748b">HỌ VÀ TÊN NHÂN VIÊN</text>
+        <text x="90" y="254" class="modern-text" font-size="27" font-weight="800" fill="#0f172a">${escapeHtml(emp.name)}</text>
       ` : ''}
       
       ${visibility.showEmpRole ? `
-        <text x="90" y="295" class="modern-text" font-size="15" font-weight="600" fill="#2563eb">${escapeHtml(defaultPosition)}</text>
+        <text x="90" y="290" class="modern-text" font-size="15" font-weight="600" fill="#0369a1">${escapeHtml(empRole)}</text>
       ` : ''}
       
       ${visibility.showEmpDept ? `
-        <text x="600" y="225" class="modern-text" font-size="14" font-weight="700" fill="#64748b">PHÒNG BAN/BỘ PHẬN</text>
-        <text x="600" y="260" class="modern-text" font-size="24" font-weight="700" fill="#0f172a">${escapeHtml(defaultDept)}</text>
+        <text x="600" y="218" class="modern-text" font-size="13" font-weight="700" fill="#64748b">PHÒNG BAN / BỘ PHẬN</text>
+        <text x="600" y="254" class="modern-text" font-size="23" font-weight="700" fill="#0f172a">${escapeHtml(empDept)}</text>
       ` : ''}
       
-      <text x="90" y="390" class="modern-text" font-size="20" font-weight="800" fill="#1e3a8a">DANH SÁCH CHI TIẾT TÍNH LƯƠNG</text>
+      <text x="90" y="385" class="modern-text" font-size="18" font-weight="800" fill="#0369a1">CHI TIẾT CÁC KHOẢN LƯƠNG (${slipRows.length} DÒNG)</text>
       
-      <rect x="60" y="415" width="880" height="340" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+      <rect x="60" y="415" width="880" height="${boxHeight}" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+      ${rowLines}
       
-      <text x="90" y="465" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row1Label}</text>
-      <text x="910" y="465" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${visibility.showBaseSalary ? row1Val : '***'}</text>
-      <line x1="60" y1="495" x2="940" y2="495" stroke="#f1f5f9" stroke-width="1"/>
-      
-      <text x="90" y="535" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row2Label}</text>
-      <text x="910" y="535" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${escapeHtml(row2Val)}</text>
-      <line x1="60" y1="565" x2="940" y2="565" stroke="#f1f5f9" stroke-width="1"/>
-      
-      <text x="90" y="605" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row3Label}</text>
-      <text x="910" y="605" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#2563eb">${escapeHtml(row3Val)}</text>
-      <line x1="60" y1="635" x2="940" y2="635" stroke="#f1f5f9" stroke-width="1"/>
-      
-      <text x="90" y="675" class="modern-text" font-size="${fontSizeTable}" font-weight="600" fill="#475569">${row4Label}</text>
-      <text x="910" y="675" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 2}" font-weight="700" fill="#0f172a">${row4Val}</text>
-      <line x1="60" y1="705" x2="940" y2="705" stroke="#f1f5f9" stroke-width="1"/>
-      
-      <text x="90" y="740" class="modern-text" font-size="${fontSizeTable}" font-weight="700" fill="#0f172a">Tiền lương thực nhận dự kiến</text>
-      <text x="910" y="740" text-anchor="end" class="modern-text" font-size="${fontSizeTable + 4}" font-weight="800" fill="#0f172a">${formatMoney(emp.amount)}</text>
-      
-      <rect x="60" y="800" width="880" height="150" rx="16" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
-      <text x="100" y="860" class="modern-text" font-size="18" font-weight="800" fill="#1e3a8a">THANH TOÁN THỰC NHẬN CHUYỂN KHOẢN</text>
+      <rect x="60" y="${totalBoxY}" width="880" height="145" rx="16" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="2"/>
+      <text x="100" y="${totalBoxY + 56}" class="modern-text" font-size="18" font-weight="800" fill="#0369a1">THANH TOÁN THỰC NHẬN</text>
       
       ${visibility.showNotes ? `
-        <text x="100" y="890" class="modern-text" font-size="15" font-weight="600" fill="#64748b" font-style="italic">Bằng chữ: ${escapeHtml(words)}</text>
+        <text x="100" y="${totalBoxY + 88}" class="modern-text" font-size="14" font-weight="600" fill="#475569" font-style="italic">Bằng chữ: ${escapeHtml(words)}</text>
       ` : ''}
-      <text x="900" y="885" text-anchor="end" class="modern-text" font-size="44" font-weight="900" fill="#dc2626">${formatMoney(empNet)}</text>
+      <text x="900" y="${totalBoxY + 84}" text-anchor="end" class="modern-text" font-size="42" font-weight="900" fill="#dc2626">${formatMoney(totals.netPay)}</text>
       
-      <text x="90" y="1040" class="modern-text" font-size="15" font-weight="600" fill="#64748b">${escapeHtml(vDate)}</text>
-      <line x1="60" y1="1080" x2="940" y2="1080" stroke="#f1f5f9" stroke-width="1"/>
+      <text x="90" y="${totalBoxY + 215}" class="modern-text" font-size="15" font-weight="600" fill="#64748b">${escapeHtml(vDate)}</text>
+      <line x1="60" y1="${totalBoxY + 250}" x2="940" y2="${totalBoxY + 250}" stroke="#f1f5f9" stroke-width="1"/>
       
       ${visibility.showSignatures ? `
-        <text x="180" y="1120" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#0f172a">Người Nhận Lương</text>
-        <text x="180" y="1145" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký tên xác nhận đã nhận)</text>
+        <text x="200" y="${totalBoxY + 295}" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#0f172a">Người Nhận Lương</text>
+        <text x="200" y="${totalBoxY + 322}" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký tên xác nhận)</text>
         
-        <text x="800" y="1120" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#1e3a8a">Bộ Phận Kế Toán</text>
-        <text x="800" y="1145" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký và đóng dấu nếu có)</text>
+        <text x="800" y="${totalBoxY + 295}" text-anchor="middle" class="modern-text" font-size="18" font-weight="700" fill="#0369a1">Bộ Phận Kế Toán</text>
+        <text x="800" y="${totalBoxY + 322}" text-anchor="middle" class="modern-text" font-size="14" font-style="italic" fill="#64748b">(Ký và ghi rõ họ tên)</text>
       ` : ''}
     </svg>`;
   };
@@ -2925,7 +2346,6 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
 
   const isHourly = salaryMode === 'hourly';
 
-  const [showMobileEmpList, setShowMobileEmpList] = useState(false);
   const paperBaseWidthPx = activeTemplate === 'k80' ? 380 : 1000;
   const getZoomWidthStyle = () => {
     if (zoomLevel === 'fit') {
@@ -2957,47 +2377,25 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
     return Object.values(validationMap).flat();
   }, [validationMap]);
 
-  const showConfigPane = layoutMode === 'mobile' 
-    ? (mobileActiveTab === 'data' || mobileActiveTab === 'settings' || mobileActiveTab === 'export')
-    : !isLeftPanelCollapsed;
-
-  const showPreviewPane = layoutMode === 'mobile'
-    ? (mobileActiveTab === 'preview' || mobileActiveTab === 'export')
-    : true;
-
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className={`payroll-creator mode-${layoutMode} ${isFullscreenPreview ? 'fullscreen-preview-active' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{ position: 'relative' }}
     >
+      {/* Drag & Drop Multi-Format Overlay (Excel + Images) */}
       {isDraggingFile && (
-        <div className="file-dropzone-overlay" style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(10, 20, 45, 0.9)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 5000,
-          border: '3px dashed #3b82f6',
-          borderRadius: '16px',
-          margin: '8px',
-          color: 'white',
-          pointerEvents: 'none'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📂</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6' }}>Thả file Excel phiếu lương vào đây</div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>Hỗ trợ tệp Excel (.xlsx, .xls) chứa phiếu lương F&B</div>
+        <div className="payroll-drop-overlay">
+          <UploadCloud size={44} style={{ color: 'var(--accent-primary)' }} />
+          <strong>Thả File Excel (.xlsx, .xls, .csv) hoặc Ảnh phiếu lương (.png, .jpg) vào đây</strong>
+          <span>Hệ thống sẽ tự động phân tích và dựng bảng cấu hình riêng cho từng phiếu lương</span>
         </div>
       )}
-      
-      {/* Hidden Print only container */}
+
+      {/* Hidden Print-Only Container (K80 / A4 Thermal Isolation) */}
       <div className="print-only-container">
         {activeView === 'summary' ? (
           <div className="print-page" dangerouslySetInnerHTML={{ __html: getActiveSvgText() }} />
@@ -3015,1262 +2413,606 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
         )}
       </div>
 
-      <div className="head">
-        <div className="stitch-breadcrumb">
-          <span>F&amp;B HR SUITE</span>
-          <span>/</span>
-          <b>QUẢN LÝ BẢNG LƯƠNG &amp; PHIẾU LƯƠNG K80</b>
+      {/* Exporting Progress Overlay */}
+      {isExporting && (
+        <div className="export-progress-overlay">
+          <div className="export-progress-card">
+            <RefreshCw size={24} className="spinner" style={{ color: 'var(--accent-primary)', margin: '0 auto' }} />
+            <strong>Đang xuất tệp phiếu lương...</strong>
+            <div className="progress-bar-container">
+              <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }} />
+            </div>
+            <span>Hoàn thành {exportProgress}%</span>
+          </div>
         </div>
+      )}
+
+      {/* 1. Clean Header & 4 KPI Cards */}
+      <div className="head">
         <PageHeader
-          icon={<CreditCard size={24} />}
-          title="Quản Lý Bảng Lương & Phiếu Lương"
-          subtitle="Tạo, tính toán thực nhận và xuất phiếu lương nhiệt K80, A4/A5 hoặc đồng bộ tự động Google Sheets chi nhánh Kings Grill."
-          badgeText="Payroll Studio Pro v3.0"
+          icon={<CreditCard size={22} />}
+          title="Bảng Lương & Chuẩn Hóa Phiếu Lương"
+          subtitle="Nhập từ Ảnh, File Excel hoặc nội dung nhanh để tự động dựng bảng cấu hình — tùy biến linh hoạt số dòng cộng/trừ riêng cho từng phiếu K80/A4."
+          badgeText="Payroll Studio v4.0"
           badgeVariant="info"
           actions={
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() => setIsConfigDrawerOpen(true)}
-              style={{ height: '38px', fontSize: '12.5px' }}
-            >
-              <Sliders size={15} />
-              <span>Cấu hình & Cloud Sync</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={handlePipeToTransferTool}
+                title="Chuyển danh sách thực nhận sang Lệnh chuyển khoản MyVIB / VCB"
+              >
+                <Send size={15} />
+                <span>Đẩy sang Lệnh CK</span>
+              </button>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setIsConfigDrawerOpen(true)}
+                title="Cấu hình mẫu in K80/A4, khấu trừ chung & lịch sử Google Sheets"
+              >
+                <Sliders size={15} />
+                <span>Cài đặt &amp; Cloud</span>
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={handlePrint}
+                disabled={employees.length === 0}
+                title="In phiếu lương ngay"
+              >
+                <Printer size={15} />
+                <span>In phiếu ({printScope === 'all' ? employees.length : printScope === 'selected' ? selectedEmployeeIds.size : 1})</span>
+              </button>
+            </div>
           }
         />
-        <div className="title" style={{ display: 'none' }}>
-          <h1>Quản lý Phiếu Lương <span className="blue-dot"></span></h1>
-          <p>Tạo, quản lý và xuất hóa đơn K80, A4 và lưu trữ Google Sheets</p>
-        </div>
+
         <div className="kpis">
-          <StatCard 
-            icon={<Users size={18} />} 
-            label="Tổng số nhân viên" 
-            value={employees.length.toLocaleString('vi-VN')} 
-            subtext="Nhân viên tính lương thực tế"
-            hasData={employees.length > 0} 
+          <StatCard
+            icon={<Users size={18} />}
+            label="Tổng nhân sự"
+            value={employees.length.toLocaleString('vi-VN')}
+            subtext={`${selectedEmployeeIds.size} phiếu đang chọn in`}
+            hasData={employees.length > 0}
           />
-          <StatCard 
-            icon={<Calendar size={18} />} 
-            label="Tổng số công" 
-            value={totalDays.toLocaleString('vi-VN')} 
-            subtext={isHourly ? 'Tổng số giờ làm việc' : 'Tổng số công làm việc'}
-            hasData={employees.length > 0} 
+          <StatCard
+            icon={<Calendar size={18} />}
+            label={isHourly ? 'Tổng giờ công' : 'Tổng ngày công'}
+            value={totalDays.toLocaleString('vi-VN')}
+            subtext={salaryMode === 'restaurant' ? 'Chế độ F&B Nhà hàng' : isHourly ? 'Tính theo giờ' : `Định mức ${standardDays} công`}
+            hasData={employees.length > 0}
           />
-          <StatCard 
-            icon={<Wallet size={18} />} 
-            label="Quỹ lương dự kiến" 
-            value={`${formatMoney(totalSalary)}`} 
-            subtext="Trước khi khấu trừ"
-            hasData={employees.length > 0} 
+          <StatCard
+            icon={<Wallet size={18} />}
+            label="Tổng thực nhận NV"
+            value={formatMoney(totalSalary)}
+            subtext="Đã cộng/trừ từng phiếu riêng"
+            hasData={employees.length > 0}
           />
-          <StatCard 
-            icon={<CreditCard size={18} />} 
-            label="Thực nhận" 
-            value={`${formatMoney(net)}`} 
-            subtext="Sau khi trừ tạm ứng & khấu trừ"
-            hasData={employees.length > 0} 
+          <StatCard
+            icon={<CreditCard size={18} />}
+            label="Tổng chi kỳ lương"
+            value={formatMoney(net)}
+            subtext={warningsList.length > 0 ? `${warningsList.length} cảnh báo cần xem` : 'Dữ liệu khớp chuẩn'}
+            hasData={employees.length > 0}
+            accentColor={warningsList.length > 0 ? 'var(--status-warning)' : 'var(--status-success)'}
           />
         </div>
       </div>
 
-      <GuidePanel 
-        title="Quản lý Phiếu Lương"
-        purpose="Tạo phiếu lương chi tiết cho từng nhân viên nhà hàng (hỗ trợ chế độ lương tháng hoặc lương giờ), tính toán thực nhận sau khi cấn trừ tạm ứng & các khoản khấu trừ khác, xuất file ảnh PNG hóa đơn nhiệt K80 hoặc in phiếu A4/A5."
-        steps={[
-          "Thiết lập tháng thanh toán, ngày lập chứng từ và chế độ tính lương (Lương tháng / Lương giờ).",
-          "Nhập dữ liệu nhân viên bằng cách gõ tay, dán dữ liệu thô từ Excel (nút 'Dán dữ liệu') hoặc import tệp CSV.",
-          "Cấu hình các khoản khấu trừ chung (như BHXH, đồng phục, tiền phạt) hoặc tiền tạm ứng lương.",
-          "Chuyển đổi qua lại giữa 'Phiếu Lương Nhân Viên' và 'Bảng Tổng Hợp Lương' để kiểm tra số liệu.",
-          "Chọn các mẫu in 'Standard', 'K80 Thermal' hoặc 'Modern' rồi bấm 'Tải ảnh PNG' hoặc 'In Phiếu' để in hóa đơn vật lý."
-        ]}
-        notes={[
-          "Mức lương và số ngày công phải là số thực tế để tính toán chính xác.",
-          "Cấu hình K80 Thermal được tối ưu để in qua máy in hóa đơn nhiệt khổ giấy 80mm."
-        ]}
-        errors={[
-          "Lỗi 'Thực nhận âm' -> Kiểm tra xem số tiền tạm ứng hoặc khấu trừ của nhân viên đó có lớn hơn tổng thu nhập cơ bản không."
-        ]}
+      {/* 2. Single-Row Compact Studio Action Bar */}
+      <div className="payroll-studio-bar">
+        <div className="payroll-studio-bar-left">
+          <label className="payroll-bar-inline-control" title="Kỳ thanh toán lương">
+            <span>Kỳ lương</span>
+            <input
+              type="month"
+              value={payMonth}
+              onChange={(e) => setPayMonth(e.target.value)}
+            />
+          </label>
+
+          <div className="payroll-seg-control" role="group" aria-label="Chế độ tính lương">
+            {([
+              { id: 'restaurant', label: 'F&B Nhà hàng' },
+              { id: 'monthly', label: 'Lương tháng' },
+              { id: 'hourly', label: 'Lương giờ' }
+            ] as const).map(m => (
+              <button
+                key={m.id}
+                type="button"
+                className={salaryMode === m.id ? 'active' : ''}
+                onClick={() => handleSalaryModeChange(m.id)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="payroll-studio-bar-right">
+          <button
+            type="button"
+            className={isSmartImporterOpen ? 'primary' : 'btn-outline'}
+            onClick={() => setIsSmartImporterOpen(prev => !prev)}
+          >
+            <UploadCloud size={15} />
+            <span>Nhập Ảnh / Excel / Nội dung</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={addEmployee}
+          >
+            <Plus size={15} />
+            <span>Thêm NV</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={handleNormalizeAllSlips}
+            disabled={employees.length === 0}
+            title="Tự động ẩn các dòng 0đ và sắp xếp Cộng/Trừ cho toàn bộ phiếu"
+          >
+            <Sparkles size={15} style={{ color: 'var(--accent-primary)' }} />
+            <span>Chuẩn hóa tất cả</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={savePayrollToGAS}
+            disabled={employees.length === 0 || syncStatus === 'loading'}
+            title="Lưu kỳ lương hiện tại lên Google Sheets"
+          >
+            <Save size={15} />
+            <span>Lưu Cloud</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Inline Smart Multi-Source Importer (Image OCR / Excel / Smart Text -> Staging Table) */}
+      <PayrollSmartImporter
+        isOpen={isSmartImporterOpen}
+        onClose={() => setIsSmartImporterOpen(false)}
+        salaryMode={salaryMode}
+        standardDays={standardDays}
+        roundMode={roundMode}
+        payMonth={payMonth}
+        formatMoney={formatMoney}
+        onApplyEmployees={handleApplyImportedEmployees}
+        showToast={showToast}
+        initialTab={importerInitialTab}
+        droppedFile={droppedImportFile}
+        onClearDroppedFile={() => setDroppedImportFile(null)}
       />
 
+      {/* Mobile 2-Tab Clean Switcher */}
       {isMobileScreen && (
-        <div className="payroll-tabs" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '10px', width: '100%', marginBottom: '1.25rem', border: '1px solid var(--glass-border)', position: 'sticky', top: '0', zIndex: '100' }}>
-          <button type="button" className={`tab-btn ${mobileActiveTab === 'data' ? 'active' : ''}`} onClick={() => setMobileActiveTab('data')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'data' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Dữ liệu</button>
-          <button type="button" className={`tab-btn ${mobileActiveTab === 'settings' ? 'active' : ''}`} onClick={() => setMobileActiveTab('settings')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'settings' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Tùy chỉnh</button>
-          <button type="button" className={`tab-btn ${mobileActiveTab === 'preview' ? 'active' : ''}`} onClick={() => setMobileActiveTab('preview')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'preview' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>Xem trước</button>
-          <button type="button" className={`tab-btn ${mobileActiveTab === 'export' ? 'active' : ''}`} onClick={() => setMobileActiveTab('export')} style={{ flexGrow: 1, border: 0, background: mobileActiveTab === 'export' ? 'var(--blue)' : 'transparent', color: 'white', padding: '10px 5px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}>In / Xuất</button>
+        <div className="payroll-mobile-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileActiveTab !== 'preview'}
+            className={mobileActiveTab !== 'preview' ? 'active' : ''}
+            onClick={() => setMobileActiveTab('data')}
+          >
+            Bảng &amp; Chuẩn hóa ({employees.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileActiveTab === 'preview'}
+            className={mobileActiveTab === 'preview' ? 'active' : ''}
+            onClick={() => setMobileActiveTab('preview')}
+          >
+            Xem trước &amp; In phiếu
+          </button>
         </div>
       )}
 
-      <div className={`payroll-layout ${isLeftPanelCollapsed ? 'left-panel-collapsed' : ''} ${isMobileScreen ? 'layout-mobile' : ''}`}>
-        
-        {/* Backdrop for narrow mode drawer */}
-        {layoutMode === 'narrow' && !isLeftPanelCollapsed && (
-          <div className="drawer-backdrop" onClick={() => setIsLeftPanelCollapsed(true)} />
-        )}
-
-        {/* LEFT COLUMN: Input form configs */}
-        {showConfigPane && (
-          <div className="config-pane">
-            {/* Close button for narrow mode drawer */}
-            {layoutMode === 'narrow' && (
-              <div className="drawer-close-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button 
-                  type="button" 
-                  className="btn-ghost" 
-                  onClick={() => setIsLeftPanelCollapsed(true)} 
-                  style={{ color: '#9eb3d7', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '4px 10px', background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}
-                >
-                  ✕ Đóng
-                </button>
-              </div>
-            )}
-            
-            {/* Clean Dedicated Employee Master Panel */}
-            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', border: '1px solid var(--border-default)', borderRadius: '12px', background: 'var(--bg-panel)' }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-default)', background: 'var(--bg-elevated)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={16} style={{ color: 'var(--accent-primary)' }} />
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Danh Sách Nhân Viên</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, background: 'var(--accent-primary-subtle)', color: 'var(--accent-primary)', padding: '1px 8px', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                    {employees.length}
-                  </span>
+      {/* 4. Clean 2-Column Studio Workspace (Master Table + Per-Slip Normalizer | Live Slip Preview) */}
+      <div className={`payroll-studio-grid ${isLeftPanelCollapsed ? 'is-preview-expanded' : ''}`}>
+        {/* LEFT PANE: Master Table + Active Employee Dynamic Line-Item Editor */}
+        {(!isMobileScreen || mobileActiveTab !== 'preview') && !isLeftPanelCollapsed && (
+          <div className="payroll-studio-left">
+            {/* Master Configurable Table Card */}
+            <div className="payroll-master-card">
+              <div className="payroll-master-toolbar">
+                <div className="payroll-master-search">
+                  <Search size={15} className="payroll-search-ic" />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Tìm nhanh nhân viên..."
+                    value={searchEmployeeQuery}
+                    onChange={(e) => setSearchEmployeeQuery(e.target.value)}
+                  />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {employees.length > 0 && (
+
+                <div className="payroll-master-filters">
+                  <button
+                    type="button"
+                    className={`filter-tag ${navigatorFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setNavigatorFilter('all')}
+                  >
+                    Tất cả ({employees.length})
+                  </button>
+                  {Object.keys(validationMap).length > 0 && (
                     <button
                       type="button"
-                      className="btn-outline"
-                      onClick={() => {
-                        if (selectedEmployeeIds.size === employees.length) {
-                          setSelectedEmployeeIds(new Set());
-                        } else {
-                          setSelectedEmployeeIds(new Set(employees.map(e => e.id)));
-                        }
-                      }}
-                      style={{
-                        height: '30px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        padding: '0 8px',
-                        borderRadius: '7px'
-                      }}
-                      title="Chọn / Bỏ chọn tất cả nhân viên để in"
+                      className={`filter-tag ${navigatorFilter === 'invalid' ? 'active' : ''}`}
+                      onClick={() => setNavigatorFilter('invalid')}
                     >
-                      <span>{selectedEmployeeIds.size === employees.length ? 'Bỏ chọn' : 'Chọn hết'} ({selectedEmployeeIds.size}/{employees.length})</span>
+                      Cảnh báo ({Object.keys(validationMap).length})
                     </button>
                   )}
                   <button
                     type="button"
-                    className="btn-outline"
-                    onClick={() => setIsConfigDrawerOpen(true)}
-                    style={{
-                      height: '30px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      padding: '0 10px',
-                      borderRadius: '7px'
-                    }}
-                    title="Mở cấu hình tính lương và đồng bộ Cloud"
+                    className="btn-ghost"
+                    style={{ height: '32px', fontSize: '12px' }}
+                    onClick={loadSampleData}
+                    title="Nạp 3 nhân viên mẫu có số dòng cộng/trừ khác nhau"
                   >
-                    <Sliders size={13} />
-                    <span>Cài đặt Lương</span>
+                    Mẫu 3 phiếu
                   </button>
-                </div>
-              </div>
-
-              {/* Action Toolbar */}
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
-                <input type="file" ref={excelInputRef} accept=".xlsx, .xls" style={{ display: 'none' }} onChange={handleExcelImport} />
-                <input type="file" ref={fileInputRef} accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
-                
-                {/* Row 1: Primary Add/Import */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                  <button 
-                    type="button" 
-                    className="primary" 
-                    onClick={triggerExcelSelect} 
-                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
-                    title="Nạp bảng tính Excel .xlsx, .xls"
-                  >
-                    <UploadCloud size={13} />
-                    <span>Nhập Excel</span>
-                  </button>
-                  
-                  <button 
-                    type="button" 
-                    className="btn-outline" 
-                    onClick={addEmployee} 
-                    style={{ flex: 1, height: '32px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'var(--status-success-bg)', borderColor: 'var(--status-success-border)', color: 'var(--status-success)' }}
-                    title="Thêm một nhân viên mới vào danh sách"
-                  >
-                    <Plus size={13} />
-                    <span>+ Thêm NV</span>
-                  </button>
-                </div>
-
-                {/* Row 2: Secondary Quick Actions */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                  <button 
-                    type="button" 
-                    className="btn-outline" 
-                    onClick={() => {
-                      const text = prompt('Dán dữ liệu CSV/TSV tại đây (Họ tên \t Số công/Giờ \t Khoảng thời gian \t Lương):');
-                      if (text) {
-                        const lines = text.split('\n');
-                        const newEmps: Employee[] = [];
-                        const isHourlyMode = salaryMode === 'hourly';
-                        lines.forEach((line, idx) => {
-                          if (!line.trim()) return;
-                          const cols = line.split('\t');
-                          if (cols.length < 2) return;
-                          const name = cols[0]?.trim() || '';
-                          const days = parseSmartDecimal(cols[1]);
-                          const range = cols[2]?.trim() || '';
-                          const salary = Math.round(
-                            parseSmartCurrency(cols[3] || (isHourlyMode ? '35.000' : '10.000.000'))
-                          );
-                          const tempEmp: Employee = {
-                            id: createPayrollId(`paste-${idx}`),
-                            name,
-                            days,
-                            workedDays: isHourlyMode ? 0 : days,
-                            totalHours: isHourlyMode ? days : days * 8,
-                            addedDays: 0,
-                            lunchPay: isHourlyMode ? 0 : days * 20000,
-                            bonus: 0,
-                            overtimePay: 0,
-                            deduction: 0,
-                            advance: 0,
-                            range,
-                            salary,
-                            amount: 0,
-                          };
-                          tempEmp.amount = computeEmployeeAmount(tempEmp, salaryMode, standardDays, roundMode);
-                          newEmps.push(tempEmp);
-                        });
-                        if (newEmps.length > 0) {
-                          setEmployees(prev => [...prev, ...newEmps]);
-                          showToast('Đã dán thành công ' + newEmps.length + ' nhân viên!', 'success');
-                        }
-                      }
-                    }}
-                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Dán dữ liệu từ Clipboard (Tab-separated)"
-                  >
-                    📋 Dán
-                  </button>
-
-                  <button 
-                    type="button" 
-                    className="btn-outline" 
-                    onClick={loadSampleData} 
-                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: 'var(--text-secondary)', borderRadius: '6px' }}
-                    title="Nạp dữ liệu mẫu thử nghiệm"
-                  >
-                    💡 Mẫu
-                  </button>
-
-                  <button 
-                    type="button" 
-                    className="btn-outline" 
-                    onClick={triggerCsvSelect} 
-                    style={{ flex: 1, height: '30px', padding: '0 4px', fontSize: '11px', color: 'var(--text-secondary)', borderRadius: '6px' }}
-                    title="Nạp tệp CSV"
-                  >
-                    CSV
-                  </button>
-
-                  <button 
-                    type="button" 
-                    className="btn-ghost" 
-                    onClick={clearAllForms} 
-                    style={{ width: '30px', height: '30px', padding: 0, fontSize: '12px', color: 'var(--status-danger)', border: '1px solid var(--status-danger-border)', background: 'var(--status-danger-bg)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Xóa trắng form dữ liệu"
-                  >
-                    🗑️
-                  </button>
-                </div>
-
-                {/* Instant Realtime Search input */}
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="text" 
-                    className="form-control" 
-                    placeholder="🔍 Tìm nhanh tên nhân viên..."
-                    value={searchEmployeeQuery}
-                    onChange={(e) => setSearchEmployeeQuery(e.target.value)}
-                    style={{
-                      height: '32px',
-                      fontSize: '12px',
-                      background: 'var(--surface-input)',
-                      border: '1px solid var(--border-default)',
-                      paddingLeft: '10px',
-                      borderRadius: '6px',
-                      width: '100%'
-                    }}
-                  />
-                  {searchEmployeeQuery && (
+                  {employees.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setSearchEmployeeQuery('')}
-                      style={{
-                        position: 'absolute',
-                        right: '8px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
+                      className="btn-ghost"
+                      style={{ height: '32px', padding: '0 8px', color: 'var(--status-danger)' }}
+                      onClick={clearAllForms}
+                      title="Xóa trắng danh sách"
                     >
-                      ✕
+                      <Trash2 size={14} />
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Master Employees List Container */}
-              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 'clamp(280px, calc(100vh - 350px), 580px)', overflowY: 'auto' }}>
-                {filteredNavigatorEmployees.map((emp) => {
-                  const realIdx = employees.findIndex(e => e.id === emp.id);
-                  const isCurrent = currentEmployeeIndex === realIdx;
-                  const isExpanded = editingEmployeeId === emp.id || (isCurrent && editingEmployeeId === null);
-                  const msgs = validationMap[emp.id] || [];
-                  const hasError = msgs.some(m => m.type === 'error');
-
-                  return (
-                    <div 
-                      key={emp.id} 
-                      style={{ 
-                        background: isCurrent ? 'var(--accent-primary-subtle)' : 'var(--bg-elevated)', 
-                        borderRadius: 'var(--radius-md)', 
-                        border: isCurrent 
-                          ? '1px solid var(--accent-primary)' 
-                          : hasError 
-                            ? '1px solid var(--status-danger-border)' 
-                            : '1px solid var(--border-default)',
-                        transition: 'background-color 140ms ease, border-color 140ms ease',
-                        boxShadow: 'none',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {/* Summary Row (Clickable to switch preview) */}
-                      <div 
-                        onClick={() => {
-                          if (realIdx >= 0) setCurrentEmployeeIndex(realIdx);
-                        }}
-                        style={{ 
-                          padding: '10px 12px', 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center', 
-                          cursor: 'pointer',
-                          gap: '8px',
-                          userSelect: 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              {employees.length === 0 ? (
+                <div style={{ padding: '1.25rem' }}>
+                  <EmptyState
+                    icon={<FileText size={28} />}
+                    title="Chưa có phiếu lương nào trong kỳ này"
+                    description="Bạn có thể nhập trực tiếp từ Ảnh phiếu lương (OCR), File Excel (.xlsx/.csv), dán nội dung nhanh hoặc nạp 3 phiếu mẫu để xem thử."
+                    actionLabel="Mở khung Nhập Ảnh / Excel / Nội dung"
+                    onAction={() => openSmartImporter('excel')}
+                  />
+                </div>
+              ) : (
+                <div className="payroll-master-table-wrap">
+                  <table className="payroll-master-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '36px', textAlign: 'center' }}>
                           <input
                             type="checkbox"
-                            checked={selectedEmployeeIds.has(emp.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => handleToggleEmployeeSelection(emp.id)}
-                            title="Chọn nhân viên này để in"
-                            style={{ cursor: 'pointer', flexShrink: 0 }}
-                          />
-                          <span style={{ 
-                            fontSize: '11px', 
-                            fontWeight: 700, 
-                            color: isCurrent ? 'var(--accent-primary)' : 'var(--text-muted)',
-                            background: isCurrent ? 'rgba(59, 130, 246, 0.16)' : 'var(--surface-subtle)',
-                            border: '1px solid var(--border-subtle)',
-                            padding: '2px 6px',
-                            borderRadius: '4px'
-                          }}>
-                            #{realIdx + 1}
-                          </span>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ 
-                              fontSize: '13px', 
-                              fontWeight: 600, 
-                              color: 'var(--text-primary)', 
-                              whiteSpace: 'nowrap', 
-                              overflow: 'hidden', 
-                              textOverflow: 'ellipsis' 
-                            }}>
-                              {emp.name || '(Chưa nhập tên)'}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              {salaryMode === 'restaurant' 
-                                ? `${emp.workedDays !== undefined ? emp.workedDays : emp.days} ngày · ${emp.totalHours || 0}h`
-                                : `${emp.days} ${salaryMode === 'hourly' ? 'giờ' : 'công'}`
+                            checked={employees.length > 0 && selectedEmployeeIds.size === employees.length}
+                            onChange={() => {
+                              if (selectedEmployeeIds.size === employees.length) {
+                                setSelectedEmployeeIds(new Set());
+                              } else {
+                                setSelectedEmployeeIds(new Set(employees.map(e => e.id)));
                               }
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                          <span style={{ 
-                            fontSize: '12px', 
-                            fontWeight: 700, 
-                            color: isCurrent ? 'var(--accent-primary)' : 'var(--text-secondary)' 
-                          }}>
-                            {formatMoney(emp.amount)}
-                          </span>
-
-                          <button 
-                            type="button" 
-                            className="btn-ghost" 
-                            style={{ padding: '3px 6px', fontSize: '11px', color: isExpanded ? 'var(--accent-primary)' : 'var(--text-muted)' }} 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingEmployeeId(editingEmployeeId === emp.id ? 'NONE' : emp.id);
-                              if (realIdx >= 0) setCurrentEmployeeIndex(realIdx);
                             }}
-                            title={isExpanded ? "Thu gọn form" : "Mở form chi tiết"}
-                          >
-                            {isExpanded ? '▲' : '✏️'}
-                          </button>
-
-                          <button 
-                            type="button" 
-                            className="btn-ghost" 
-                            style={{ padding: '3px 6px', fontSize: '11px', color: 'var(--status-danger)' }} 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              deleteEmployee(emp.id); 
-                            }}
-                            title="Xóa nhân viên này"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Detailed Editor Form (Expanded) */}
-                      {isExpanded && (
-                        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
-                          <div className="form-group" style={{ marginBottom: '8px' }}>
-                            <label className="form-label" style={{ fontSize: '11px' }}>Họ và tên nhân viên</label>
-                            <input 
-                              type="text" 
-                              className="form-control input-compact" 
-                              value={emp.name} 
-                              onChange={(e) => updateEmployeeDetails(emp.id, 'name', e.target.value)} 
-                            />
-                          </div>
-
-                          {salaryMode === 'restaurant' ? (
-                            <>
-                              <div className="grid3" style={{ marginBottom: '8px' }}>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Mức lương</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.salary}
-                                    onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Số ngày làm</label>
-                                  <input 
-                                    type="number" 
-                                    step="1" 
-                                    min="0" 
-                                    className="form-control input-compact" 
-                                    value={emp.workedDays !== undefined ? emp.workedDays : emp.days} 
-                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'workedDays', Number(e.target.value) || 0)} 
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Công thêm (+)</label>
-                                  <input 
-                                    type="number" 
-                                    step="0.5" 
-                                    min="0" 
-                                    className="form-control input-compact" 
-                                    value={emp.addedDays || 0} 
-                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'addedDays', Number(e.target.value) || 0)} 
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid3" style={{ marginBottom: '8px' }}>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Tổng giờ làm</label>
-                                  <input 
-                                    type="number" 
-                                    step="0.1" 
-                                    min="0" 
-                                    className="form-control input-compact" 
-                                    value={emp.totalHours !== undefined ? emp.totalHours : 0} 
-                                    onChange={(e) => updateEmployeeRestaurantField(emp.id, 'totalHours', Number(e.target.value) || 0)} 
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Tiền cơm (+)</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.lunchPay !== undefined ? emp.lunchPay : (emp.workedDays !== undefined ? emp.workedDays : emp.days) * 20000}
-                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'lunchPay', val)}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Thưởng (+)</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.bonus || 0}
-                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'bonus', val)}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid2" style={{ marginBottom: '8px' }}>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Tăng ca (+)</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.overtimePay || 0}
-                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'overtimePay', val)}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Tạm ứng (-)</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.advance || 0}
-                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'advance', val)}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                              </div>
-                              <div className="grid2">
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Đổ bể (-)</label>
-                                  <MoneyInput
-                                    className="form-control input-compact"
-                                    value={emp.deduction || 0}
-                                    onChange={(val) => updateEmployeeRestaurantField(emp.id, 'deduction', val)}
-                                    formatMoney={formatMoney}
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-label" style={{ fontSize: '11px' }}>Thời gian</label>
-                                  <input 
-                                    type="text" 
-                                    className="form-control input-compact" 
-                                    placeholder="01/06 - 30/06" 
-                                    value={emp.range} 
-                                    onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
-                                  />
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="grid3">
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>{salaryMode === 'hourly' ? 'Giờ làm' : 'Công'}</label>
-                                <input 
-                                  type="number" 
-                                  step="0.1" 
-                                  min="0" 
-                                  className="form-control input-compact" 
-                                  value={emp.days} 
-                                  onChange={(e) => updateEmployeeDays(emp.id, Number(e.target.value) || 0)} 
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>Thời gian</label>
-                                <input 
-                                  type="text" 
-                                  className="form-control input-compact" 
-                                  placeholder="01/06 - 30/06" 
-                                  value={emp.range} 
-                                  onChange={(e) => updateEmployeeDetails(emp.id, 'range', e.target.value)} 
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '11px' }}>{salaryMode === 'hourly' ? 'Lương giờ' : 'Lương CB'}</label>
-                                <MoneyInput
-                                  className="form-control input-compact"
-                                  value={emp.salary}
-                                  onChange={(val) => updateEmployeeSalary(emp.id, String(val))}
-                                  formatMoney={formatMoney}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {employees.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '1.75rem 1rem', color: 'var(--text-muted)', fontSize: '13px' }}>
-                    Chưa có nhân viên nào. Bấm <strong style={{ color: 'var(--text-primary)' }}>"Nhập Excel"</strong> hoặc <strong style={{ color: 'var(--text-primary)' }}>"+ Thêm NV"</strong> để bắt đầu.
-                  </div>
-                )}
-              </div>
-
-              {/* Deductions Collapsible Section */}
-              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--surface-subtle)' }}>
-                <div 
-                  onClick={() => setIsDeductionsExpanded(!isDeductionsExpanded)}
-                  style={{ 
-                    padding: '10px 16px', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>💸 Khoản Khấu Trừ Chung ({deductions.length})</span>
-                    {totalDeduct > 0 && (
-                      <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 600 }}>-{formatMoney(totalDeduct)}</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                      type="button" 
-                      className="btn-outline" 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        addDeduction(); 
-                        setIsDeductionsExpanded(true); 
-                      }} 
-                      style={{ height: '26px', padding: '0 8px', fontSize: '11px' }}
-                    >
-                      <Plus size={11} />
-                      <span>Thêm</span>
-                    </button>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{isDeductionsExpanded ? '▲' : '▼'}</span>
-                  </div>
-                </div>
-
-                {isDeductionsExpanded && (
-                  <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-                    {deductions.map(d => (
-                      <div key={d.id} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <input 
-                          type="text" 
-                          className="form-control input-compact" 
-                          placeholder="BHXH, Đồng phục, Phạt..." 
-                          value={d.label} 
-                          onChange={(e) => updateDeduction(d.id, 'label', e.target.value)} 
-                          style={{ flex: 1, height: '30px', fontSize: '12px' }}
-                        />
-                        <div style={{ width: '120px' }}>
-                          <MoneyInput
-                            className="form-control input-compact"
-                            value={d.amount}
-                            onChange={(val) => updateDeduction(d.id, 'amount', val)}
-                            formatMoney={formatMoney}
+                            aria-label="Chọn tất cả nhân viên để in"
                           />
-                        </div>
-                        <button 
-                          type="button" 
-                          className="btn-ghost" 
-                          style={{ color: 'var(--status-danger)', padding: '4px' }} 
-                          onClick={() => deleteDeduction(d.id)}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    {deductions.length === 0 && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '4px' }}>
-                        Không có khoản khấu trừ nào.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                        </th>
+                        <th>Nhân viên</th>
+                        <th style={{ width: '78px', textAlign: 'right' }}>{isHourly ? 'Giờ' : 'Công'}</th>
+                        <th style={{ width: '115px', textAlign: 'right' }}>Lương CB</th>
+                        <th>Cấu trúc khoản riêng</th>
+                        <th style={{ width: '126px', textAlign: 'right' }}>Thực nhận</th>
+                        <th style={{ width: '38px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredNavigatorEmployees.map((emp) => {
+                        const realIdx = employees.findIndex(e => e.id === emp.id);
+                        const isActive = currentEmployeeIndex === realIdx;
+                        const totals = computeDynamicEmployeeTotals(emp, salaryMode, standardDays, roundMode);
+                        const hasWarning = Boolean(validationMap[emp.id]);
 
-              {/* Data Warning Footer */}
-              {warningsList.length > 0 && (
-                <div 
-                  onClick={() => {
-                    setConfigDrawerTab('warnings');
-                    setIsConfigDrawerOpen(true);
-                  }}
-                  style={{ 
-                    padding: '8px 16px', 
-                    background: 'var(--status-danger-bg)', 
-                    borderTop: '1px solid var(--status-danger-border)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between',
-                    cursor: 'pointer' 
-                  }}
-                >
-                  <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 600 }}>
-                    ⚠️ {warningsList.length} nhân viên cần kiểm tra lại dữ liệu
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 600 }}>Xem ›</span>
+                        return (
+                          <tr
+                            key={emp.id}
+                            className={`${isActive ? 'is-active' : ''} ${hasWarning ? 'has-warning' : ''}`}
+                            onClick={() => {
+                              setCurrentEmployeeIndex(realIdx);
+                              setPreviewMode('single');
+                            }}
+                          >
+                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedEmployeeIds.has(emp.id)}
+                                onChange={() => handleToggleEmployeeSelection(emp.id)}
+                                aria-label={`Chọn in phiếu ${emp.name}`}
+                              />
+                            </td>
+                            <td>
+                              <div className="payroll-emp-cell">
+                                <div className="payroll-emp-name-row">
+                                  <strong>{emp.name || '(Chưa đặt tên)'}</strong>
+                                  {hasWarning && <AlertTriangle size={13} style={{ color: 'var(--status-warning)', flexShrink: 0 }} />}
+                                </div>
+                                <span className="payroll-emp-meta">{emp.role || defaultPosition}</span>
+                              </div>
+                            </td>
+                            <td className="tabular-nums" style={{ textAlign: 'right', fontWeight: 600 }}>
+                              {salaryMode === 'restaurant' ? (emp.workedDays ?? emp.days) : emp.days}
+                            </td>
+                            <td className="tabular-nums" style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                              {formatMoney(emp.salary)}
+                            </td>
+                            <td>
+                              <div className="payroll-row-badges">
+                                {totals.visibleAddCount > 0 && (
+                                  <span className="payroll-mini-badge is-add">+{totals.visibleAddCount} cộng</span>
+                                )}
+                                {totals.visibleDeductCount > 0 && (
+                                  <span className="payroll-mini-badge is-deduct">−{totals.visibleDeductCount} trừ</span>
+                                )}
+                                {totals.visibleAddCount === 0 && totals.visibleDeductCount === 0 && (
+                                  <span className="payroll-mini-badge is-neutral">Lương cơ bản</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="tabular-nums" style={{ textAlign: 'right', fontWeight: 700, color: totals.netPay < 0 ? 'var(--status-danger)' : 'var(--accent-primary)' }}>
+                              {formatMoney(totals.netPay)}
+                            </td>
+                            <td onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                className="btn-ghost"
+                                style={{ width: '30px', height: '30px', padding: 0, color: 'var(--status-danger)' }}
+                                onClick={() => deleteEmployee(emp.id)}
+                                title={`Xóa ${emp.name}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredNavigatorEmployees.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--text-muted)' }}>
+                            Không tìm thấy nhân viên phù hợp từ khóa.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
-
-              {/* Saved Presets Collapsible */}
-              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--bg-elevated)' }}>
-                <div 
-                  onClick={() => setIsPresetsExpanded(!isPresetsExpanded)}
-                  style={{ 
-                    padding: '9px 16px', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--accent-primary)' }}>
-                      🖨️ Mẫu Cấu Hình In Đã Lưu ({customPresets.length})
-                    </span>
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{isPresetsExpanded ? '▲' : '▼'}</span>
-                </div>
-
-                {isPresetsExpanded && (
-                  <div style={{ padding: '8px 14px 12px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--surface-subtle)', borderTop: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
-                      <button type="button" className="btn-outline small-btn" onClick={resetAllConfigurations} style={{ fontSize: '10px', padding: '2px 8px' }}>
-                        Khôi phục mặc định
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '100px', overflowY: 'auto' }}>
-                      {customPresets.map(preset => (
-                        <div key={preset.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '4px 8px' }}>
-                          <span style={{ cursor: 'pointer', flexGrow: 1, fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500 }} onClick={() => applyCustomPreset(preset)} title="Click để áp dụng mẫu">
-                            📄 {preset.name}
-                          </span>
-                          <button type="button" className="btn-danger small-btn" style={{ padding: '1px 5px', fontSize: '9px' }} onClick={() => deleteCustomPreset(preset.id)}>
-                            Xóa
-                          </button>
-                        </div>
-                      ))}
-                      {customPresets.length === 0 && (
-                        <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', padding: '2px' }}>
-                          Chưa có mẫu cấu hình in riêng.
-                        </div>
-                      )}
-                    </div>
-                    <button type="button" className="primary" onClick={saveCurrentAsPreset} style={{ width: '100%', height: '30px', fontSize: '11px', marginTop: '4px' }}>
-                      Lưu cấu hình hiện tại thành mẫu
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
+
+            {/* Active Employee Per-Slip Line-Item Customizer */}
+            {activeEmployee && (
+              <PayrollSlipEditor
+                employee={activeEmployee}
+                salaryMode={salaryMode}
+                standardDays={standardDays}
+                roundMode={roundMode}
+                defaultPosition={defaultPosition}
+                defaultDept={defaultDept}
+                formatMoney={formatMoney}
+                onUpdateEmployee={handleUpdateEmployeeFull}
+                onNormalizeSlip={() => handleNormalizeSingleSlip(activeEmployee.id)}
+              />
+            )}
           </div>
         )}
 
-        {/* RIGHT COLUMN: Live dynamic preview rendering */}
-        {showPreviewPane && (
-          <div className="preview-pane">
-            
-            {/* Preview Tab Control Panel */}
-            
-            {/* Unified Sleek Preview Toolbar */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '10px',
-              padding: '8px 12px',
-              background: 'var(--bg-panel)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '12px',
-              marginBottom: '10px',
-              boxShadow: 'var(--shadow-sm)',
-              flexWrap: 'wrap'
-            }}>
-              {/* Left group: View Switcher and Template Pill Switcher */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                  <button 
-                    type="button"
-                    style={{
-                      height: '28px',
-                      padding: '0 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      borderRadius: 'var(--radius-sm)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: activeView === 'receipt' ? 'var(--accent-primary)' : 'transparent',
-                      color: activeView === 'receipt' ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                      transition: 'background-color 140ms ease, color 140ms ease'
-                    }}
-                    onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
-                  >
-                    Phiếu Lương
-                  </button>
-                  <button 
-                    type="button"
-                    style={{
-                      height: '28px',
-                      padding: '0 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      borderRadius: 'var(--radius-sm)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: activeView === 'summary' ? 'var(--accent-primary)' : 'transparent',
-                      color: activeView === 'summary' ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                      transition: 'background-color 140ms ease, color 140ms ease'
-                    }}
-                    onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
-                  >
-                    Bảng Tổng Hợp
-                  </button>
-                </div>
-
-                <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)' }}>
-                  {(['standard', 'modern', 'k80'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      style={{
-                        height: '28px',
-                        padding: '0 10px',
-                        fontSize: '11.5px',
-                        fontWeight: 600,
-                        borderRadius: 'var(--radius-sm)',
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: activeTemplate === t ? 'var(--accent-primary)' : 'transparent',
-                        color: activeTemplate === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                        transition: 'background-color 140ms ease, color 140ms ease'
-                      }}
-                      onClick={() => {
-                        setActiveTemplate(t);
-                        if (t === 'k80') {
-                          setPaperSize('k80');
-                          setActiveQuickPreset('k80');
-                        } else {
-                          setPaperSize('a4');
-                          if (activeQuickPreset === 'k80') setActiveQuickPreset('full');
-                        }
-                      }}
-                    >
-                      {t === 'standard' ? 'Chuẩn' : t === 'modern' ? 'Modern' : 'K80 Nhiệt'}
-                    </button>
-                  ))}
-                </div>
-
-                {activeView === 'receipt' && (
-                  <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                    {([
-                      { id: 'single', label: '1 Phiếu' },
-                      { id: 'list', label: 'Danh sách' },
-                      { id: 'thumbnail', label: 'Lưới' }
-                    ] as const).map(m => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        style={{
-                          height: '28px',
-                          padding: '0 9px',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          borderRadius: '6px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          background: previewMode === m.id ? 'var(--status-success-bg)' : 'transparent',
-                          color: previewMode === m.id ? 'var(--status-success)' : 'var(--text-muted)'
-                        }}
-                        onClick={() => setPreviewMode(m.id)}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+        {/* RIGHT PANE: Sticky Live Slip Preview & Clean Export Controls */}
+        {(!isMobileScreen || mobileActiveTab === 'preview') && (
+          <div className="preview-pane payroll-studio-right">
+            {/* Compact Single-Row Preview Controls */}
+            <div className="payroll-preview-toolbar">
+              <div className="payroll-seg-control">
+                <button
+                  type="button"
+                  className={activeView === 'receipt' ? 'active' : ''}
+                  onClick={() => { setActiveView('receipt'); setPreviewMode('single'); }}
+                >
+                  Phiếu cá nhân
+                </button>
+                <button
+                  type="button"
+                  className={activeView === 'summary' ? 'active' : ''}
+                  onClick={() => { setActiveView('summary'); setPreviewMode('single'); }}
+                >
+                  Tổng hợp
+                </button>
               </div>
 
-              {/* Center group: Employee navigator widget (when single slip) */}
-              {activeView === 'receipt' && previewMode === 'single' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                  <button type="button" className="btn-ghost" onClick={handlePrevEmployee} disabled={currentEmployeeIndex === 0} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="payroll-seg-control">
+                {([
+                  { id: 'k80', label: 'K80 Nhiệt' },
+                  { id: 'standard', label: 'A4 Chuẩn' },
+                  { id: 'modern', label: 'Modern' }
+                ] as const).map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={activeTemplate === t.id ? 'active' : ''}
+                    onClick={() => {
+                      setActiveTemplate(t.id);
+                      if (t.id === 'k80') {
+                        setPaperSize('k80');
+                        setActiveQuickPreset('k80');
+                      } else {
+                        setPaperSize('a4');
+                        if (activeQuickPreset === 'k80') setActiveQuickPreset('full');
+                      }
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeView === 'receipt' && employees.length > 0 && (
+                <div className="payroll-nav-pager">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={handlePrevEmployee}
+                    disabled={currentEmployeeIndex === 0}
+                    style={{ width: '30px', height: '30px', padding: 0 }}
+                    aria-label="Phiếu trước"
+                  >
                     <ChevronLeft size={15} />
                   </button>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', minWidth: '58px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
-                    {employees.length > 0 ? (currentEmployeeIndex + 1) + ' / ' + employees.length : '0 / 0'}
-                  </span>
-                  <button type="button" className="btn-ghost" onClick={handleNextEmployee} disabled={currentEmployeeIndex === employees.length - 1} style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="tabular-nums">{currentEmployeeIndex + 1} / {employees.length}</span>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={handleNextEmployee}
+                    disabled={currentEmployeeIndex >= employees.length - 1}
+                    style={{ width: '30px', height: '30px', padding: 0 }}
+                    aria-label="Phiếu sau"
+                  >
                     <ChevronRight size={15} />
                   </button>
                 </div>
               )}
 
-              {/* Right group: Quick actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="pipeline-quick-btn"
-                  onClick={handlePipeToTransferTool}
-                  title="Đẩy danh sách nhân viên và số tiền thực nhận sang công cụ Lập lệnh chuyển khoản MyVIB / VCB"
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                <select
+                  className="form-control select-compact"
+                  style={{ width: '96px' }}
+                  value={zoomLevel}
+                  onChange={(e) => setZoomLevel(e.target.value)}
+                  aria-label="Thu phóng phiếu"
                 >
-                  <span>⚡ Lập lệnh CK</span>
-                </button>
-
-                <select 
-                  className="form-control select-compact" 
-                  style={{ width: '92px', height: '32px', padding: '0 6px', fontSize: '11px', background: 'var(--surface-input)', border: '1px solid var(--border-default)' }} 
-                  value={zoomLevel} 
-                  onChange={e => setZoomLevel(e.target.value)}
-                >
-                  <option value="fit">Vừa khít (Auto)</option>
+                  <option value="fit">Vừa khít</option>
                   <option value="75">75%</option>
                   <option value="100">100%</option>
                   <option value="125">125%</option>
                 </select>
-
                 <button
                   type="button"
-                  onClick={() => setIsConfigDrawerOpen(true)}
-                  className="btn-outline"
-                  style={{
-                    height: '32px',
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    fontWeight: 600
-                  }}
-                  title="Cấu hình tham số lương & tùy chỉnh in ấn"
+                  className="btn-ghost"
+                  onClick={() => setIsFullscreenPreview(!isFullscreenPreview)}
+                  style={{ width: '32px', height: '32px', padding: 0 }}
+                  title="Phóng to toàn màn hình"
                 >
-                  <span>⚙️ Cấu hình</span>
+                  {isFullscreenPreview ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
                 </button>
-
-                <button 
-                  type="button" 
-                  className="btn-ghost" 
-                  onClick={() => setIsFullscreenPreview(!isFullscreenPreview)} 
-                  title="Bật/Tắt toàn màn hình preview"
-                  style={{ width: '30px', height: '30px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}
-                >
-                  {isFullscreenPreview ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                </button>
-
-                <button type="button" className="primary" onClick={() => handleDownloadPng()} style={{ height: '32px', padding: '0 10px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Download size={13} />
-                  <span>Ảnh</span>
-                </button>
-
-                {activeView === 'receipt' && (
-                  <button type="button" className="btn-outline" onClick={handleDownloadZip} disabled={isExporting} style={{ height: '32px', padding: '0 8px', fontSize: '12px' }} title="Tải toàn bộ phiếu lương dạng file nén ZIP">
-                    <Archive size={13} />
-                    <span>ZIP</span>
-                  </button>
-                )}
-                
-                <button type="button" className="btn-outline" onClick={() => handleDownloadPdf()} style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}>
-                  <FileText size={13} />
-                  <span>PDF</span>
-                </button>
-
-                <button type="button" className="btn-outline" onClick={handlePrint} style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}>
-                  <Printer size={13} />
-                  <span>In</span>
-                </button>
-
-                {(layoutMode === 'wide' || layoutMode === 'compact') && (
-                  <button 
-                    type="button" 
-                    className="btn-ghost" 
-                    onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)} 
-                    title="Ẩn hoặc hiện cột danh sách nhân viên bên trái"
-                    style={{ height: '32px', padding: '0 8px', fontSize: '12px', color: '#94a3b8' }}
+                {!isMobileScreen && (
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+                    style={{ height: '32px', padding: '0 8px', fontSize: '12px' }}
+                    title="Ẩn/hiện bảng bên trái"
                   >
-                    {isLeftPanelCollapsed ? '📋 Hiện DS' : '‹ Ẩn DS'}
+                    {isLeftPanelCollapsed ? 'Hiện bảng' : 'Mở rộng'}
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Quick Metrics display bar */}
-            {activeView === 'receipt' && activeEmployee && (
-              <div className="metrics-strip-pnl">
-                <div className="metric-box">
-                  <span>Mức Lương</span>
-                  <strong>{formatMoney(activeEmployee.salary)}</strong>
-                </div>
-                <div className="metric-box">
-                  <span>{isHourly ? 'Giờ Làm' : 'Ngày Công'}</span>
-                  <strong>{salaryMode === 'restaurant' ? (activeEmployee.workedDays ?? activeEmployee.days) : activeEmployee.days}</strong>
-                </div>
-                <div className="metric-box">
-                  <span>Khấu Trừ</span>
-                  <strong className="red">{formatMoney((activeEmployee.deduction || 0) + (activeEmployee.advance || 0))}</strong>
-                </div>
-                <div className="metric-box">
-                  <span>Thực Nhận</span>
-                  <strong style={{ color: 'var(--cyan)' }}>{formatMoney(getEmployeeNet(activeEmployee))}</strong>
-                </div>
-              </div>
-            )}
-
-            
-            {/* Exporting progress overlay indicator */}
-            {isExporting && (
-              <div className="export-progress-overlay">
-                <div className="export-progress-card">
-                  <div className="spinner" style={{ fontSize: '24px' }}>⏳</div>
-                  <strong>Đang xử lý xuất tập tin...</strong>
-                  <div className="progress-bar-container">
-                    <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }}></div>
-                  </div>
-                  <span>Hoàn thành {exportProgress}%</span>
-                </div>
-              </div>
-            )}
-
-            {/* Render target content preview canvas viewport */}
+            {/* Live SVG Preview Viewport */}
             <div className="preview-scroll-container PayrollPreviewViewport" ref={previewViewportRef}>
               {employees.length === 0 ? (
-                <EmptyState 
-                  icon="📄"
-                  title="Chưa có phiếu lương để hiển thị"
-                  description="Vui lòng thêm nhân viên mới hoặc tải file CSV dữ liệu chấm công ở cột bên trái để bắt đầu tạo phiếu lương và bảng tổng hợp."
-                  actionLabel="Thêm nhân viên đầu tiên"
-                  onAction={addEmployee}
-                  style={{ padding: '2.75rem 1.5rem' }}
+                <EmptyState
+                  icon={<Printer size={28} />}
+                  title="Bản xem trước phiếu lương"
+                  description="Khi có dữ liệu nhân viên, phiếu in K80 hoặc A4 sẽ hiển thị trực tiếp tại đây và tự động thay đổi số dòng theo từng nhân viên."
                 />
               ) : (
                 <div className="sheet-canvas-wrapper" style={getZoomWidthStyle()}>
-                  
-                  {/* 1. SINGLE SLIP MODE */}
-                  {previewMode === 'single' && (
-                    <div className="preview-receipt-card" style={{ width: '100%', margin: '0 auto' }}>
-                      <div className="receipt-card-header print-hidden">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {activeView === 'receipt' && activeEmployee && (
-                            <input 
-                              type="checkbox" 
-                              checked={selectedEmployeeIds.has(activeEmployee.id)} 
-                              onChange={() => handleToggleEmployeeSelection(activeEmployee.id)} 
-                            />
-                          )}
-                          <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                            {activeView === 'receipt' && activeEmployee
-                              ? `Phiếu #${currentEmployeeIndex + 1} - ${activeEmployee.name}`
-                              : `Bảng Tổng Hợp Lương (${payMonth})`
-                            }
-                          </span>
-                        </div>
-                        
-                        {activeView === 'receipt' && activeEmployee && validationMap[activeEmployee.id] && (
-                          <span className="warning-pill-indicator">
-                            ⚠️ Cảnh báo dữ liệu
-                          </span>
-                        )}
-                      </div>
-                      
-                      {activeTemplate === 'k80' && <div className="receipt-edge top-edge print-hidden" />}
-                      <div 
-                        className="receipt-svg-holder" 
-                        dangerouslySetInnerHTML={{ __html: getActiveSvgText(activeView === 'receipt' ? activeEmployee : undefined) }} 
-                      />
-                      {activeTemplate === 'k80' && <div className="receipt-edge bottom-edge print-hidden" />}
+                  <div className="preview-receipt-card" style={{ width: '100%', margin: '0 auto' }}>
+                    <div className="receipt-card-header print-hidden">
+                      <span style={{ fontSize: '12.5px', fontWeight: 700 }}>
+                        {activeView === 'receipt' && activeEmployee
+                          ? `Phiếu #${currentEmployeeIndex + 1} · ${activeEmployee.name}`
+                          : `Bảng Tổng Hợp Lương (${payMonth})`}
+                      </span>
+                      {activeView === 'receipt' && activeEmployee && (
+                        <span className="payroll-slip-row-count-pill">
+                          {buildSlipRenderRows(
+                            activeEmployee,
+                            salaryMode,
+                            standardDays,
+                            roundMode,
+                            formatMoney,
+                            {
+                              showTime: visibility.showTime,
+                              showBaseSalary: visibility.showBaseSalary,
+                              showAdvance: visibility.showAdvance,
+                              showDeductions: visibility.showDeductions,
+                            },
+                            thermalOptions.hideEmptyRows
+                          ).rows.length} dòng trên phiếu
+                        </span>
+                      )}
                     </div>
-                  )}
-
-                  {/* 2. LIST CONTINUOUS SLIP MODE */}
-                  {previewMode === 'list' && activeView === 'receipt' && (
-                    <div className="continuous-list-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
-                      {employees.map((emp, index) => (
-                        <div key={emp.id} className="preview-receipt-card" style={{ width: '100%', margin: '0 auto' }}>
-                          <div className="receipt-card-header print-hidden">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedEmployeeIds.has(emp.id)} 
-                                onChange={() => handleToggleEmployeeSelection(emp.id)} 
-                              />
-                              <span>Phiếu #{index + 1} - {emp.name}</span>
-                            </div>
-                            {validationMap[emp.id] && (
-                              <span className="warning-pill-indicator">
-                                ⚠️ Cảnh báo
-                              </span>
-                            )}
-                          </div>
-                          <div className="receipt-svg-holder" dangerouslySetInnerHTML={{ __html: getActiveSvgText(emp) }} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 3. THUMBNAIL PREVIEW GRID */}
-                  {previewMode === 'thumbnail' && activeView === 'receipt' && (
-                    <div className="thumbnail-grid-layout">
-                      {employees.map((emp, index) => (
-                        <div 
-                          key={emp.id} 
-                          className={`thumbnail-preview-card ${currentEmployeeIndex === index ? 'active' : ''}`}
-                          onClick={() => { setCurrentEmployeeIndex(index); setPreviewMode('single'); }}
-                        >
-                          <div className="thumbnail-card-header">
-                            <input 
-                              type="checkbox" 
-                              checked={selectedEmployeeIds.has(emp.id)} 
-                              onClick={e => e.stopPropagation()}
-                              onChange={() => handleToggleEmployeeSelection(emp.id)} 
-                            />
-                            <span>#{index + 1} - {emp.name}</span>
-                          </div>
-                          <div className="thumbnail-svg-render" dangerouslySetInnerHTML={{ __html: getActiveSvgText(emp) }} />
-                          {validationMap[emp.id] && (
-                            <div className="thumbnail-warning-overlay">⚠️ Lỗi dữ liệu</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
+                    {activeTemplate === 'k80' && <div className="receipt-edge top-edge print-hidden" />}
+                    <div
+                      className="receipt-svg-holder"
+                      dangerouslySetInnerHTML={{ __html: getActiveSvgText(activeView === 'receipt' ? activeEmployee : undefined) }}
+                    />
+                    {activeTemplate === 'k80' && <div className="receipt-edge bottom-edge print-hidden" />}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Desktop bottom navigator - hidden on mobile viewports */}
-            {!isMobileScreen && employees.length > 0 && activeView === 'receipt' && (
-              <div className="preview-bottom-navigator print-hidden">
-                <div className="navigator-filter-toolbar">
-                  <div className="search-field-box">
-                    <Search size={14} className="search-icon" />
-                    <input 
-                      type="text" 
-                      placeholder="Tìm nhân viên..." 
-                      className="form-control"
-                      value={searchEmployeeQuery}
-                      onChange={e => setSearchEmployeeQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="filter-buttons-box">
-                    <button type="button" className={`filter-tag ${navigatorFilter === 'all' ? 'active' : ''}`} onClick={() => setNavigatorFilter('all')}>Tất cả ({employees.length})</button>
-                    <button type="button" className={`filter-tag ${navigatorFilter === 'invalid' ? 'active' : ''}`} onClick={() => setNavigatorFilter('invalid')}>Cảnh báo ({Object.keys(validationMap).length})</button>
-                    <button type="button" className={`filter-tag ${navigatorFilter === 'valid' ? 'active' : ''}`} onClick={() => setNavigatorFilter('valid')}>Đủ chuẩn</button>
-                  </div>
-                </div>
-
-                <div className="navigator-horizontal-scroll">
-                  {filteredNavigatorEmployees.map(emp => {
-                    const idx = employees.findIndex(e => e.id === emp.id);
-                    const isActive = currentEmployeeIndex === idx;
-                    const hasWarning = !!validationMap[emp.id];
-                    
-                    return (
-                      <div 
-                        key={emp.id} 
-                        className={`navigator-item-card ${isActive ? 'active' : ''} ${hasWarning ? 'warn' : ''}`}
-                        onClick={() => { setCurrentEmployeeIndex(idx); setPreviewMode('single'); }}
-                      >
-                        <div className="nav-item-meta">
-                          <span className="name">{emp.name}</span>
-                          <span className="sub">{emp.days} {isHourly ? 'giờ' : 'công'} • {formatMoney(emp.amount)}</span>
-                        </div>
-                        {hasWarning && <span className="nav-item-warn-tag">⚠️</span>}
-                      </div>
-                    );
-                  })}
-                  {filteredNavigatorEmployees.length === 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '1rem', width: '100%', textAlign: 'center' }}>
-                      Không tìm thấy nhân viên phù hợp bộ lọc.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
+            {/* Clean 1-Row Export Footer under Preview */}
+            <div className="payroll-export-bar print-hidden">
+              <button
+                type="button"
+                className="primary"
+                onClick={handlePrint}
+                disabled={employees.length === 0}
+              >
+                <Printer size={15} />
+                <span>In phiếu</span>
+              </button>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => handleDownloadPng()}
+                disabled={employees.length === 0}
+              >
+                <Download size={15} />
+                <span>Tải PNG</span>
+              </button>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => handleDownloadPdf()}
+                disabled={employees.length === 0}
+              >
+                <FileText size={15} />
+                <span>Tải PDF</span>
+              </button>
+              {activeView === 'receipt' && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={handleDownloadZip}
+                  disabled={isExporting || employees.length === 0}
+                  title="Tải toàn bộ phiếu lương dạng file nén ZIP"
+                >
+                  <Archive size={15} />
+                  <span>ZIP tất cả</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
-
       </div>
 
-      {/* Mobile Employee List selector Drawer / Bottom Sheet */}
-      {isMobileScreen && showMobileEmpList && (
-        <>
-          <div className="dropdown-click-outside-backdrop" onClick={() => setShowMobileEmpList(false)} style={{ zIndex: 2002, background: 'rgba(5, 11, 30, 0.7)' }} />
-          <div className="bank-dropdown-popover" style={{ zIndex: 2101, maxHeight: '80vh', height: '80vh', padding: '16px', display: 'flex', flexDirection: 'column' }}>
-            <div className="bank-dropdown-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-              <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 700 }}>Danh sách nhân viên ({employees.length})</span>
-              <button type="button" className="close-dropdown-btn" onClick={() => setShowMobileEmpList(false)} style={{ background: 'none', border: 0, color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
-            </div>
-            
-            <div className="search-field-box" style={{ marginBottom: '12px', flexShrink: 0 }}>
-              <Search size={14} className="search-icon" />
-              <input 
-                type="text" 
-                placeholder="Tìm nhân viên..." 
-                className="form-control"
-                value={searchEmployeeQuery}
-                onChange={e => setSearchEmployeeQuery(e.target.value)}
-              />
-            </div>
-
-            <div className="bank-options-list" style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {filteredNavigatorEmployees.map((emp) => {
-                const idx = employees.findIndex(e => e.id === emp.id);
-                const isCurrent = currentEmployeeIndex === idx;
-                const hasWarning = !!validationMap[emp.id];
-                return (
-                  <div 
-                    key={emp.id}
-                    className={`navigator-item-card ${isCurrent ? 'active' : ''} ${hasWarning ? 'warn' : ''}`}
-                    onClick={() => {
-                      setCurrentEmployeeIndex(idx);
-                      setPreviewMode('single');
-                      setShowMobileEmpList(false);
-                    }}
-                    style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center', 
-                      padding: '12px', 
-                      borderRadius: '10px', 
-                      background: isCurrent ? 'var(--accent-primary-subtle)' : 'var(--surface-subtle)',
-                      border: `1px solid ${isCurrent ? 'var(--accent-primary)' : 'var(--border-default)'}`,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {emp.name || '(Chưa điền tên)'}
-                      </strong>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                        {emp.days} {isHourly ? 'giờ' : 'công'} • Lương: {formatMoney(emp.salary)}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: isCurrent ? 'var(--accent-primary)' : 'var(--green)' }}>
-                        {formatMoney(emp.amount)}
-                      </span>
-                      {hasWarning && <span style={{ fontSize: '14px' }}>⚠️</span>}
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredNavigatorEmployees.length === 0 && (
-                <div style={{ padding: '2rem 1rem', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-                  Không tìm thấy nhân viên phù hợp.
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Slide-over Drawer for Deep Configuration & Customization */}
       <SlideOverDrawer
@@ -4477,6 +3219,36 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                 formatMoney={formatMoney}
               />
             </div>
+
+            <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label className="form-label" style={{ margin: 0 }}>Khấu trừ chung toàn kỳ ({deductions.length})</label>
+                <button type="button" className="btn-outline" style={{ height: '30px', fontSize: '12px' }} onClick={addDeduction}>
+                  <Plus size={13} />
+                  <span>Thêm khoản</span>
+                </button>
+              </div>
+              {deductions.map(d => (
+                <div key={d.id} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    className="form-control input-compact"
+                    placeholder="Tên khoản (VD: Quỹ chung)"
+                    value={d.label}
+                    onChange={(e) => updateDeduction(d.id, 'label', e.target.value)}
+                  />
+                  <MoneyInput
+                    className="form-control input-compact"
+                    value={d.amount}
+                    onChange={(val) => updateDeduction(d.id, 'amount', val)}
+                    formatMoney={formatMoney}
+                  />
+                  <button type="button" className="btn-ghost" style={{ width: '32px', height: '32px', padding: 0, color: 'var(--status-danger)' }} onClick={() => deleteDeduction(d.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -4626,11 +3398,33 @@ export default function PayrollCreator({ gasUrl, spreadsheetId, operatorName, sh
                   </label>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={thermalOptions.showCutLine} onChange={e => setThermalOptions(prev => ({ ...prev, showCutLine: e.target.checked }))} />
-                    <span>Hiện đường kẻ cắt giấy ✂ cuối phiếu</span>
+                    <span>Hiện đường kẻ cắt giấy cuối phiếu</span>
                   </label>
                 </div>
               </div>
             )}
+
+            <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="form-label" style={{ margin: 0 }}>Mẫu cấu hình in đã lưu ({customPresets.length})</span>
+                <button type="button" className="btn-ghost" style={{ height: '28px', fontSize: '11.5px' }} onClick={resetAllConfigurations}>
+                  Khôi phục mặc định
+                </button>
+              </div>
+              {customPresets.map(preset => (
+                <div key={preset.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-subtle)', border: '1px solid var(--border-default)' }}>
+                  <button type="button" className="btn-ghost" style={{ height: '28px', padding: 0, flex: 1, justifyContent: 'flex-start', fontSize: '12px' }} onClick={() => applyCustomPreset(preset)}>
+                    {preset.name}
+                  </button>
+                  <button type="button" className="btn-ghost" style={{ width: '28px', height: '28px', padding: 0, color: 'var(--status-danger)' }} onClick={() => deleteCustomPreset(preset.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="btn-outline" style={{ width: '100%', height: '34px', fontSize: '12px' }} onClick={saveCurrentAsPreset}>
+                Lưu cấu hình in hiện tại thành mẫu
+              </button>
+            </div>
           </div>
         )}
 
